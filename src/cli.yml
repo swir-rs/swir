@@ -1,0 +1,31 @@
+name: rustycar
+version: "0.01"
+author: Dawid N. <nowakd@gmail.com>
+about: Event Driven Sidecar
+args:
+  - address:
+      short: a
+      long: address
+      value_name: IP:PORT
+      required: true
+  - kafka_broker:
+      short: b
+      long: kafkabroker
+      value_name: IP:PORT
+      required: true
+  - kafka_sending_topic:
+      short: s
+      long: sendingtopic
+      value_name: STRING
+      required: true
+  - kafka_receiving_topic:
+      short: r
+      long: receivingtopic
+      value_name: STRING
+      required: true
+  - kafka_receiving_group:
+      short: g
+      long: receivinggroup
+      value_name: STRING
+      required: false
+

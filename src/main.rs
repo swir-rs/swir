@@ -1,21 +1,24 @@
 #![deny(warnings)]
+
+#[macro_use]
+extern crate clap;
 extern crate futures;
 extern crate hyper;
 extern crate kafka;
 
-use kafka::producer::{Producer,  Record, RequiredAcks};
-use futures::future;
-use hyper::rt::{Future, Stream};
-use hyper::service::service_fn;
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use std::{sync::Arc, time::Duration};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{Sender,Receiver};
-use std::{env,sync::Arc,time::Duration};
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc;
 use std::thread;
 
-
-
+use clap::App;
+use futures::future;
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::rt::{Future, Stream};
+use hyper::service::service_fn;
+use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
+use kafka::producer::{Producer, Record, RequiredAcks};
 
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
@@ -84,24 +87,38 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
-    let external_address = &args[1].parse().expect("Unable to parse socket address");;
-    let request_counter = Arc::new(AtomicUsize::new(0));
-    let broker_address = String::from(&args[2]);
-    println!("Using kafka broker on {}", broker_address);
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
+    println!("Application arguments {:?}", matches);
+
+    let external_address = matches.value_of("address").unwrap().parse().expect("Unable to parse socket address");
+    let kafka_sending_topic = matches.value_of("kafka_sending_topic").unwrap().to_owned();
+    let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
+    let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap();
+    println!("Using kafka broker on {}", kafka_broker_address);
+    let kafka_broker_address = vec!(String::from(kafka_broker_address));
     println!("Listening on http://{}", external_address);
 
+    let request_counter = Arc::new(AtomicUsize::new(0));
 
     let (tx, rx):(Sender<usize>, Receiver<usize>) = mpsc::channel();
 
-
     let mut producer =
-        Producer::from_hosts(vec!(String::from(broker_address)))
+        Producer::from_hosts(kafka_broker_address.to_owned())
             .with_ack_timeout(Duration::from_secs(1))
             .with_required_acks(RequiredAcks::One)
             .create()
             .unwrap();
+
+    let mut consumer =
+        Consumer::from_hosts(kafka_broker_address.to_owned())
+            .with_topic(kafka_receiving_topic.to_owned())
+            .with_fallback_offset(FetchOffset::Latest)
+//            .with_group(kafka_receiving_group.to_owned())
+            .with_offset_storage(GroupOffsetStorage::Kafka)
+            .create()
+            .unwrap();
+
 
     let server = Server::bind(&external_address)
         .serve(move || {
@@ -112,20 +129,33 @@ fn main() {
         ).map_err(|e| eprintln!("server error: {}", e));
 
 
-
-
-    let child = thread::spawn(move ||{
+    let kafka_sending_thread = thread::spawn(move || {
+        let topic = kafka_sending_topic.clone();
         loop {
             let i = rx.recv().unwrap();
-            println!("Got {}", i);
-            producer.send(&Record::from_value("Request",i.to_string())).unwrap();
+            println!("Sending {}", i);
+            producer.send(&Record::from_value(&topic, i.to_string())).unwrap();
         }
     });
 
+    let kafka_receiving_thread = thread::spawn(move || {
+        loop {
+            for ms in consumer.poll().unwrap().iter() {
+                for m in ms.messages() {
+                    println!("Received message {:?}", std::str::from_utf8(m.value).unwrap());
+                }
+                let r = consumer.consume_messageset(ms);
+                println!("Consumed result {:?}", r);
+                consumer.commit_consumed().unwrap();
+            }
+
+        }
+    });
 
     hyper::rt::run(server);
-    
-    child.join().unwrap()
+    kafka_sending_thread.join().unwrap();
+    kafka_receiving_thread.join().unwrap();
 
 }
+
 
