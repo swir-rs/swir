@@ -5,6 +5,8 @@ extern crate clap;
 extern crate futures;
 extern crate hyper;
 extern crate kafka;
+#[macro_use]
+extern crate log;
 
 use std::{sync::Arc, time::Duration};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -26,12 +28,12 @@ type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send
 fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     counter.fetch_add(1, Ordering::Relaxed);
-    println!("Counter {}", counter.load(Ordering::Relaxed));
+    info!("Counter {}", counter.load(Ordering::Relaxed));
     let headers= req.headers();
-    println!("Headers {:?}", headers);
+    info!("Headers {:?}", headers);
     let (parts,body) = req.into_parts();
-    println!("Parts {:?}", parts);
-    println!("Body {:?}", body);
+    info!("Parts {:?}", parts);
+    info!("Body {:?}", body);
 
     match (parts.method, parts.uri.path()) {
         // Serve some instructions at /
@@ -42,9 +44,9 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
         // Simply echo the body back to the client.
         (Method::POST, "/echo") => {
 //            let res = body.concat2().wait().unwrap();
-//            println!("{:?}", res);
+//            info!("{:?}", res);
 //            producer.send(&Record::from_value("Request", body.as_bytes())).unwrap();
-            println!("Sending {}", counter.load(Ordering::Relaxed));
+            info!("Sending {}", counter.load(Ordering::Relaxed));
             s.send(counter.load(Ordering::Relaxed)).unwrap();
             *response.body_mut() = body;
         }
@@ -87,17 +89,19 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
 }
 
 fn main() {
+    env_logger::init();
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
-    println!("Application arguments {:?}", matches);
+    info!("Application arguments {:?}", matches);
 
     let external_address = matches.value_of("address").unwrap().parse().expect("Unable to parse socket address");
     let kafka_sending_topic = matches.value_of("kafka_sending_topic").unwrap().to_owned();
     let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
     let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap();
-    println!("Using kafka broker on {}", kafka_broker_address);
+    let kafka_receiving_group = matches.value_of("kafka_receiving_group").unwrap();
+    info!("Using kafka broker on {}", kafka_broker_address);
     let kafka_broker_address = vec!(String::from(kafka_broker_address));
-    println!("Listening on http://{}", external_address);
+    info!("Listening on http://{}", external_address);
 
     let request_counter = Arc::new(AtomicUsize::new(0));
 
@@ -113,8 +117,8 @@ fn main() {
     let mut consumer =
         Consumer::from_hosts(kafka_broker_address.to_owned())
             .with_topic(kafka_receiving_topic.to_owned())
-            .with_fallback_offset(FetchOffset::Latest)
-//            .with_group(kafka_receiving_group.to_owned())
+            .with_fallback_offset(FetchOffset::Earliest)
+            .with_group(kafka_receiving_group.to_owned())
             .with_offset_storage(GroupOffsetStorage::Kafka)
             .create()
             .unwrap();
@@ -126,14 +130,14 @@ fn main() {
             let inner_txx = mpsc::Sender::clone(&tx);
             service_fn(move |req| echo(req, &inner_rc,&mpsc::Sender::clone(&inner_txx)))
         }
-        ).map_err(|e| eprintln!("server error: {}", e));
+        ).map_err(|e| warn!("server error: {}", e));
 
 
     let kafka_sending_thread = thread::spawn(move || {
         let topic = kafka_sending_topic.clone();
         loop {
             let i = rx.recv().unwrap();
-            println!("Sending {}", i);
+            info!("Sending {}", i);
             producer.send(&Record::from_value(&topic, i.to_string())).unwrap();
         }
     });
@@ -142,13 +146,12 @@ fn main() {
         loop {
             for ms in consumer.poll().unwrap().iter() {
                 for m in ms.messages() {
-                    println!("Received message {:?}", std::str::from_utf8(m.value).unwrap());
+                    info!("Received message {:?}", std::str::from_utf8(m.value).unwrap());
                 }
                 let r = consumer.consume_messageset(ms);
-                println!("Consumed result {:?}", r);
-                consumer.commit_consumed().unwrap();
+                info!("Consumed result {:?}", r);
             }
-
+            consumer.commit_consumed().unwrap();
         }
     });
 
