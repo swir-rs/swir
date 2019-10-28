@@ -6,8 +6,21 @@ args:
   - address:
       short: a
       long: address
-      value_name: IP:PORT
+      value_name: IP
       required: true
+
+  - tlsport:
+      short: t
+      long: tls port
+      value_name: Integer
+      default_value: "8443"
+
+  - plainport:
+      short: p
+      long: plain port
+      value_name: Integer
+      default_value: "8080"
+
   - kafka_broker:
       short: b
       long: kafkabroker
