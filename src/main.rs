@@ -53,7 +53,7 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
 //            let res = body.concat2().wait().unwrap();
 //            info!("{:?}", res);
 //            producer.send(&Record::from_value("Request", body.as_bytes())).unwrap();
-            info!("Sending {}", counter.load(Ordering::Relaxed));
+            info!("Sending counter {}", counter.load(Ordering::Relaxed));
             s.send(counter.load(Ordering::Relaxed)).unwrap();
             *response.body_mut() = body;
         }
@@ -107,7 +107,9 @@ fn main() {
     let kafka_sending_topic = matches.value_of("kafka_sending_topic").unwrap().to_owned();
     let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
     let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap();
-    let kafka_receiving_group = matches.value_of("kafka_receiving_group").unwrap();
+    let kafka_receiving_group = matches.value_of("kafka_receiving_group").unwrap_or_default();
+    let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
+    let http_tls_key = matches.value_of("http_tls_key").unwrap();
 
 
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
@@ -119,16 +121,16 @@ fn main() {
     info!("Plain port Listening on {}", plain_socket_addr);
 
 
+    let (tls_tx, tls_rx): (Sender<usize>, Receiver<usize>) = mpsc::channel();
+    let (plain_tx, plain_rx): (Sender<usize>, Receiver<usize>) = mpsc::channel();
 
-    let (tx, rx):(Sender<usize>, Receiver<usize>) = mpsc::channel();
-    let txx = tx.clone();
 
 
     let tls_cfg = {
         // Load public certificate.
-        let certs = load_certs("cert_util/localhost.pem").unwrap();
+        let certs = load_certs(&http_tls_certificate).unwrap();
         // Load private key.
-        let key = load_private_key("cert_util/localhost.key").unwrap();
+        let key = load_private_key(&http_tls_key).unwrap();
         // Do not use client certificate authentication.
         let mut cfg = rustls::ServerConfig::new(rustls::NoClientAuth::new());
         // Select a certificate to use.
@@ -160,6 +162,13 @@ fn main() {
             .create()
             .unwrap();
 
+    let mut producer2 =
+        Producer::from_hosts(kafka_broker_address.to_owned())
+            .with_ack_timeout(Duration::from_secs(1))
+            .with_required_acks(RequiredAcks::One)
+            .create()
+            .unwrap();
+
     let mut consumer =
         Consumer::from_hosts(kafka_broker_address.to_owned())
             .with_topic(kafka_receiving_topic.to_owned())
@@ -170,33 +179,43 @@ fn main() {
             .unwrap();
 
 
-    let request_counter = Arc::new(AtomicUsize::new(0));
-    let request_counter_tls = Arc::clone(&request_counter);
-    let request_counter_plain = Arc::clone(&request_counter);
-
-    let tlsserver = Server::builder(tls)
-        .serve(move || {
-            let inner_rc = Arc::clone(&request_counter_tls);
-            let inner_txx = mpsc::Sender::clone(&tx);
-            service_fn(move |req| echo(req, &inner_rc,&mpsc::Sender::clone(&inner_txx)))
-        }
-        ).map_err(|e| warn!("server error: {}", e));
+    let request_counter_tls = Arc::new(AtomicUsize::new(0));
+    let request_counter_plain = Arc::new(AtomicUsize::new(0));
 
     let server = Server::bind(&plain_socket_addr)
         .serve(move || {
             let inner_rc = Arc::clone(&request_counter_plain);
-            let inner_txx = mpsc::Sender::clone(&txx);
+            let inner_txx = mpsc::Sender::clone(&plain_tx);
             service_fn(move |req| echo(req, &inner_rc, &mpsc::Sender::clone(&inner_txx)))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
 
+    let tlsserver = Server::builder(tls)
+        .serve(move || {
+            let inner_rc = Arc::clone(&request_counter_tls);
+            let inner_txx = mpsc::Sender::clone(&tls_tx);
+            service_fn(move |req| echo(req, &inner_rc, &mpsc::Sender::clone(&inner_txx)))
+        }
+        ).map_err(|e| warn!("server error: {}", e));
+
+
+    let tls_kafka_sending_topic = kafka_sending_topic.clone();
     let kafka_sending_thread = thread::spawn(move || {
         let topic = kafka_sending_topic.clone();
         loop {
-            let i = rx.recv().unwrap();
-            info!("Sending {}", i);
+            let i = plain_rx.recv().unwrap();
+            info!("Kafka plain sending {}", i);
             producer.send(&Record::from_value(&topic, i.to_string())).unwrap();
+        }
+    });
+
+    let kafka_tls_sending_thread = thread::spawn(move || {
+        let topic = tls_kafka_sending_topic.clone();
+        loop {
+            let i = tls_rx.recv().unwrap();
+            info!("Kafka TLS Sending {}", i);
+            producer2.send(&Record::from_value(&topic, i.to_string())).unwrap();
         }
     });
 
@@ -214,11 +233,16 @@ fn main() {
     });
 
 
-    thread::spawn(move || { hyper::rt::spawn(tlsserver) });
-    thread::spawn(move || { hyper::rt::spawn(server) });
+    let tls_server = thread::spawn(move || { hyper::rt::run(tlsserver) });
+    let plain_server = thread::spawn(move || { hyper::rt::run(server); });
+
 
     kafka_sending_thread.join().unwrap();
+    kafka_tls_sending_thread.join().unwrap();
     kafka_receiving_thread.join().unwrap();
+    plain_server.join().unwrap_err();
+    tls_server.join().unwrap_err();
+
 
 }
 
@@ -231,7 +255,13 @@ fn load_certs(filename: &str) -> io::Result<Vec<rustls::Certificate>> {
     let mut reader = io::BufReader::new(certfile);
 
     // Load and return certificate.
-    pemfile::certs(&mut reader).map_err(|_| error("failed to load certificate".into()))
+    let certs = pemfile::certs(&mut reader).map_err(|_| error("failed to load certificate".into())).unwrap();
+    info!("Certs = {:?}", certs.len());
+    if certs.len() == 0 {
+        return Err(error("expected at least one certificate".into()));
+    }
+    Ok(certs)
+
 }
 
 // Load private key from file.
@@ -241,9 +271,17 @@ fn load_private_key(filename: &str) -> io::Result<rustls::PrivateKey> {
         .map_err(|e| error(format!("failed to open {}: {}", filename, e)))?;
     let mut reader = io::BufReader::new(keyfile);
 
+
     // Load and return a single private key.
-    let keys = pemfile::rsa_private_keys(&mut reader)
-        .map_err(|_| error("failed to load private key".into()))?;
+    let keys = pemfile::rsa_private_keys(&mut reader);
+
+    let keys = match keys {
+        Ok(keys) => keys,
+        Err(error) => {
+            panic!("There was a problem with reading private key: {:?}", error)
+        },
+    };
+    info!("Keys = {:?}", keys.len());
     if keys.len() != 1 {
         return Err(error("expected a single private key".into()));
     }

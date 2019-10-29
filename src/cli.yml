@@ -41,4 +41,17 @@ args:
       long: receivinggroup
       value_name: STRING
       required: false
+  - http_tls_certificate:
+        short: c
+        long: httptlscertificate
+        value_name: file.pem
+        required: false
+        default_value: "demoCA/cacert.pem"
+  - http_tls_key:
+        short: k
+        long: httptlskey
+        value_name: file.key
+        required: false
+        default_value: "rustycar.CA.pem"
+
 
