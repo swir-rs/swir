@@ -1,0 +1,2 @@
+curl -k --cacert demoCA/cacert.pem -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -X POST https://localhost:8443/echo
+curl -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -X POST http://localhost:8080/echo
