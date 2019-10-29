@@ -1,2 +1,12 @@
 /target
 **/*.rs.bk
+**/*.key
+**/*.pem
+**/*.csr
+**/*.crt
+pass.txt
+/demoCA
+/.idea/
+**/*.iml
+
+
