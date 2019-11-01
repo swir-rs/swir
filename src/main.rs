@@ -21,7 +21,8 @@ use std::thread;
 
 use clap::App;
 use futures::future;
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use http::HeaderValue;
+use hyper::{Body, HeaderMap, Method, Request, Response, Server, StatusCode};
 use hyper::rt::{Future, Stream};
 use hyper::service::service_fn;
 use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
@@ -31,12 +32,29 @@ use tokio_rustls::ServerConfigExt;
 
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
+fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
+    match headers.get(http::header::CONTENT_TYPE) {
+        Some(header) => {
+            if header == HeaderValue::from_static("application/json") {
+                return Some(true)
+            } else {
+                return None
+            }
+        },
+        None => return None
+    }
+}
 
 fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut {
     let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     counter.fetch_add(1, Ordering::Relaxed);
     info!("Counter {}", counter.load(Ordering::Relaxed));
+
     let headers= req.headers();
+    if validate_content_type(headers).is_none() {
+        return Box::new(future::ok(response))
+    }
     info!("Headers {:?}", headers);
     let (parts,body) = req.into_parts();
     info!("Parts {:?}", parts);
@@ -48,18 +66,19 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
             *response.body_mut() = Body::from("Try POSTing data to /echo");
         }
 
-        // Simply echo the body back to the client.
-        (Method::POST, "/echo") => {
-//            let res = body.concat2().wait().unwrap();
-//            info!("{:?}", res);
-//            producer.send(&Record::from_value("Request", body.as_bytes())).unwrap();
-            info!("Sending counter {}", counter.load(Ordering::Relaxed));
-            s.send(counter.load(Ordering::Relaxed)).unwrap();
-            *response.body_mut() = body;
+        // Convert to uppercase before sending back to client.
+        (Method::POST, "/publish") => {
+            let reversed = body.concat2().map(move |chunk| {
+                info!("Full body = {:?}", String::from_utf8_lossy(&chunk.to_vec()));
+
+
+                *response.body_mut() = Body::from(chunk.to_vec());
+                response
+            });
+            return Box::new(reversed);
         }
 
-        // Convert to uppercase before sending back to client.
-        (Method::POST, "/echo/uppercase") => {
+        (Method::POST, "/subscribe") => {
             let mapping = body.map(|chunk| {
                 chunk
                     .iter()
