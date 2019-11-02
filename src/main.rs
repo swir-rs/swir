@@ -8,6 +8,7 @@ extern crate kafka;
 #[macro_use]
 extern crate log;
 extern crate rustls;
+extern crate serde;
 extern crate tokio;
 extern crate tokio_rustls;
 extern crate tokio_tcp;
@@ -28,7 +29,15 @@ use hyper::service::service_fn;
 use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
 use kafka::producer::{Producer, Record, RequiredAcks};
 use rustls::internal::pemfile;
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
 use tokio_rustls::ServerConfigExt;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PublishRequest {
+    key1: String,
+    key2: String,
+}
 
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
@@ -45,19 +54,22 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     }
 }
 
-fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut {
+
+fn echo(req: Request<Body>, counter: &AtomicUsize, s: &Sender<PublishRequest>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     counter.fetch_add(1, Ordering::Relaxed);
     info!("Counter {}", counter.load(Ordering::Relaxed));
 
     let headers= req.headers();
+    info!("Headers {:?}", headers);
+
     if validate_content_type(headers).is_none() {
         return Box::new(future::ok(response))
     }
-    info!("Headers {:?}", headers);
+
     let (parts,body) = req.into_parts();
-    info!("Parts {:?}", parts);
+
     info!("Body {:?}", body);
 
     match (parts.method, parts.uri.path()) {
@@ -68,25 +80,37 @@ fn echo(req: Request<Body>, counter: &AtomicUsize , s:&Sender<usize>) -> BoxFut 
 
         // Convert to uppercase before sending back to client.
         (Method::POST, "/publish") => {
-            let reversed = body.concat2().map(move |chunk| {
-                info!("Full body = {:?}", String::from_utf8_lossy(&chunk.to_vec()));
-
-
-                *response.body_mut() = Body::from(chunk.to_vec());
-                response
-            });
-            return Box::new(reversed);
+            let mapping = body.concat2()
+                .map(|chunk| { chunk.to_vec() })
+                .map(|payload| {
+                    let p = &String::from_utf8_lossy(&payload);
+                    info!("Payload is {:?}", &p);
+                    let p: Result<PublishRequest> = serde_json::from_str(&p);
+                    match p {
+                        Ok(s) => info!("{:?}", s),
+                        Err(e) => error!("{:?}", e)
+                    }
+                    *response.body_mut() = Body::empty();
+                    response
+                });
+            return Box::new(mapping);
         }
 
         (Method::POST, "/subscribe") => {
-            let mapping = body.map(|chunk| {
-                chunk
-                    .iter()
-                    .map(|byte| byte.to_ascii_uppercase())
-                    .collect::<Vec<u8>>()
-            });
-
-            *response.body_mut() = Body::wrap_stream(mapping);
+            let mapping = body.concat2()
+                .map(|chunk| { chunk.to_vec() })
+                .map(|payload| {
+                    let p = &String::from_utf8_lossy(&payload);
+                    info!("Payload is {:?}", &p);
+                    let p: Result<PublishRequest> = serde_json::from_str(&p);
+                    match p {
+                        Ok(s) => info!("{:?}", s),
+                        Err(e) => error!("{:?}", e)
+                    }
+                    *response.body_mut() = Body::empty();
+                    response
+                });
+            return Box::new(mapping);
         }
 
         // Reverse the entire body before sending back to the client.
@@ -140,8 +164,8 @@ fn main() {
     info!("Plain port Listening on {}", plain_socket_addr);
 
 
-    let (tls_tx, tls_rx): (Sender<usize>, Receiver<usize>) = mpsc::channel();
-    let (plain_tx, plain_rx): (Sender<usize>, Receiver<usize>) = mpsc::channel();
+    let (tls_tx, tls_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = mpsc::channel();
+    let (plain_tx, plain_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = mpsc::channel();
 
 
 
@@ -224,8 +248,12 @@ fn main() {
         let topic = kafka_sending_topic.clone();
         loop {
             let i = plain_rx.recv().unwrap();
-            info!("Kafka plain sending {}", i);
-            producer.send(&Record::from_value(&topic, i.to_string())).unwrap();
+            info!("Kafka plain sending {:?}", i);
+            let r = serde_json::to_string(&i);
+            if let Ok(j) = r {
+                producer.send(&Record::from_value(&topic, j)).unwrap();
+            }
+
         }
     });
 
@@ -233,8 +261,11 @@ fn main() {
         let topic = tls_kafka_sending_topic.clone();
         loop {
             let i = tls_rx.recv().unwrap();
-            info!("Kafka TLS Sending {}", i);
-            producer2.send(&Record::from_value(&topic, i.to_string())).unwrap();
+            info!("Kafka TLS Sending {:?}", i);
+            let r = serde_json::to_string(&i);
+            if let Ok(j) = r {
+                producer2.send(&Record::from_value(&topic, j)).unwrap();
+            }
         }
     });
 
