@@ -2,6 +2,7 @@
 
 #[macro_use]
 extern crate clap;
+extern crate crossbeam_channel;
 extern crate futures;
 extern crate hyper;
 extern crate kafka;
@@ -13,14 +14,15 @@ extern crate tokio;
 extern crate tokio_rustls;
 extern crate tokio_tcp;
 
-
 use std::{fs, io, str, sync, sync::Arc, time::Duration};
+use std::convert::TryInto;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::mpsc;
 use std::thread;
 
 use clap::App;
+use crossbeam_channel::Receiver;
+use crossbeam_channel::Sender;
+use crossbeam_channel::unbounded;
 use futures::future;
 use http::HeaderValue;
 use hyper::{Body, HeaderMap, Method, Request, Response, Server, StatusCode};
@@ -55,7 +57,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
 }
 
 
-fn echo(req: Request<Body>, counter: &AtomicUsize, s: &Sender<PublishRequest>) -> BoxFut {
+fn echo(req: Request<Body>, counter: &AtomicUsize, sender: Sender<PublishRequest>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     counter.fetch_add(1, Ordering::Relaxed);
@@ -86,13 +88,22 @@ fn echo(req: Request<Body>, counter: &AtomicUsize, s: &Sender<PublishRequest>) -
                     let p = &String::from_utf8_lossy(&payload);
                     info!("Payload is {:?}", &p);
                     let p: Result<PublishRequest> = serde_json::from_str(&p);
+                    p
+                }).map(move |p| {
                     match p {
-                        Ok(s) => info!("{:?}", s),
+                        Ok(json) => {
+                            info!("{:?}", json);
+                            let r = sender.send(json);
+                            if let Err(e) = r {
+                                info!("Channel is dead {:?}", e)
+                            }
+                        },
                         Err(e) => error!("{:?}", e)
                     }
                     *response.body_mut() = Body::empty();
                     response
                 });
+
             return Box::new(mapping);
         }
 
@@ -164,8 +175,8 @@ fn main() {
     info!("Plain port Listening on {}", plain_socket_addr);
 
 
-    let (tls_tx, tls_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = mpsc::channel();
-    let (plain_tx, plain_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = mpsc::channel();
+    let (tls_tx, tls_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = unbounded();
+    let (plain_tx, plain_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = unbounded();
 
 
 
@@ -228,8 +239,8 @@ fn main() {
     let server = Server::bind(&plain_socket_addr)
         .serve(move || {
             let inner_rc = Arc::clone(&request_counter_plain);
-            let inner_txx = mpsc::Sender::clone(&plain_tx);
-            service_fn(move |req| echo(req, &inner_rc, &mpsc::Sender::clone(&inner_txx)))
+            let inner_txx = plain_tx.clone();
+            service_fn(move |req| echo(req, &inner_rc, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
@@ -237,8 +248,8 @@ fn main() {
     let tlsserver = Server::builder(tls)
         .serve(move || {
             let inner_rc = Arc::clone(&request_counter_tls);
-            let inner_txx = mpsc::Sender::clone(&tls_tx);
-            service_fn(move |req| echo(req, &inner_rc, &mpsc::Sender::clone(&inner_txx)))
+            let inner_txx = tls_tx.clone();
+            service_fn(move |req| echo(req, &inner_rc, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
@@ -341,3 +352,4 @@ fn load_private_key(filename: &str) -> io::Result<rustls::PrivateKey> {
 fn error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
+

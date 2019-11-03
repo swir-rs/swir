@@ -25,6 +25,7 @@ env_logger = "*"
 clap = {version = ">=2.33.0", features = ["yaml"]}
 serde = {version = "*", features = ["derive"] }
 serde_json = {version = "= 1.0.41"}
+crossbeam-channel = "*"
 #
 #hyper = "=0.12.35"
 #
