@@ -14,8 +14,7 @@ extern crate tokio;
 extern crate tokio_rustls;
 extern crate tokio_tcp;
 
-use std::{fs, io, str, sync, sync::Arc, time::Duration};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{fs, io, str, sync, time::Duration};
 use std::thread;
 
 use clap::App;
@@ -82,11 +81,9 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
 }
 
 
-fn handler(req: Request<Body>, counter: &AtomicUsize, sender: Sender<Message>) -> BoxFut {
+fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
-    counter.fetch_add(1, Ordering::Relaxed);
-    info!("Counter {}", counter.load(Ordering::Relaxed));
 
     let headers= req.headers();
     info!("Headers {:?}", headers);
@@ -296,24 +293,18 @@ fn main() {
             .create()
             .unwrap();
 
-
-    let request_counter_tls = Arc::new(AtomicUsize::new(0));
-    let request_counter_plain = Arc::new(AtomicUsize::new(0));
-
     let server = Server::bind(&plain_socket_addr)
         .serve(move || {
-            let inner_rc = Arc::clone(&request_counter_plain);
             let inner_txx = plain_tx.clone();
-            service_fn(move |req| handler(req, &inner_rc, inner_txx.clone()))
+            service_fn(move |req| handler(req, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
 
     let tls_server = Server::builder(tls)
         .serve(move || {
-            let inner_rc = Arc::clone(&request_counter_tls);
             let inner_txx = tls_tx.clone();
-            service_fn(move |req| handler(req, &inner_rc, inner_txx.clone()))
+            service_fn(move |req| handler(req, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
