@@ -15,7 +15,6 @@ extern crate tokio_rustls;
 extern crate tokio_tcp;
 
 use std::{fs, io, str, sync, sync::Arc, time::Duration};
-use std::convert::TryInto;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
@@ -38,7 +37,18 @@ use tokio_rustls::ServerConfigExt;
 #[derive(Serialize, Deserialize, Debug)]
 struct PublishRequest {
     key1: String,
-    key2: String,
+    key2: String
+}
+
+#[derive(Debug)]
+struct KafkaResult {
+    result: String
+}
+
+#[derive(Debug)]
+struct Job {
+    request: PublishRequest,
+    sender: Sender<KafkaResult>,
 }
 
 type BoxFut = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
@@ -57,7 +67,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
 }
 
 
-fn echo(req: Request<Body>, counter: &AtomicUsize, sender: Sender<PublishRequest>) -> BoxFut {
+fn handler(req: Request<Body>, counter: &AtomicUsize, sender: Sender<Job>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     counter.fetch_add(1, Ordering::Relaxed);
@@ -75,39 +85,44 @@ fn echo(req: Request<Body>, counter: &AtomicUsize, sender: Sender<PublishRequest
     info!("Body {:?}", body);
 
     match (parts.method, parts.uri.path()) {
-        // Serve some instructions at /
-        (Method::GET, "/") => {
-            *response.body_mut() = Body::from("Try POSTing data to /echo");
-        }
-
-        // Convert to uppercase before sending back to client.
         (Method::POST, "/publish") => {
             let mapping = body.concat2()
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
                     let p = &String::from_utf8_lossy(&payload);
                     info!("Payload is {:?}", &p);
-                    let p: Result<PublishRequest> = serde_json::from_str(&p);
-                    p
+                    serde_json::from_str(&p)
                 }).map(move |p| {
                     match p {
                         Ok(json) => {
                             info!("{:?}", json);
-                            let r = sender.send(json);
-                            if let Err(e) = r {
-                                info!("Channel is dead {:?}", e)
+                            let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
+                            let job = Job { request: json, sender: local_tx.clone() };
+                            info!("About to send to kafka processor");
+                            if let Err(e) = sender.send(job) {
+                                warn!("Channel is dead {:?}", e);
+                                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                *response.body_mut() = Body::empty();
+                                ;
                             }
+                            info!("Waiting for response from kafka");
+                            let r = local_rx.recv();
+                            info!("Got result {:?}", r);
+                            *response.body_mut() = Body::from("delivered");
                         },
-                        Err(e) => error!("{:?}", e)
+                        Err(e) => {
+                            warn!("{:?}", e);
+                            *response.status_mut() = StatusCode::BAD_REQUEST;
+                            *response.body_mut() = Body::from(e.to_string());
+                        }
                     }
-                    *response.body_mut() = Body::empty();
                     response
                 });
 
             return Box::new(mapping);
         }
 
-        (Method::POST, "/subscribe") => {
+        (Method::POST, "/register") => {
             let mapping = body.concat2()
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
@@ -123,23 +138,6 @@ fn echo(req: Request<Body>, counter: &AtomicUsize, sender: Sender<PublishRequest
                 });
             return Box::new(mapping);
         }
-
-        // Reverse the entire body before sending back to the client.
-        //
-        // Since we don't know the end yet, we can't simply stream
-        // the chunks as they arrive. So, this returns a different
-        // future, waiting on concatenating the full body, so that
-        // it can be reversed. Only then can we return a `Response`.
-        (Method::POST, "/echo/reversed") => {
-            let reversed = body.concat2().map(move |chunk| {
-                let body = chunk.iter().rev().cloned().collect::<Vec<u8>>();
-                *response.body_mut() = Body::from(body);
-                response
-            });
-
-            return Box::new(reversed);
-        }
-
         // The 404 Not Found route...
         _ => {
             *response.status_mut() = StatusCode::NOT_FOUND;
@@ -147,6 +145,24 @@ fn echo(req: Request<Body>, counter: &AtomicUsize, sender: Sender<PublishRequest
     };
 
     Box::new(future::ok(response))
+}
+
+fn kafka_event_handler(rx: &Receiver<Job>, kafka_producer: &mut Producer, topic: &String) {
+    let job = rx.recv().unwrap();
+    let req = job.request;
+    let sender = job.sender;
+    info!("Kafka plain sending {:?}", req);
+    if let Ok(event) = serde_json::to_string(&req) {
+        if let Err(e) = kafka_producer.send(&Record::from_value(&topic, event)) {
+            if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
+                warn!("Can't send response back {:?}", e);
+            }
+        } else {
+            if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
+                warn!("Can't send response back {:?}", e);
+            }
+        }
+    }
 }
 
 fn main() {
@@ -175,8 +191,8 @@ fn main() {
     info!("Plain port Listening on {}", plain_socket_addr);
 
 
-    let (tls_tx, tls_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = unbounded();
-    let (plain_tx, plain_rx): (Sender<PublishRequest>, Receiver<PublishRequest>) = unbounded();
+    let (tls_tx, tls_rx): (Sender<Job>, Receiver<Job>) = unbounded();
+    let (plain_tx, plain_rx): (Sender<Job>, Receiver<Job>) = unbounded();
 
 
 
@@ -209,14 +225,14 @@ fn main() {
         }).filter_map(|x| x);
 
 
-    let mut producer =
+    let mut plain_producer =
         Producer::from_hosts(kafka_broker_address.to_owned())
             .with_ack_timeout(Duration::from_secs(1))
             .with_required_acks(RequiredAcks::One)
             .create()
             .unwrap();
 
-    let mut producer2 =
+    let mut tls_producer =
         Producer::from_hosts(kafka_broker_address.to_owned())
             .with_ack_timeout(Duration::from_secs(1))
             .with_required_acks(RequiredAcks::One)
@@ -240,16 +256,16 @@ fn main() {
         .serve(move || {
             let inner_rc = Arc::clone(&request_counter_plain);
             let inner_txx = plain_tx.clone();
-            service_fn(move |req| echo(req, &inner_rc, inner_txx.clone()))
+            service_fn(move |req| handler(req, &inner_rc, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
 
-    let tlsserver = Server::builder(tls)
+    let tls_server = Server::builder(tls)
         .serve(move || {
             let inner_rc = Arc::clone(&request_counter_tls);
             let inner_txx = tls_tx.clone();
-            service_fn(move |req| echo(req, &inner_rc, inner_txx.clone()))
+            service_fn(move |req| handler(req, &inner_rc, inner_txx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
@@ -258,12 +274,7 @@ fn main() {
     let kafka_sending_thread = thread::spawn(move || {
         let topic = kafka_sending_topic.clone();
         loop {
-            let i = plain_rx.recv().unwrap();
-            info!("Kafka plain sending {:?}", i);
-            let r = serde_json::to_string(&i);
-            if let Ok(j) = r {
-                producer.send(&Record::from_value(&topic, j)).unwrap();
-            }
+            kafka_event_handler(&plain_rx, &mut plain_producer, &topic);
 
         }
     });
@@ -271,12 +282,7 @@ fn main() {
     let kafka_tls_sending_thread = thread::spawn(move || {
         let topic = tls_kafka_sending_topic.clone();
         loop {
-            let i = tls_rx.recv().unwrap();
-            info!("Kafka TLS Sending {:?}", i);
-            let r = serde_json::to_string(&i);
-            if let Ok(j) = r {
-                producer2.send(&Record::from_value(&topic, j)).unwrap();
-            }
+            kafka_event_handler(&tls_rx, &mut tls_producer, &topic);
         }
     });
 
@@ -292,19 +298,14 @@ fn main() {
             consumer.commit_consumed().unwrap();
         }
     });
-
-
-    let tls_server = thread::spawn(move || { hyper::rt::run(tlsserver) });
+    let tls_server = thread::spawn(move || { hyper::rt::run(tls_server) });
     let plain_server = thread::spawn(move || { hyper::rt::run(server); });
-
 
     kafka_sending_thread.join().unwrap();
     kafka_tls_sending_thread.join().unwrap();
     kafka_receiving_thread.join().unwrap();
     plain_server.join().unwrap_err();
     tls_server.join().unwrap_err();
-
-
 }
 
 
