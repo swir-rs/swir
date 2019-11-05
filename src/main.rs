@@ -1,15 +1,18 @@
 //#![deny(warnings)]
 
+extern crate bincode;
 #[macro_use]
 extern crate clap;
 extern crate crossbeam_channel;
 extern crate futures;
+extern crate hex_literal;
 extern crate hyper;
 extern crate kafka;
 #[macro_use]
 extern crate log;
 extern crate rustls;
 extern crate serde;
+extern crate sled;
 extern crate tokio;
 extern crate tokio_rustls;
 extern crate tokio_tcp;
@@ -30,21 +33,25 @@ use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
 use kafka::producer::{AsBytes, Producer, Record, RequiredAcks};
 use rustls::internal::pemfile;
 use serde::{Deserialize, Serialize};
+use sled::{Config, Db, IVec};
 use tokio_rustls::ServerConfigExt;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct PublishRequest {
-    key1: String,
-    key2: String
+    payload: String,
+    url: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct EndpointDesc {
+    url: String,
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
-struct RegisterRequest {
-    key1: String,
-    key2: String,
+struct SubscribeRequest {
+    endpoint: EndpointDesc
 }
-
 
 
 #[derive(Debug)]
@@ -54,7 +61,7 @@ struct KafkaResult {
 
 #[derive(Debug)]
 enum Job {
-    Register(RegisterRequest),
+    Subscribe(SubscribeRequest),
     Publish(PublishRequest),
 }
 
@@ -95,7 +102,7 @@ fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
     let (parts,body) = req.into_parts();
 
     info!("Body {:?}", body);
-
+    let url = parts.uri.clone().to_string();
     match (parts.method, parts.uri.path()) {
         (Method::POST, "/publish") => {
             let mapping = body.concat2()
@@ -103,38 +110,34 @@ fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
                 .map(|payload| {
                     let p = &String::from_utf8_lossy(&payload.as_bytes());
                     info!("Payload is {:?}", &p);
-                    serde_json::from_str(&p)
+                    PublishRequest { payload: p.to_string(), url: url }
                 }).map(move |p| {
-                    match p {
-                        Ok(json) => {
-                            info!("{:?}", json);
-                            let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
-                            let job = Message { job: Job::Publish(json), sender: local_tx.clone() };
-                            info!("About to send to kafka processor");
-                            if let Err(e) = sender.send(job) {
-                                warn!("Channel is dead {:?}", e);
-                                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                                *response.body_mut() = Body::empty();
-                                ;
-                            }
-                            info!("Waiting for response from kafka");
-                            let r = local_rx.recv();
-                            info!("Got result {:?}", r);
-                            *response.body_mut() = Body::from("delivered");
-                        },
-                        Err(e) => {
-                            warn!("{:?}", e);
-                            *response.status_mut() = StatusCode::BAD_REQUEST;
-                            *response.body_mut() = Body::from(e.to_string());
-                        }
-                    }
-                    response
-                });
-
+                info!("{:?}", p);
+                let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
+                let job = Message { job: Job::Publish(p), sender: local_tx.clone() };
+                info!("About to send to kafka processor");
+                if let Err(e) = sender.send(job) {
+                    warn!("Channel is dead {:?}", e);
+                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    *response.body_mut() = Body::empty();
+                    ;
+                }
+                info!("Waiting for response from kafka");
+                let r = local_rx.recv();
+                info!("Got result {:?}", r);
+                if let Ok(res) = r {
+                    *response.body_mut() = Body::from(res.result);
+                    *response.status_mut() = StatusCode::OK;
+                } else {
+                    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    *response.body_mut() = Body::empty();
+                }
+                response
+            });
             return Box::new(mapping);
         }
 
-        (Method::POST, "/register") => {
+        (Method::POST, "/subscribe") => {
             let mapping = body.concat2()
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
@@ -146,7 +149,7 @@ fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
                         Ok(json) => {
                             info!("{:?}", json);
                             let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
-                            let job = Message { job: Job::Register(json), sender: local_tx.clone() };
+                            let job = Message { job: Job::Subscribe(json), sender: local_tx.clone() };
                             info!("About to send to kafka processor");
                             if let Err(e) = sender.send(job) {
                                 warn!("Channel is dead {:?}", e);
@@ -157,7 +160,13 @@ fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
                             info!("Waiting for response from kafka");
                             let r = local_rx.recv();
                             info!("Got result {:?}", r);
-                            *response.body_mut() = Body::from("delivered");
+                            if let Ok(res) = r {
+                                *response.body_mut() = Body::from(res.result);
+                                *response.status_mut() = StatusCode::OK;
+                            } else {
+                                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                                *response.body_mut() = Body::empty();
+                            }
                         },
                         Err(e) => {
                             warn!("{:?}", e);
@@ -178,37 +187,43 @@ fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
     Box::new(future::ok(response))
 }
 
-fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, topic: &String) {
+fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, publish_topic: &String, subscribe_topic: &String, db: &Db) {
     let job = rx.recv().unwrap();
 
     let sender = job.sender;
     match job.job {
-        Job::Register(value) => {
+        Job::Subscribe(value) => {
             let req = value;
             info!("New registration  {:?}", req);
-            if let Ok(event) = serde_json::to_string(&req) {
+
+
+            if let Err(e) = db.insert(req.endpoint.url, IVec::from(subscribe_topic.as_bytes())) {
+                warn!("Can't store registration {:?}", e);
+                if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
+                    warn!("Can't send response back {:?}", e);
+                }
+            } else {
                 if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
                     warn!("Can't send response back {:?}", e);
                 }
-            }
-        },
+            };
+        }
         Job::Publish(value) => {
             let req = value;
             info!("Kafka plain sending {:?}", req);
-            if let Ok(event) = serde_json::to_string(&req) {
-                if let Err(e) = kafka_producer.send(&Record::from_value(&topic, event)) {
-                    if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
-                        warn!("Can't send response back {:?}", e);
-                    }
-                } else {
-                    if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
-                        warn!("Can't send response back {:?}", e);
-                    }
+            if let Err(e) = kafka_producer.send(&Record::from_value(&publish_topic, req.payload)) {
+                if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
+                    warn!("Can't send response back {:?}", e);
+                }
+            } else {
+                if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
+                    warn!("Can't send response back {:?}", e);
                 }
             }
         }
     }
 }
+
 
 fn main() {
     env_logger::init();
@@ -221,11 +236,10 @@ fn main() {
     let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let kafka_sending_topic = matches.value_of("kafka_sending_topic").unwrap().to_owned();
     let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
-    let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap();
+    let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap().to_owned();
     let kafka_receiving_group = matches.value_of("kafka_receiving_group").unwrap_or_default();
     let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
     let http_tls_key = matches.value_of("http_tls_key").unwrap();
-
 
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
     let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
@@ -235,11 +249,11 @@ fn main() {
     info!("Tls port Listening on {}", tls_socket_addr);
     info!("Plain port Listening on {}", plain_socket_addr);
 
-
     let (tls_tx, tls_rx): (Sender<Message>, Receiver<Message>) = unbounded();
     let (plain_tx, plain_rx): (Sender<Message>, Receiver<Message>) = unbounded();
 
-
+    let config = Config::new().temporary(true);
+    let db = config.open().unwrap();
 
     let tls_cfg = {
         // Load public certificate.
@@ -309,19 +323,23 @@ fn main() {
         ).map_err(|e| warn!("server error: {}", e));
 
 
+    let db_clone = db.clone();
     let tls_kafka_sending_topic = kafka_sending_topic.clone();
+    let tls_kafka_receiveing_topic = kafka_receiving_topic.clone();
     let kafka_sending_thread = thread::spawn(move || {
-        let topic = kafka_sending_topic.clone();
+        let sending_topic = kafka_sending_topic.clone();
+        let receiving_topic = kafka_receiving_topic.clone();
         loop {
-            kafka_event_handler(&plain_rx, &mut plain_producer, &topic);
+            kafka_event_handler(&plain_rx, &mut plain_producer, &sending_topic, &receiving_topic, &db_clone);
 
         }
     });
-
+    let db_clone = db.clone();
     let kafka_tls_sending_thread = thread::spawn(move || {
-        let topic = tls_kafka_sending_topic.clone();
+        let sending_topic = tls_kafka_sending_topic.clone();
+        let receiving_topic = tls_kafka_receiveing_topic.clone();
         loop {
-            kafka_event_handler(&tls_rx, &mut tls_producer, &topic);
+            kafka_event_handler(&tls_rx, &mut tls_producer, &sending_topic, &receiving_topic, &db_clone);
         }
     });
 
@@ -392,4 +410,5 @@ fn load_private_key(filename: &str) -> io::Result<rustls::PrivateKey> {
 fn error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
+
 

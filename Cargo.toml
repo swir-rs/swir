@@ -26,6 +26,10 @@ clap = {version = ">=2.33.0", features = ["yaml"]}
 serde = {version = "*", features = ["derive"] }
 serde_json = {version = "= 1.0.41"}
 crossbeam-channel = "*"
+sled = "*"
+sha2 = "*"
+bincode ="*"
+hex-literal="*"
 #
 #hyper = "=0.12.35"
 #
