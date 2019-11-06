@@ -8,7 +8,6 @@ edition = "2018"
 
 
 [dependencies]
-
 futures = "0.1"
 http = "0.1"
 hyper = "0.12"
@@ -30,6 +29,7 @@ sled = "*"
 sha2 = "*"
 bincode ="*"
 hex-literal="*"
+
 #
 #hyper = "=0.12.35"
 #
