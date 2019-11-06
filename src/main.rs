@@ -17,6 +17,7 @@ extern crate tokio;
 extern crate tokio_rustls;
 extern crate tokio_tcp;
 
+
 use std::{fs, io, str, sync, time::Duration};
 use std::thread;
 
@@ -26,10 +27,12 @@ use crossbeam_channel::Sender;
 use crossbeam_channel::unbounded;
 use futures::future;
 use http::HeaderValue;
-use hyper::{Body, HeaderMap, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Client, HeaderMap, Method, Request, Response, Server, StatusCode, Uri};
+use hyper::body::Payload;
+use hyper::client::HttpConnector;
 use hyper::rt::{Future, Stream};
 use hyper::service::service_fn;
-use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage};
+use kafka::consumer::{Consumer, FetchOffset, GroupOffsetStorage, MessageSetsIter};
 use kafka::producer::{AsBytes, Producer, Record, RequiredAcks};
 use rustls::internal::pemfile;
 use serde::{Deserialize, Serialize};
@@ -195,9 +198,7 @@ fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, pu
         Job::Subscribe(value) => {
             let req = value;
             info!("New registration  {:?}", req);
-
-
-            if let Err(e) = db.insert(req.endpoint.url, IVec::from(subscribe_topic.as_bytes())) {
+            if let Err(e) = db.insert(subscribe_topic, IVec::from(req.endpoint.url.as_bytes())) {
                 warn!("Can't store registration {:?}", e);
                 if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
                     warn!("Can't send response back {:?}", e);
@@ -208,6 +209,7 @@ fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, pu
                 }
             };
         }
+
         Job::Publish(value) => {
             let req = value;
             info!("Kafka plain sending {:?}", req);
@@ -224,6 +226,49 @@ fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, pu
     }
 }
 
+fn kafka_incoming_event_handler(iter: MessageSetsIter, client: &Client<HttpConnector, Body>, consumer: &mut Consumer, db: &Db) {
+    for ms in iter {
+        let topic = ms.topic();
+        let mut uri: String = String::from("");
+        if let Ok(maybe_url) = db.get(topic) {
+            if let Some(url) = maybe_url {
+                let vec = url.to_vec();
+                let b = vec.as_bytes();
+                uri = String::from_utf8_lossy(b).to_string();
+            }
+        }
+
+        for m in ms.messages() {
+            let kafka_msg = String::from_utf8_lossy(m.value);
+            info!("Received message {:?}", kafka_msg);
+            let b = Body::empty();
+            let mut postreq = Request::new(Body::empty());
+            *postreq.method_mut() = Method::POST;
+            *postreq.uri_mut() = Uri::from(uri.parse().unwrap_or_default());
+            postreq.headers_mut().insert(
+                hyper::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
+            let cl = b.content_length().unwrap().to_string();
+            postreq.headers_mut().insert(
+                hyper::header::CONTENT_LENGTH,
+                HeaderValue::from_str(&cl).unwrap(),
+            );
+            let post = client.request(postreq).and_then(|res| {
+                info!("POST: {}", res.status());
+                res.into_body().concat2()
+            }).map(|_| {
+                info!("Done.");
+            }).map_err(|err| {
+                warn!("Error {}", err);
+            });
+            hyper::rt::run(post);
+        }
+        let r = consumer.consume_messageset(ms);
+        info!("Consumed result {:?}", r);
+    }
+    consumer.commit_consumed().unwrap();
+}
 
 fn main() {
     env_logger::init();
@@ -254,6 +299,7 @@ fn main() {
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
+    let client = Client::new();
 
     let tls_cfg = {
         // Load public certificate.
@@ -345,16 +391,10 @@ fn main() {
 
     let kafka_receiving_thread = thread::spawn(move || {
         loop {
-            for ms in consumer.poll().unwrap().iter() {
-                for m in ms.messages() {
-                    info!("Received message {:?}", std::str::from_utf8(m.value).unwrap());
-                }
-                let r = consumer.consume_messageset(ms);
-                info!("Consumed result {:?}", r);
-            }
-            consumer.commit_consumed().unwrap();
+            kafka_incoming_event_handler(consumer.poll().unwrap().iter(), &client, &mut consumer, &db);
         }
     });
+
     let tls_server = thread::spawn(move || { hyper::rt::run(tls_server) });
     let plain_server = thread::spawn(move || { hyper::rt::run(server); });
 
