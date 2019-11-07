@@ -8,5 +8,5 @@ pass.txt
 /demoCA
 /.idea/
 **/*.iml
-
+**/*.lock
 
