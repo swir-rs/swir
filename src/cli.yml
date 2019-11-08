@@ -35,6 +35,7 @@ args:
       short: r
       long: receivingtopic
       value_name: STRING
+      multiple: true
       required: true
   - kafka_receiving_group:
       short: g

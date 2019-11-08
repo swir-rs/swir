@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use futures::future;
 use http::HeaderValue;
@@ -5,16 +7,18 @@ use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode, Uri}
 use hyper::body::Payload;
 use hyper::client::HttpConnector;
 use hyper::rt::{Future, Stream};
-use kafka::consumer::{Consumer, MessageSetsIter};
-use kafka::producer::{AsBytes, Producer, Record};
+use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
+use rdkafka::message::Message;
+use rdkafka::message::ToBytes;
+use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
 
 use structs::{Job, KafkaResult, PublishRequest};
 
-mod structs;
+pub mod structs;
 
 #[derive(Debug)]
-pub struct Message {
+pub struct InternalMessage {
     job: Job,
     sender: Sender<KafkaResult>,
 }
@@ -36,7 +40,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
 }
 
 
-pub fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
+pub fn handler(req: Request<Body>, sender: Sender<InternalMessage>) -> BoxFut {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -56,13 +60,13 @@ pub fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
             let mapping = body.concat2()
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
-                    let p = &String::from_utf8_lossy(&payload.as_bytes());
+                    let p = &String::from_utf8_lossy(&payload);
                     info!("Payload is {:?}", &p);
                     PublishRequest { payload: p.to_string(), url: url }
                 }).map(move |p| {
                 info!("{:?}", p);
                 let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
-                let job = Message { job: Job::Publish(p), sender: local_tx.clone() };
+                let job = InternalMessage { job: Job::Publish(p), sender: local_tx.clone() };
                 info!("About to send to kafka processor");
                 if let Err(e) = sender.send(job) {
                     warn!("Channel is dead {:?}", e);
@@ -89,7 +93,7 @@ pub fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
             let mapping = body.concat2()
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
-                    let p = &String::from_utf8_lossy(&payload.as_bytes());
+                    let p = &String::from_utf8_lossy(&payload);
                     info!("Payload is {:?}", &p);
                     serde_json::from_str(&p)
                 }).map(move |p| {
@@ -97,7 +101,7 @@ pub fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
                     Ok(json) => {
                         info!("{:?}", json);
                         let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
-                        let job = Message { job: Job::Subscribe(json), sender: local_tx.clone() };
+                        let job = InternalMessage { job: Job::Subscribe(json), sender: local_tx.clone() };
                         info!("About to send to kafka processor");
                         if let Err(e) = sender.send(job) {
                             warn!("Channel is dead {:?}", e);
@@ -135,7 +139,7 @@ pub fn handler(req: Request<Body>, sender: Sender<Message>) -> BoxFut {
     Box::new(future::ok(response))
 }
 
-pub fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer, publish_topic: &String, subscribe_topic: &String, db: &Db) {
+pub fn kafka_event_handler(rx: &Receiver<InternalMessage>, kafka_producer: &FutureProducer, publish_topic: &str, subscribe_topic: &str, db: &Db) {
     let job = rx.recv().unwrap();
 
     let sender = job.sender;
@@ -158,65 +162,93 @@ pub fn kafka_event_handler(rx: &Receiver<Message>, kafka_producer: &mut Producer
         Job::Publish(value) => {
             let req = value;
             info!("Kafka plain sending {:?}", req);
-            if let Err(e) = kafka_producer.send(&Record::from_value(&publish_topic, req.payload)) {
-                if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
-                    warn!("Can't send response back {:?}", e);
+            let r = FutureRecord::to(publish_topic).payload(ToBytes::to_bytes(&req.payload))
+                .key("some key".to_bytes());
+            let foo = kafka_producer.send(r, 0).map(move |status| {
+                match status {
+                    Ok(_) => {
+                        sender.send(KafkaResult { result: "All is good".to_string() })
+                    }
+                    Err(e) => {
+                        sender.send(KafkaResult { result: e.0.to_string() })
+                    }
                 }
-            } else {
-                if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
-                    warn!("Can't send response back {:?}", e);
-                }
+            });
+            if let Err(_) = foo.wait() {
+                warn!("hmmm something is very wrong here. it seems that the channel has been closed");
             }
         }
     }
 }
 
-pub fn kafka_incoming_event_handler(iter: MessageSetsIter, client: &Client<HttpConnector, Body>, consumer: &mut Consumer, db: &Db) {
-    let f = {
-        for ms in iter {
-            let topic = ms.topic();
-            let mut uri: String = String::from("");
-            if let Ok(maybe_url) = db.get(topic) {
-                if let Some(url) = maybe_url {
-                    let vec = url.to_vec();
-                    let b = vec.as_bytes();
-                    uri = String::from_utf8_lossy(b).to_string();
+pub fn kafka_incoming_event_handler(consumer: &StreamConsumer<structs::CustomContext>, client: &Client<HttpConnector, Body>, db: &Db) {
+    let stream = consumer.start();
+    for message in stream.wait() {
+        let f = {
+            match message {
+                Err(_) => {
+                    warn!("Error while reading from stream.");
+                }
+                Ok(Ok(m)) => {
+                    let payload = match m.payload_view::<str>() {
+                        None => "",
+                        Some(Ok(s)) => s,
+                        Some(Err(e)) => {
+                            warn!("Error while deserializing message payload: {:?}", e);
+                            ""
+                        }
+                    };
+
+                    let mut uri: String = String::from("");
+                    if let Ok(maybe_url) = db.get(m.topic()) {
+                        if let Some(url) = maybe_url {
+                            let vec = url.to_vec();
+                            uri = String::from_utf8_lossy(vec.borrow()).to_string();
+                        }
+                    }
+
+                    let (s, r) = futures::sync::oneshot::channel::<u16>();
+
+
+                    let mut postreq = Request::new(Body::from(payload.to_owned()));
+                    *postreq.method_mut() = Method::POST;
+                    *postreq.uri_mut() = Uri::from(uri.parse().unwrap_or_default());
+                    postreq.headers_mut().insert(
+                        hyper::header::CONTENT_TYPE,
+                        HeaderValue::from_static("application/json"),
+                    );
+                    let cl = postreq.body_mut().content_length().unwrap().to_string();
+                    postreq.headers_mut().insert(
+                        hyper::header::CONTENT_LENGTH,
+                        HeaderValue::from_str(&cl).unwrap(),
+                    );
+
+                    let post = client.request(postreq).and_then(|res| {
+                        let status = res.status();
+                        info!("POST: {}", res.status());
+                        s.send(status.as_u16());
+                        res.into_body().concat2()
+                    }).map(|_| {
+                        info!("Done.");
+                    }).map_err(|err| {
+                        warn!("Error {}", err);
+                    });
+                    hyper::rt::run(post);
+                    r.map(|f| {
+                        if f == 200 {
+                            consumer.commit_message(&m, CommitMode::Async).unwrap();
+                        }
+                    }).wait();
+                }
+                Ok(Err(e)) => {
+                    warn!("Kafka error: {}", e);
                 }
             }
-
-            for m in ms.messages() {
-                let kafka_msg = String::from_utf8_lossy(m.value).to_string();
-                info!("Received message {:?}", kafka_msg);
-
-                let mut postreq = Request::new(Body::empty());
-                *postreq.method_mut() = Method::POST;
-                *postreq.uri_mut() = Uri::from(uri.parse().unwrap_or_default());
-                postreq.headers_mut().insert(
-                    hyper::header::CONTENT_TYPE,
-                    HeaderValue::from_static("application/json"),
-                );
-
-                *postreq.body_mut() = Body::from(kafka_msg);
-                let cl = postreq.body_mut().content_length().unwrap().to_string();
-                postreq.headers_mut().insert(
-                    hyper::header::CONTENT_LENGTH,
-                    HeaderValue::from_str(&cl).unwrap(),
-                );
-                let post = client.request(postreq).and_then(|res| {
-                    info!("POST: {}", res.status());
-                    res.into_body().concat2()
-                }).map(|_| {
-                    info!("Done.");
-                }).map_err(|err| {
-                    warn!("Error {}", err);
-                });
-                hyper::rt::run(post);
-            }
-            let r = consumer.consume_messageset(ms);
-            info!("Consumed result {:?}", r);
-        }
-        consumer.commit_consumed().unwrap();
-        future::ok(())
+            future::ok(())
+        };
+        info!("got message. about to spawn");
+        hyper::rt::run(f);
     };
-    hyper::rt::run(f);
 }
+
+

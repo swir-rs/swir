@@ -29,3 +29,5 @@ pub enum Job {
     Publish(PublishRequest),
 }
 
+#[derive(Debug)]
+pub struct CustomContext;

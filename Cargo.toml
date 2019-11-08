@@ -29,6 +29,11 @@ sled = "*"
 sha2 = "*"
 bincode ="*"
 hex-literal="*"
+rdkafka  = { version = "~0.20"}
+rdkafka-sys = { version ="^0.11.6-1"}
+
+
+
 
 #
 #hyper = "=0.12.35"
