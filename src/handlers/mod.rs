@@ -226,7 +226,10 @@ pub fn kafka_incoming_event_handler(consumer: &StreamConsumer<structs::CustomCon
                     let post = client.request(postreq).and_then(|res| {
                         let status = res.status();
                         info!("POST: {}", res.status());
-                        s.send(status.as_u16());
+                        if let Err(e) = s.send(status.as_u16()) {
+                            warn!("Problem with an internal communication {:?}", e);
+                        }
+
                         res.into_body().concat2()
                     }).map(|_| {
                         info!("Done.");
@@ -234,11 +237,14 @@ pub fn kafka_incoming_event_handler(consumer: &StreamConsumer<structs::CustomCon
                         warn!("Error {}", err);
                     });
                     hyper::rt::run(post);
-                    r.map(|f| {
+                    let result = r.map(|f| {
                         if f == 200 {
                             consumer.commit_message(&m, CommitMode::Async).unwrap();
                         }
                     }).wait();
+                    if let Err(e) = result {
+                        warn!("Kafka error when commiting messages: {}", e);
+                    }
                 }
                 Ok(Err(e)) => {
                     warn!("Kafka error: {}", e);
