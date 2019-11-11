@@ -1,26 +1,124 @@
+extern crate rdkafka;
+extern crate rdkafka_sys;
+
 use std::borrow::Borrow;
+use std::thread;
+use std::thread::JoinHandle;
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use futures::future;
 use http::HeaderValue;
 use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode, Uri};
 use hyper::body::Payload;
+use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::rt::{Future, Stream};
-use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
-use rdkafka::message::Message;
-use rdkafka::message::ToBytes;
+use rdkafka::client::ClientContext;
+use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
+use rdkafka::error::KafkaResult;
+use rdkafka::message::{Message, ToBytes};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
 
-use structs::{Job, KafkaResult, PublishRequest};
+use structs::{CustomContext, Job, PublishRequest};
 
 pub mod structs;
 
 #[derive(Debug)]
 pub struct InternalMessage {
     job: Job,
-    sender: Sender<KafkaResult>,
+    sender: Sender<structs::KafkaResult>,
+}
+
+impl ClientContext for CustomContext {}
+
+impl ConsumerContext for CustomContext {
+    fn pre_rebalance(&self, rebalance: &Rebalance) {
+        info!("Pre rebalance {:?}", rebalance);
+    }
+
+    fn post_rebalance(&self, rebalance: &Rebalance) {
+        info!("Post rebalance {:?}", rebalance);
+    }
+
+    fn commit_callback(
+        &self,
+        result: KafkaResult<()>,
+        _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList,
+    ) {
+        info!("Committing offsets: {:?}", result);
+    }
+}
+
+
+pub fn configure_broker(kafka_broker_address: String, kafka_sending_topic: String, kafka_receiving_topic: String, kafka_receiving_group: String, db: Db, rx: Receiver<InternalMessage>) -> Vec<JoinHandle<()>> {
+    let context = CustomContext;
+
+    let plain_producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", &kafka_broker_address)
+        .set("message.timeout.ms", "5000")
+        .create().expect("Can't start broker");
+
+
+//    let tls_producer:FutureProducer =
+//        ClientConfig::new()
+//            .set("bootstrap.servers", &kafka_broker_address)
+//            .set("message.timeout.ms", "5000")
+//            .create().expect("Can't start broker");;
+
+
+    let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
+        .set("group.id", &kafka_receiving_group)
+        .set("bootstrap.servers", &kafka_broker_address)
+        .set("enable.partition.eof", "false")
+        .set("session.timeout.ms", "6000")
+        .set("enable.auto.commit", "true")
+        //.set("statistics.interval.ms", "30000")
+        //.set("auto.offset.reset", "smallest")
+        .set_log_level(RDKafkaLogLevel::Debug)
+        .create_with_context(context).expect("Can't start broker");
+
+    let mut topics: Vec<&str> = vec!();
+    topics.push(&kafka_receiving_topic);
+    let tt = topics.borrow();
+    consumer.subscribe(tt).expect("Can't subscribe to topics");
+
+    let client: Client<HttpConnector<GaiResolver>, Body> = Client::new();
+
+
+    let mut threads: Vec<JoinHandle<()>> = vec!();
+
+    threads.push(create_sending_thread(kafka_receiving_topic, kafka_sending_topic, db.clone(), rx, plain_producer));
+
+    threads.push(create_receiving_thread(consumer, client, db));
+    threads
+}
+
+
+fn create_sending_thread(receiving_topic: String, sending_topic: String, db: Db, rx: Receiver<InternalMessage>, producer: FutureProducer) -> JoinHandle<()> {
+    let res = thread::spawn(move || {
+//        let rx = rx.clone();
+//        let sending_topic = sending_topic.clone();
+//        let receiving_topic = receiving_topic.clone();
+//        let db = db.clone();
+//        let producer = producer.clone();
+        loop {
+            kafka_event_handler(&rx, &producer, &sending_topic, &receiving_topic, &db);
+        }
+    });
+    res
+}
+
+fn create_receiving_thread(consumer: StreamConsumer<CustomContext>, client: Client<HttpConnector<GaiResolver>, Body>, db: Db) -> JoinHandle<()> {
+    let res = thread::spawn(move || {
+        let f = {
+            kafka_incoming_event_handler(&consumer, &client, &db);
+            future::ok(())
+        };
+        hyper::rt::run(f);
+    });
+    res
 }
 
 
@@ -65,7 +163,7 @@ pub fn handler(req: Request<Body>, sender: Sender<InternalMessage>) -> BoxFut {
                     PublishRequest { payload: p.to_string(), url: url }
                 }).map(move |p| {
                 info!("{:?}", p);
-                let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
+                let (local_tx, local_rx): (Sender<structs::KafkaResult>, Receiver<structs::KafkaResult>) = unbounded();
                 let job = InternalMessage { job: Job::Publish(p), sender: local_tx.clone() };
                 info!("About to send to kafka processor");
                 if let Err(e) = sender.send(job) {
@@ -100,7 +198,7 @@ pub fn handler(req: Request<Body>, sender: Sender<InternalMessage>) -> BoxFut {
                 match p {
                     Ok(json) => {
                         info!("{:?}", json);
-                        let (local_tx, local_rx): (Sender<KafkaResult>, Receiver<KafkaResult>) = unbounded();
+                        let (local_tx, local_rx): (Sender<structs::KafkaResult>, Receiver<structs::KafkaResult>) = unbounded();
                         let job = InternalMessage { job: Job::Subscribe(json), sender: local_tx.clone() };
                         info!("About to send to kafka processor");
                         if let Err(e) = sender.send(job) {
@@ -149,11 +247,11 @@ pub fn kafka_event_handler(rx: &Receiver<InternalMessage>, kafka_producer: &Futu
             info!("New registration  {:?}", req);
             if let Err(e) = db.insert(subscribe_topic, IVec::from(req.endpoint.url.as_bytes())) {
                 warn!("Can't store registration {:?}", e);
-                if let Err(e) = sender.send(KafkaResult { result: e.to_string() }) {
+                if let Err(e) = sender.send(structs::KafkaResult { result: e.to_string() }) {
                     warn!("Can't send response back {:?}", e);
                 }
             } else {
-                if let Err(e) = sender.send(KafkaResult { result: "All is good".to_string() }) {
+                if let Err(e) = sender.send(structs::KafkaResult { result: "All is good".to_string() }) {
                     warn!("Can't send response back {:?}", e);
                 }
             };
@@ -167,10 +265,10 @@ pub fn kafka_event_handler(rx: &Receiver<InternalMessage>, kafka_producer: &Futu
             let foo = kafka_producer.send(r, 0).map(move |status| {
                 match status {
                     Ok(_) => {
-                        sender.send(KafkaResult { result: "All is good".to_string() })
+                        sender.send(structs::KafkaResult { result: "All is good".to_string() })
                     }
                     Err(e) => {
-                        sender.send(KafkaResult { result: e.0.to_string() })
+                        sender.send(structs::KafkaResult { result: e.0.to_string() })
                     }
                 }
             });
