@@ -1,3 +1,4 @@
+use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -31,3 +32,9 @@ pub enum Job {
 
 #[derive(Debug)]
 pub struct CustomContext;
+
+#[derive(Debug)]
+pub struct InternalMessage {
+    pub job: Job,
+    pub sender: Sender<KafkaResult>,
+}

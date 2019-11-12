@@ -21,23 +21,23 @@ args:
       value_name: Integer
       default_value: "8080"
 
-  - kafka_broker:
+  - broker:
       short: b
-      long: kafkabroker
+      long: broker
       value_name: IP:PORT
       required: true
-  - kafka_sending_topic:
+  - sending_topic:
       short: s
       long: sendingtopic
       value_name: STRING
       required: true
-  - kafka_receiving_topic:
+  - receiving_topic:
       short: r
       long: receivingtopic
       value_name: STRING
       multiple: true
       required: true
-  - kafka_receiving_group:
+  - receiving_group:
       short: g
       long: receivinggroup
       value_name: STRING

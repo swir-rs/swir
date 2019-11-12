@@ -22,19 +22,18 @@ use std::thread;
 
 use clap::App;
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use hyper::Server;
 use hyper::rt::{Future, Stream};
+use hyper::Server;
 use hyper::service::service_fn;
 use sled::Config;
 use tokio_rustls::ServerConfigExt;
 
-use handlers::handler;
+use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
 mod handlers;
-
+mod http_handler;
 mod utils;
-
 
 
 
@@ -47,28 +46,25 @@ fn main() {
     let external_address = matches.value_of("address").unwrap();
     let tls_port: u16 = matches.value_of("tlsport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
-    let kafka_sending_topic = matches.value_of("kafka_sending_topic").unwrap();
-    let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
-    let kafka_receiving_topic = matches.value_of("kafka_receiving_topic").unwrap();
+    let sending_topic = matches.value_of("sending_topic").unwrap();
+    let broker_address = matches.value_of("broker").unwrap();
+    let receiving_topic = matches.value_of("receiving_topic").unwrap();
 
 
-    let kafka_receiving_group = matches.value_of("kafka_receiving_group").unwrap_or_default();
+    let receiving_group = matches.value_of("receiving_group").unwrap_or_default();
     let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
     let http_tls_key = matches.value_of("http_tls_key").unwrap();
 
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
     let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
 
-    info!("Using kafka broker on {}", kafka_broker_address);
-    let kafka_broker_address = kafka_broker_address;
+    info!("Using kafka broker on {}", broker_address);
+    let broker_address = broker_address;
     info!("Tls port Listening on {}", tls_socket_addr);
     info!("Plain port Listening on {}", plain_socket_addr);
 
-
-
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
-
 
     let tls_cfg = {
         // Load public certificate.
@@ -98,11 +94,11 @@ fn main() {
             }
         }).filter_map(|x| x);
 
-    let (plain_tx, plain_rx): (Sender<handlers::InternalMessage>, Receiver<handlers::InternalMessage>) = unbounded();
+    let (plain_tx, plain_rx): (Sender<utils::structs::InternalMessage>, Receiver<utils::structs::InternalMessage>) = unbounded();
 
     let db_clone = db.clone();
 
-    let threads = handlers::configure_broker(kafka_broker_address.to_string(), kafka_sending_topic.to_string(), kafka_receiving_topic.to_string(), kafka_receiving_group.to_string(), db_clone, plain_rx.clone());
+    let threads = handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db_clone, plain_rx.clone());
 
     let plain_tx1 = plain_tx.clone();
 
