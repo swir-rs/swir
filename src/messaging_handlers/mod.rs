@@ -54,14 +54,6 @@ pub fn configure_broker(kafka_broker_address: String, kafka_sending_topic: Strin
         .set("message.timeout.ms", "5000")
         .create().expect("Can't start broker");
 
-
-//    let tls_producer:FutureProducer =
-//        ClientConfig::new()
-//            .set("bootstrap.servers", &kafka_broker_address)
-//            .set("message.timeout.ms", "5000")
-//            .create().expect("Can't start broker");;
-
-
     let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
         .set("group.id", &kafka_receiving_group)
         .set("bootstrap.servers", &kafka_broker_address)
@@ -80,11 +72,8 @@ pub fn configure_broker(kafka_broker_address: String, kafka_sending_topic: Strin
 
     let client: Client<HttpConnector<GaiResolver>, Body> = Client::new();
 
-
     let mut threads: Vec<JoinHandle<()>> = vec!();
-
     threads.push(create_sending_thread(kafka_receiving_topic, kafka_sending_topic, db.clone(), rx, plain_producer));
-
     threads.push(create_receiving_thread(consumer, client, db));
     threads
 }
@@ -92,11 +81,6 @@ pub fn configure_broker(kafka_broker_address: String, kafka_sending_topic: Strin
 
 fn create_sending_thread(receiving_topic: String, sending_topic: String, db: Db, rx: Receiver<InternalMessage>, producer: FutureProducer) -> JoinHandle<()> {
     let res = thread::spawn(move || {
-//        let rx = rx.clone();
-//        let sending_topic = sending_topic.clone();
-//        let receiving_topic = receiving_topic.clone();
-//        let db = db.clone();
-//        let producer = producer.clone();
         loop {
             kafka_event_handler(&rx, &producer, &sending_topic, &receiving_topic, &db);
         }

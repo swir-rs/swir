@@ -31,7 +31,7 @@ use tokio_rustls::ServerConfigExt;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
-mod handlers;
+mod messaging_handlers;
 mod http_handler;
 mod utils;
 
@@ -98,7 +98,7 @@ fn main() {
 
     let db_clone = db.clone();
 
-    let threads = handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db_clone, plain_rx.clone());
+    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db_clone, plain_rx.clone());
 
     let plain_tx1 = plain_tx.clone();
 
