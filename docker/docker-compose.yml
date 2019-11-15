@@ -16,3 +16,9 @@ services:
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  nats:
+    image: nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"

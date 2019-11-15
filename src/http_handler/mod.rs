@@ -55,7 +55,6 @@ pub fn handler(req: Request<Body>, sender: Sender<InternalMessage>) -> BoxFut {
                     warn!("Channel is dead {:?}", e);
                     *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     *response.body_mut() = Body::empty();
-                    ;
                 }
                 info!("Waiting for response from kafka");
                 let r = local_rx.recv();
@@ -90,7 +89,6 @@ pub fn handler(req: Request<Body>, sender: Sender<InternalMessage>) -> BoxFut {
                             warn!("Channel is dead {:?}", e);
                             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                             *response.body_mut() = Body::empty();
-                            ;
                         }
                         info!("Waiting for response from kafka");
                         let r = local_rx.recv();

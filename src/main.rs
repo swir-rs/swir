@@ -10,12 +10,7 @@ extern crate hyper;
 extern crate kafka;
 #[macro_use]
 extern crate log;
-extern crate rustls;
-extern crate serde;
 extern crate sled;
-extern crate tokio;
-extern crate tokio_rustls;
-extern crate tokio_tcp;
 
 use std::{io, sync};
 use std::thread;
@@ -34,7 +29,6 @@ use utils::pki_utils::{load_certs, load_private_key};
 mod messaging_handlers;
 mod http_handler;
 mod utils;
-
 
 
 fn main() {
@@ -96,9 +90,9 @@ fn main() {
 
     let (plain_tx, plain_rx): (Sender<utils::structs::InternalMessage>, Receiver<utils::structs::InternalMessage>) = unbounded();
 
-    let db_clone = db.clone();
+    let kafka_threads = messaging_handlers::kafka_handler::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone());
 
-    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db_clone, plain_rx.clone());
+    let nats_threads = messaging_handlers::nats_handler::configure_broker("127.0.0.1:4222".to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
 
     let plain_tx1 = plain_tx.clone();
 
@@ -119,12 +113,14 @@ fn main() {
         ).map_err(|e| warn!("server error: {}", e));
 
 
-
-
     let tls_server = thread::spawn(move || { hyper::rt::run(tls_server) });
     let plain_server = thread::spawn(move || { hyper::rt::run(server); });
 
-    for t in threads {
+    for t in kafka_threads {
+        t.join().unwrap()
+    }
+
+    for t in nats_threads {
         t.join().unwrap()
     }
     plain_server.join().unwrap_err();
