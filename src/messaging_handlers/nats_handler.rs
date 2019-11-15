@@ -81,8 +81,14 @@ pub fn nats_event_handler(rx: &Receiver<InternalMessage>, nats: Client, publish_
                 info!("Kafka plain sending {:?}", req);
 
                 let foo = nats.publish(publish_topic, &req.payload.as_bytes(), None);
-                if let Err(_) = foo {
-                    warn!("hmmm something is very wrong here. it seems that the channel has been closed");
+                match foo {
+                    Ok(_) => {
+                        sender.send(structs::KafkaResult { result: "NATS is good".to_string() });
+                    }
+                    Err(e) => {
+                        warn!("hmmm something is very wrong here. it seems that the channel has been closed");
+                        sender.send(structs::KafkaResult { result: e.to_string() });
+                    }
                 }
             }
         }
@@ -90,7 +96,8 @@ pub fn nats_event_handler(rx: &Receiver<InternalMessage>, nats: Client, publish_
 }
 
 pub fn nats_incoming_event_handler(nats_client: natsclient::Client, client: hyper::Client<HttpConnector, Body>, db: Db) {
-    nats_client.subscribe("*", move |message| {
+    nats_client.subscribe("Response", move |message| {
+        info!("NATS processing message");
         let payload = &message.payload;
         let mut uri: String = String::from("");
         if let Ok(maybe_url) = db.get(&message.subject) {
@@ -108,6 +115,9 @@ pub fn nats_incoming_event_handler(nats_client: natsclient::Client, client: hype
             hyper::header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
         );
+
+
+        info!("NATS trying to post");
         let cl = postreq.body_mut().content_length().unwrap().to_string();
         postreq.headers_mut().insert(
             hyper::header::CONTENT_LENGTH,
@@ -120,13 +130,18 @@ pub fn nats_incoming_event_handler(nats_client: natsclient::Client, client: hype
             if let Err(e) = s.send(status.as_u16()) {
                 warn!("Problem with an internal communication {:?}", e);
             }
-
             res.into_body().concat2()
         }).map(|_| {
             info!("Done.");
         }).map_err(|err| {
             warn!("Error {}", err);
         });
+        hyper::rt::run(post);
+        let result = r.map(|f| {
+            if f != 200 {
+                warn!("Error from the client")
+            }
+        }).wait();
         Ok(())
     });
 }

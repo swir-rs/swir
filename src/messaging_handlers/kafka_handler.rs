@@ -129,7 +129,7 @@ pub fn kafka_event_handler(rx: &Receiver<InternalMessage>, kafka_producer: &Futu
             let foo = kafka_producer.send(r, 0).map(move |status| {
                 match status {
                     Ok(_) => {
-                        sender.send(structs::KafkaResult { result: "All is good".to_string() })
+                        sender.send(structs::KafkaResult { result: "KAFKA is good".to_string() })
                     }
                     Err(e) => {
                         sender.send(structs::KafkaResult { result: e.0.to_string() })
