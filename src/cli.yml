@@ -1,7 +1,7 @@
 name: rustycar
 version: "0.01"
-author: Dawid N. <nowakd@gmail.com>
-about: Event Driven Sidecar
+author: Dawid Nowak <nowakd@gmail.com>
+about: Sidecar Written In Rust for Event Driven Applications
 args:
   - address:
       short: a
@@ -21,11 +21,16 @@ args:
       value_name: Integer
       default_value: "8080"
 
-  - broker:
+  - kafka_broker:
       short: b
-      long: broker
+      long: kafkabroker
       value_name: IP:PORT
       required: true
+  - nats_broker:
+      short: n
+      long: natsbroker
+      value_name: IP:PORT
+
   - sending_topic:
       short: s
       long: sendingtopic

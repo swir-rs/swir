@@ -20,7 +20,7 @@ use super::super::utils::structs::*;
 pub type Result<T> = std::result::Result<T, String>;
 
 
-pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<InternalMessage>) -> Result<Vec<JoinHandle<()>>> {
+pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, _receiving_group: String, db: Db, rx: Receiver<InternalMessage>) -> Result<Vec<JoinHandle<()>>> {
     let cluster = vec!(broker_address);
 
     let opts = ClientOptions::builder()
@@ -80,23 +80,23 @@ pub fn nats_event_handler(rx: &Receiver<InternalMessage>, nats: Client, publish_
                 let req = value;
                 info!("Kafka plain sending {:?}", req);
 
-                let foo = nats.publish(publish_topic, &req.payload.as_bytes(), None);
-                match foo {
-                    Ok(_) => {
-                        sender.send(structs::KafkaResult { result: "NATS is good".to_string() });
-                    }
-                    Err(e) => {
-                        warn!("hmmm something is very wrong here. it seems that the channel has been closed");
-                        sender.send(structs::KafkaResult { result: e.to_string() });
-                    }
+                let foo = nats.publish(publish_topic, &req.payload.as_bytes(), None).map(|_| {
+                    sender.send(structs::KafkaResult { result: "NATS is good".to_string() })
+                }).map_err(|e| {
+                    warn!("hmmm something is very wrong here. it seems that the channel has been closed");
+                    sender.send(structs::KafkaResult { result: e.to_string() })
+                });
+                if let Err(_) = foo {
+                    warn!("hmmm something is very wrong here. it seems that the channel has been closed");
                 }
+
             }
         }
     }
 }
 
 pub fn nats_incoming_event_handler(nats_client: natsclient::Client, client: hyper::Client<HttpConnector, Body>, db: Db) {
-    nats_client.subscribe("Response", move |message| {
+    let s = nats_client.subscribe("Response", move |message| {
         info!("NATS processing message");
         let payload = &message.payload;
         let mut uri: String = String::from("");
@@ -139,11 +139,17 @@ pub fn nats_incoming_event_handler(nats_client: natsclient::Client, client: hype
         hyper::rt::run(post);
         let result = r.map(|f| {
             if f != 200 {
-                warn!("Error from the client")
+                warn!("Error from the client {}", f)
             }
         }).wait();
+        if let Err(e) = result {
+            warn!("Error from the client {}", e)
+        }
         Ok(())
     });
+    if let Err(e) = s {
+        warn!("Can't subscribe  {}", e)
+    }
 }
 
 
