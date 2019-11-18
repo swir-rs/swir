@@ -21,15 +21,11 @@ args:
       value_name: Integer
       default_value: "8080"
 
-  - kafka_broker:
+  - broker:
       short: b
       long: kafkabroker
       value_name: IP:PORT
       required: true
-  - nats_broker:
-      short: n
-      long: natsbroker
-      value_name: IP:PORT
 
   - sending_topic:
       short: s

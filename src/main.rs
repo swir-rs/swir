@@ -41,8 +41,8 @@ fn main() {
     let tls_port: u16 = matches.value_of("tlsport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let sending_topic = matches.value_of("sending_topic").unwrap();
-    let kafka_broker_address = matches.value_of("kafka_broker").unwrap();
-    let nats_broker_address = matches.value_of("nats_broker").unwrap();
+    let broker_address = matches.value_of("broker").unwrap();
+
     let receiving_topic = matches.value_of("receiving_topic").unwrap();
 
 
@@ -53,9 +53,7 @@ fn main() {
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
     let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
 
-    info!("Using kafka broker on {}", kafka_broker_address);
-    info!("Using nats broker on {}", nats_broker_address);
-
+    info!("Using kafka broker on {}", broker_address);
     info!("Tls port Listening on {}", tls_socket_addr);
     info!("Plain port Listening on {}", plain_socket_addr);
 
@@ -92,9 +90,10 @@ fn main() {
 
     let (plain_tx, plain_rx): (Sender<utils::structs::InternalMessage>, Receiver<utils::structs::InternalMessage>) = unbounded();
 
-    let kafka_threads = messaging_handlers::kafka_handler::configure_broker(kafka_broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone());
 
-    let nats_threads = messaging_handlers::nats_handler::configure_broker(nats_broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
+    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
+
+//    let nats_threads = messaging_handlers::nats_handler::configure_broker(nats_broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
 
     let plain_tx1 = plain_tx.clone();
 
@@ -118,13 +117,10 @@ fn main() {
     let tls_server = thread::spawn(move || { hyper::rt::run(tls_server) });
     let plain_server = thread::spawn(move || { hyper::rt::run(server); });
 
-    for t in kafka_threads {
+    for t in threads {
         t.join().unwrap()
     }
 
-    for t in nats_threads {
-        t.join().unwrap()
-    }
     plain_server.join().unwrap_err();
     tls_server.join().unwrap_err();
 }

@@ -25,6 +25,8 @@ use sled::{Db, IVec};
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 
+pub type Result<T> = std::result::Result<T, String>;
+
 impl ClientContext for CustomContext {}
 
 impl ConsumerContext for CustomContext {
@@ -46,7 +48,7 @@ impl ConsumerContext for CustomContext {
 }
 
 
-pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<InternalMessage>) -> Vec<JoinHandle<()>> {
+pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<InternalMessage>) -> Result<Vec<JoinHandle<()>>> {
     let context = CustomContext;
 
     let plain_producer: FutureProducer = ClientConfig::new()
@@ -75,7 +77,7 @@ pub fn configure_broker(broker_address: String, sending_topic: String, receiving
     let mut threads: Vec<JoinHandle<()>> = vec!();
     threads.push(create_sending_thread(receiving_topic, sending_topic, db.clone(), rx, plain_producer));
     threads.push(create_receiving_thread(consumer, client, db));
-    threads
+    Ok(threads)
 }
 
 
