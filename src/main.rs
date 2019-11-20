@@ -1,28 +1,23 @@
 //#![deny(warnings)]
-
-extern crate bincode;
 #[macro_use]
 extern crate clap;
-extern crate crossbeam_channel;
-extern crate futures;
-extern crate hex_literal;
-extern crate hyper;
-extern crate kafka;
 #[macro_use]
 extern crate log;
-extern crate sled;
+
 
 use std::{io, sync};
 use std::thread;
 
 use clap::App;
 use crossbeam_channel::{Receiver, Sender, unbounded};
+use futures::future;
 use hyper::rt::{Future, Stream};
 use hyper::Server;
 use hyper::service::service_fn;
 use sled::Config;
 use tokio_rustls::ServerConfigExt;
 
+use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
@@ -32,7 +27,7 @@ mod utils;
 
 
 fn main() {
-    env_logger::init();
+    pretty_env_logger::init();
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     info!("Application arguments {:?}", matches);
@@ -88,14 +83,15 @@ fn main() {
             }
         }).filter_map(|x| x);
 
-    let (plain_tx, plain_rx): (Sender<utils::structs::InternalMessage>, Receiver<utils::structs::InternalMessage>) = unbounded();
+    let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = unbounded();
+    let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = unbounded();
 
 
-    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
+    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx.clone(), msg_to_rest_tx.clone()).unwrap();
 
 //    let nats_threads = messaging_handlers::nats_handler::configure_broker(nats_broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
 
-    let plain_tx1 = plain_tx.clone();
+    let plain_tx1 = rest_to_msg_tx.clone();
 
     let server = Server::bind(&plain_socket_addr)
         .serve(move || {
@@ -105,7 +101,7 @@ fn main() {
         ).map_err(|e| warn!("server error: {}", e));
 
 
-    let plain_tx2 = plain_tx.clone();
+    let plain_tx2 = rest_to_msg_tx.clone();
     let tls_server = Server::builder(tls)
         .serve(move || {
             let inner_txx = plain_tx2.clone();
@@ -114,14 +110,16 @@ fn main() {
         ).map_err(|e| warn!("server error: {}", e));
 
 
-    let tls_server = thread::spawn(move || { hyper::rt::run(tls_server) });
-    let plain_server = thread::spawn(move || { hyper::rt::run(server); });
+    let https_server_runtime = thread::spawn(move || { hyper::rt::run(tls_server) });
+    let http_plain_server_runtime = thread::spawn(move || { hyper::rt::run(server); });
+    let http_client_runtime = thread::spawn(move || { hyper::rt::run(future::lazy(move || { client_handler(msg_to_rest_rx) })) });
 
     for t in threads {
         t.join().unwrap()
     }
 
-    plain_server.join().unwrap_err();
-    tls_server.join().unwrap_err();
+    https_server_runtime.join().unwrap_err();
+    http_plain_server_runtime.join().unwrap_err();
+    http_client_runtime.join().unwrap_err();
 }
 

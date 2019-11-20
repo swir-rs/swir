@@ -20,7 +20,8 @@ pub struct SubscribeRequest {
 
 
 #[derive(Debug)]
-pub struct KafkaResult {
+pub struct MessagingResult {
+    pub(crate) status: u32,
     pub(crate) result: String
 }
 
@@ -34,7 +35,14 @@ pub enum Job {
 pub struct CustomContext;
 
 #[derive(Debug)]
-pub struct InternalMessage {
+pub struct RestToMessagingContext {
     pub job: Job,
-    pub sender: Sender<KafkaResult>,
+    pub sender: Sender<MessagingResult>,
+}
+
+#[derive(Debug)]
+pub struct MessagingToRestContext {
+    pub sender: Sender<MessagingResult>,
+    pub payload: Vec<u8>,
+    pub uri: String
 }
