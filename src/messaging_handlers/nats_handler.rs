@@ -1,5 +1,3 @@
-extern crate natsclient;
-
 use std::borrow::Borrow;
 use std::thread;
 use std::thread::JoinHandle;
@@ -73,8 +71,6 @@ pub fn nats_event_handler(rx: &Receiver<RestToMessagingContext>, nats: Client, p
 
             Job::Publish(value) => {
                 let req = value;
-                info!("Kafka plain sending {:?}", req);
-
                 let foo = nats.publish(publish_topic, &req.payload.as_bytes(), None).map(|_| {
                     sender.send(structs::MessagingResult { status: 1, result: "NATS is good".to_string() })
                 }).map_err(|e| {
@@ -92,7 +88,6 @@ pub fn nats_event_handler(rx: &Receiver<RestToMessagingContext>, nats: Client, p
 
 pub fn nats_incoming_event_handler(nats_client: natsclient::Client, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) {
     let s = nats_client.subscribe("Response", move |message| {
-        info!("NATS processing message");
         let payload = &message.payload;
         let mut uri: String = String::from("");
         if let Ok(maybe_url) = db.get(&message.subject) {

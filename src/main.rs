@@ -27,7 +27,7 @@ mod utils;
 
 
 fn main() {
-    pretty_env_logger::init();
+    env_logger::init();
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
     info!("Application arguments {:?}", matches);
