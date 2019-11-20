@@ -86,26 +86,23 @@ fn main() {
     let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = unbounded();
     let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = unbounded();
 
-
     let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx.clone(), msg_to_rest_tx.clone()).unwrap();
 
-//    let nats_threads = messaging_handlers::nats_handler::configure_broker(nats_broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), plain_rx.clone()).unwrap();
-
-    let plain_tx1 = rest_to_msg_tx.clone();
+    let tx = rest_to_msg_tx.clone();
 
     let server = Server::bind(&plain_socket_addr)
         .serve(move || {
-            let inner_txx = plain_tx1.clone();
-            service_fn(move |req| handler(req, inner_txx.clone()))
+            let tx = tx.clone();
+            service_fn(move |req| handler(req, tx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
 
-    let plain_tx2 = rest_to_msg_tx.clone();
+    let tx = rest_to_msg_tx.clone();
     let tls_server = Server::builder(tls)
         .serve(move || {
-            let inner_txx = plain_tx2.clone();
-            service_fn(move |req| handler(req, inner_txx.clone()))
+            let tx = tx.clone();
+            service_fn(move |req| handler(req, tx.clone()))
         }
         ).map_err(|e| warn!("server error: {}", e));
 
