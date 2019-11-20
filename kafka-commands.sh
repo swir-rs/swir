@@ -3,6 +3,6 @@ kafkacat -P  -b localhost:9092 -H "header1=header value" -H "nullheader" -H "emp
 
 
 docker pull confluentinc/cp-kafkacat
-docker run -ti --rm -network="docker_default" confluentinc/cp-kafkacat kafkacat -C -b docker_kafka_1:9092 -t Request
-docker run -ti --rm --network="docker_default" confluentinc/cp-kafkacat kafkacat -P -b docker_kafka_1:9092 -t Response
+docker run -ti --rm -network="docker_default" confluentinc/cp-kafkacat kafkacat -C -b kafka:9094 -t Request
+docker run -ti --rm --network="docker_default" confluentinc/cp-kafkacat kafkacat -P -b kafka:9094 -t Response
 

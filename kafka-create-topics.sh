@@ -1,2 +1,2 @@
-docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9092 --create --topic Request --partitions 1 --replication-factor 1
-docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9092 --create --topic Response --partitions 1 --replication-factor 1
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request --partitions 2 --replication-factor 1
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response --partitions 2 --replication-factor 1

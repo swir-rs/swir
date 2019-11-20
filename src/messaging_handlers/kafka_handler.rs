@@ -14,8 +14,6 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
 
 use crate::utils;
-
-//use super::utils::structs::{CustomContext, Job, PublishRequest,InternalMessage,KafkaResult,CustomContext};
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 
@@ -27,11 +25,9 @@ impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
         info!("Pre rebalance {:?}", rebalance);
     }
-
     fn post_rebalance(&self, rebalance: &Rebalance) {
         info!("Post rebalance {:?}", rebalance);
     }
-
     fn commit_callback(
         &self,
         result: KafkaResult<()>,
@@ -65,7 +61,6 @@ pub fn configure_broker(broker_address: String, sending_topic: String, receiving
     topics.push(&receiving_topic);
     let tt = topics.borrow();
     consumer.subscribe(tt).expect("Can't subscribe to topics");
-
 
     let mut threads: Vec<JoinHandle<()>> = vec!();
     threads.push(create_sending_thread(receiving_topic, sending_topic, db.clone(), rx, plain_producer));
