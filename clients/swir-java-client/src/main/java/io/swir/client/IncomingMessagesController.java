@@ -8,6 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
 public class IncomingMessagesController {
@@ -15,9 +18,13 @@ public class IncomingMessagesController {
     @Autowired
     ObjectMapper om;
 
+    @Autowired
+    AtomicInteger processedCounter;
+
     @PostMapping("/response")
-    public JsonNode handleSwirIncomingStream(@RequestBody() JsonNode body) {
+    public Mono<JsonNode> handleSwirIncomingStream(@RequestBody() JsonNode body) {
         logger.info("Incoming message {}", body);
+        processedCounter.incrementAndGet();
         return null;
     }
 }

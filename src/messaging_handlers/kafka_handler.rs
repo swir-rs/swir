@@ -16,6 +16,7 @@ use sled::{Db, IVec};
 use crate::utils;
 use super::super::utils::structs;
 use super::super::utils::structs::*;
+use kafka::producer::AsBytes;
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -128,16 +129,18 @@ pub fn kafka_event_handler(rx: &Receiver<RestToMessagingContext>, kafka_producer
 }
 
 fn send_request(m: impl Message, tx: &Sender<utils::structs::MessagingToRestContext>, db: &Db) {
-    let payload = match m.payload_view::<str>() {
-        None => "",
-        Some(Ok(s)) => s,
-        Some(Err(e)) => {
-            warn!("Error while deserializing message payload: {:?}", e);
-            ""
-        }
+    let payload = match m.payload() {
+        None => "".as_bytes(),
+        Some(s) => s
     };
+    if payload.is_empty() {
+        return
+    }
 
     let mut uri: String = String::from("");
+
+    let p = String::from_utf8_lossy(payload.as_bytes());
+    info!("Processing message  {}",p);
     if let Ok(maybe_url) = db.get(m.topic()) {
         if let Some(url) = maybe_url {
             let vec = url.to_vec();
@@ -145,20 +148,21 @@ fn send_request(m: impl Message, tx: &Sender<utils::structs::MessagingToRestCont
         }
     }
 
-    let (s, r) = bounded(1);
+
+    let (s, _r) = bounded(1);
     let p = MessagingToRestContext {
         sender: s,
         payload: payload.as_bytes().to_vec(),
-        uri: uri,
+        uri,
     };
 
     if let Err(e) = tx.send(p) {
         warn!("Error from the client {}", e)
     }
-    match r.recv() {
-        Ok(r) => debug!("Response from the client {:?}", r),
-        Err(e) => warn!("Internal communication error  {}", e)
-    }
+//    match r.recv() {
+//        Ok(r) => debug!("Response from the client {:?}", r),
+//        Err(e) => warn!("Internal communication error  {}", e)
+//    }
 }
 
 pub fn kafka_incoming_event_handler(consumer: &StreamConsumer<structs::CustomContext>, tx: Sender<utils::structs::MessagingToRestContext>, db: &Db) -> impl Future<Item=(), Error=()> {

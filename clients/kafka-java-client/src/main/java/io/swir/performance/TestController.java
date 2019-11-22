@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
@@ -31,6 +32,10 @@ public class TestController {
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
 
+    @Autowired
+    AtomicInteger processedCounter;
+
+
     ExecutorService ex = Executors.newCachedThreadPool();
 
     @PostMapping("/test")
@@ -39,13 +44,16 @@ public class TestController {
         int messages = body.get("messages").intValue();
         int threads = body.get("threads").intValue();
         String url =        body.get("sidecarUrl").textValue();
-
+        processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
         int offset = messages/threads;
         logger.info("url {}",url);
         logger.info("offset {}",offset);
-        final AtomicLong totalTime  = new AtomicLong(0);
+        final AtomicLong totalSendTime  = new AtomicLong(0);
+
         Semaphore semaphore  =new Semaphore(threads);
+        final AtomicInteger completedCount = new AtomicInteger();
+        long totalStart = System.nanoTime();
 
         semaphore.acquire(threads);
         for(int i = 0; i <threads; i++) {
@@ -59,12 +67,13 @@ public class TestController {
                             Payload p = new Payload().setName("kafka-native").setSurname("fooo").setCounter(k * offset + j);
                             ListenableFuture<SendResult<String, String>> f = kafkaTemplate.send(TOPIC, om.writeValueAsString(p));
                             SendResult<String, String> result = f.get();
+                            completedCount.incrementAndGet();
                         }
                     }catch(Exception e){
                         logger.error("not right",e);
                     }finally {
                         long stop = System.nanoTime();
-                        totalTime.addAndGet((stop-start));
+                        totalSendTime.addAndGet((stop-start));
                         logger.info("Run {} completed in {}",(stop-start));
                         semaphore.release();
                     }
@@ -73,14 +82,24 @@ public class TestController {
             });
         };
         semaphore.acquire(threads);
-        long tt = totalTime.get();
-        logger.info("Done  {} ms throughput {} messages/sec", TimeUnit.MILLISECONDS.convert(tt,TimeUnit.NANOSECONDS), messages/TimeUnit.SECONDS.convert(tt,TimeUnit.NANOSECONDS));
 
+        while(processedCounter.get()!=(messages)){
+            logger.debug("completed count {}",processedCounter.get());
+            Thread.sleep(10);
+        }
+
+        long ts = totalSendTime.get();
+        long totalEnd = System.nanoTime();
+        long tt = totalEnd-totalStart;
         ObjectNode response = om.createObjectNode();
+        response.put("totalSendTimeNs",ts);
+        response.put("totalSendTimeMs",TimeUnit.MILLISECONDS.convert(ts,TimeUnit.NANOSECONDS));
+        response.put("totalSendTimeS",TimeUnit.SECONDS.convert(ts,TimeUnit.NANOSECONDS));
         response.put("totalTimeNs",tt);
         response.put("totalTimeMs",TimeUnit.MILLISECONDS.convert(tt,TimeUnit.NANOSECONDS));
         response.put("totalTimeS",TimeUnit.SECONDS.convert(tt,TimeUnit.NANOSECONDS));
         response.put("throughput msg/sec",((double)messages/tt)*TimeUnit.NANOSECONDS.convert(1, TimeUnit.SECONDS));
+        logger.info("{}",response);
         return response;
     }
 }

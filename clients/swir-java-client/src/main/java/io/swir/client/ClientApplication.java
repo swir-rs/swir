@@ -7,6 +7,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 
 @SpringBootApplication
 public class ClientApplication {
@@ -14,10 +16,18 @@ public class ClientApplication {
 	private static Logger logger = LoggerFactory.getLogger(ClientApplication.class);
 
 
+
 	@Bean
 	public RestTemplate produceRestTemplate(){
 		return new RestTemplate();
 	}
+
+	@Bean
+	public AtomicInteger produceExpectedMessagesCounter(){
+		return new AtomicInteger();
+	}
+
+
 
 	public static void main(String[] args) {
 		SpringApplication.run(ClientApplication.class, args);

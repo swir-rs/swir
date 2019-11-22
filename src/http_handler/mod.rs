@@ -33,9 +33,9 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
     let headers = req.headers();
     debug!("Headers {:?}", headers);
 
-//    if validate_content_type(headers).is_none() {
-//        return Box::new(future::ok(response));
-//    }
+    if validate_content_type(headers).is_none() {
+        return Box::new(future::ok(response));
+    }
 
     let (parts, body) = req.into_parts();
 
@@ -126,6 +126,7 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
     let uri = payload.uri;
     let url = uri.parse::<hyper::Uri>().unwrap();
 
+    let p = payload.payload.clone();
     let req = Request::builder()
         .method("POST")
         .uri(url)
@@ -133,29 +134,31 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
         .body(Body::from(payload.payload))
         .expect("request builder");
 
-    let sender = payload.sender.clone();
-    let err_sender = payload.sender.clone();
+//    let sender = payload.sender.clone();
+//    let err_sender = payload.sender.clone();
 
-    let f = client.request(req)
-        .and_then(move |res| {
-            debug!("Status POST to the client: {}", res.status());
-            let mut status = "All good".to_string();
-            if res.status() != hyper::StatusCode::OK {
-                warn!("Error from the client {}", res.status());
-                status = "Invalid response from the client".to_string();
-            }
-            if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
-                warn!("Problem with an internal communication {:?}", e);
-            }
-            res.into_body().concat2()
-        })
-        .map(|_| {})
-        .map_err(move |err| {
-            eprintln!("Error {}", err);
-            if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
-                warn!("Problem with an internal communication {:?}", e);
-            }
-        });
+    let f = {
+        info!("Making request for {}", String::from_utf8_lossy(&p));
+        client.request(req).and_then(move |res| {
+                debug!("Status POST to the client: {}", res.status());
+//                let mut status = "All good".to_string();
+                if res.status() != hyper::StatusCode::OK {
+                    warn!("Error from the client {}", res.status());
+//                    status = "Invalid response from the client".to_string();
+                }
+//                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
+//                    warn!("Problem with an internal communication {:?}", e);
+//                }
+                res.into_body().concat2()
+            }).map(|_| {})
+                .map_err(move |err| {
+                    eprintln!("Error {}", err);
+//                    if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
+//                        warn!("Problem with an internal communication {:?}", e);
+//                    }
+                })
+
+    };
     hyper::rt::spawn(f);
 }
 

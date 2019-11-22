@@ -7,14 +7,17 @@ import io.swir.client.payload.Payload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.Disposable;
+import reactor.core.publisher.Mono;
 
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
@@ -26,6 +29,9 @@ public class TestController {
     @Autowired
     RestTemplate restTemplate;
 
+    @Autowired
+    AtomicInteger processedCounter;
+
     ExecutorService ex = Executors.newCachedThreadPool();
 
     @PostMapping("/test")
@@ -34,15 +40,19 @@ public class TestController {
         int messages = body.get("messages").intValue();
         int threads = body.get("threads").intValue();
         String url =        body.get("sidecarUrl").textValue();
-
+        processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
         int offset = messages/threads;
         logger.info("url {}",url);
         logger.info("offset {}",offset);
-        final AtomicLong totalTime  = new AtomicLong(0);
+        final AtomicLong totalSendTime  = new AtomicLong(0);
         Semaphore semaphore  =new Semaphore(threads);
 
+        WebClient client = WebClient.create(url);
+
+        final AtomicInteger completedCount = new AtomicInteger();
         semaphore.acquire(threads);
+        long totalStart = System.nanoTime();
         for(int i = 0; i <threads; i++) {
             final int k = i;
             ex.submit(new Runnable() {
@@ -51,17 +61,15 @@ public class TestController {
                     long start = System.nanoTime();
                     try {
                         for (int j = 0; j < offset; j++) {
-                            HttpEntity<String> request = new HttpEntity<>(om.writeValueAsString(new Payload().setName("client").setSurname("fooo").setCounter(k * offset + j)));
-                            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-                            if (!response.getStatusCode().is2xxSuccessful()) {
-                                logger.warn("Got invalid response {}", response.getStatusCode());
-                            }
+                            final int c = k * offset + j;
+                            final WebClient.RequestHeadersSpec<?> request = client.post().uri("/publish").body(BodyInserters.fromPublisher(Mono.just(new Payload().setName("client").setSurname("fooo").setCounter(c)), Payload.class));
+                            Disposable resp = request.retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
                         }
                     }catch(Exception e){
                         logger.error("not right",e);
                     }finally {
                         long stop = System.nanoTime();
-                        totalTime.addAndGet((stop-start));
+                        totalSendTime.addAndGet((stop-start));
                         logger.info("Run {} completed in {}",k,(stop-start));
                         semaphore.release();
                     }
@@ -70,14 +78,23 @@ public class TestController {
             });
         };
         semaphore.acquire(threads);
-        long tt = totalTime.get();
-        logger.info("Done  {} ms throughput {} messages/sec", TimeUnit.MILLISECONDS.convert(tt,TimeUnit.NANOSECONDS), messages/TimeUnit.SECONDS.convert(tt,TimeUnit.NANOSECONDS));
 
+        while(processedCounter.get()!=(messages)){
+            logger.debug("completed count {}",processedCounter.get());
+            Thread.sleep(10);
+        }
+        long ts = totalSendTime.get();
+        long totalEnd = System.nanoTime();
+        long tt = totalEnd-totalStart;
         ObjectNode response = om.createObjectNode();
+        response.put("totalSendTimeNs",ts);
+        response.put("totalSendTimeMs",TimeUnit.MILLISECONDS.convert(ts,TimeUnit.NANOSECONDS));
+        response.put("totalSendTimeS",TimeUnit.SECONDS.convert(ts,TimeUnit.NANOSECONDS));
         response.put("totalTimeNs",tt);
         response.put("totalTimeMs",TimeUnit.MILLISECONDS.convert(tt,TimeUnit.NANOSECONDS));
         response.put("totalTimeS",TimeUnit.SECONDS.convert(tt,TimeUnit.NANOSECONDS));
         response.put("throughput msg/sec",((double)messages/tt)*TimeUnit.NANOSECONDS.convert(1, TimeUnit.SECONDS));
+        logger.info("{}",response);
         return response;
     }
 }
