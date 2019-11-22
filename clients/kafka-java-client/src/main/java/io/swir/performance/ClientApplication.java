@@ -1,4 +1,4 @@
-package io.swir.client;
+package io.swir.performance;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

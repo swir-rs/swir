@@ -33,9 +33,9 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
     let headers = req.headers();
     debug!("Headers {:?}", headers);
 
-    if validate_content_type(headers).is_none() {
-        return Box::new(future::ok(response));
-    }
+//    if validate_content_type(headers).is_none() {
+//        return Box::new(future::ok(response));
+//    }
 
     let (parts, body) = req.into_parts();
 
@@ -47,10 +47,9 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
                 .map(|chunk| { chunk.to_vec() })
                 .map(|payload| {
                     let p = &String::from_utf8_lossy(&payload);
-                    debug!("Payload is {:?}", &p);
                     PublishRequest { payload: p.to_string(), url: url }
                 }).map(move |p| {
-                info!("{:?}", p);
+                debug!("{:?}", p);
                 let (local_tx, local_rx): (Sender<MessagingResult>, Receiver<MessagingResult>) = unbounded();
                 let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx.clone() };
                 if let Err(e) = sender.send(job) {
@@ -60,7 +59,7 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
                 }
 
                 let r = local_rx.recv();
-                info!("Got result {:?}", r);
+                debug!("Got result {:?}", r);
                 if let Ok(res) = r {
                     *response.body_mut() = Body::from(res.result);
                     *response.status_mut() = StatusCode::OK;
@@ -139,7 +138,7 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
 
     let f = client.request(req)
         .and_then(move |res| {
-            info!("Status POST to the client: {}", res.status());
+            debug!("Status POST to the client: {}", res.status());
             let mut status = "All good".to_string();
             if res.status() != hyper::StatusCode::OK {
                 warn!("Error from the client {}", res.status());

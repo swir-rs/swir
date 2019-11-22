@@ -32,12 +32,14 @@ fn main() {
     let matches = App::from_yaml(yaml).get_matches();
     info!("Application arguments {:?}", matches);
 
+
+
     let external_address = matches.value_of("address").unwrap();
     let tls_port: u16 = matches.value_of("tlsport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
     let sending_topic = matches.value_of("sending_topic").unwrap();
     let broker_address = matches.value_of("broker").unwrap();
-
+    let command = matches.value_of("execute_command").unwrap();
     let receiving_topic = matches.value_of("receiving_topic").unwrap();
 
 
@@ -110,6 +112,8 @@ fn main() {
     let https_server_runtime = thread::spawn(move || { hyper::rt::run(tls_server) });
     let http_plain_server_runtime = thread::spawn(move || { hyper::rt::run(server); });
     let http_client_runtime = thread::spawn(move || { hyper::rt::run(future::lazy(move || { client_handler(msg_to_rest_rx) })) });
+
+    utils::command_utils::run_java_command(command.to_string());
 
     for t in threads {
         t.join().unwrap()

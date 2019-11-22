@@ -33,7 +33,7 @@ impl ConsumerContext for CustomContext {
         result: KafkaResult<()>,
         _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList,
     ) {
-        info!("Committing offsets: {:?}", result);
+        debug!("Committing offsets: {:?}", result);
     }
 }
 
@@ -107,7 +107,7 @@ pub fn kafka_event_handler(rx: &Receiver<RestToMessagingContext>, kafka_producer
 
         Job::Publish(value) => {
             let req = value;
-            info!("Kafka plain sending {:?}", req);
+            debug!("Kafka plain sending {:?}", req);
             let r = FutureRecord::to(publish_topic).payload(ToBytes::to_bytes(&req.payload))
                 .key("some key".to_bytes());
             let foo = kafka_producer.send(r, 0).map(move |status| {
@@ -156,7 +156,7 @@ fn send_request(m: impl Message, tx: &Sender<utils::structs::MessagingToRestCont
         warn!("Error from the client {}", e)
     }
     match r.recv() {
-        Ok(r) => info!("Response from the client {:?}", r),
+        Ok(r) => debug!("Response from the client {:?}", r),
         Err(e) => warn!("Internal communication error  {}", e)
     }
 }

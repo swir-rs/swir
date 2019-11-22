@@ -1,14 +1,17 @@
-package io.swir.client;
+package io.swir.performance;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.swir.client.payload.Payload;
+import io.swir.performance.payload.Payload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
+import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,8 +26,10 @@ public class TestController {
     @Autowired
     ObjectMapper om;
 
+    private static final String TOPIC = "Request";
+
     @Autowired
-    RestTemplate restTemplate;
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     ExecutorService ex = Executors.newCachedThreadPool();
 
@@ -51,18 +56,16 @@ public class TestController {
                     long start = System.nanoTime();
                     try {
                         for (int j = 0; j < offset; j++) {
-                            HttpEntity<String> request = new HttpEntity<>(om.writeValueAsString(new Payload().setName("client").setSurname("fooo").setCounter(k * offset + j)));
-                            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-                            if (!response.getStatusCode().is2xxSuccessful()) {
-                                logger.warn("Got invalid response {}", response.getStatusCode());
-                            }
+                            Payload p = new Payload().setName("kafka-native").setSurname("fooo").setCounter(k * offset + j);
+                            ListenableFuture<SendResult<String, String>> f = kafkaTemplate.send(TOPIC, om.writeValueAsString(p));
+                            SendResult<String, String> result = f.get();
                         }
                     }catch(Exception e){
                         logger.error("not right",e);
                     }finally {
                         long stop = System.nanoTime();
                         totalTime.addAndGet((stop-start));
-                        logger.info("Run {} completed in {}",k,(stop-start));
+                        logger.info("Run {} completed in {}",(stop-start));
                         semaphore.release();
                     }
 

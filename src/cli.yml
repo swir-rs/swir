@@ -23,7 +23,7 @@ args:
 
   - broker:
       short: b
-      long: kafkabroker
+      long: broker
       value_name: IP:PORT
       required: true
 
@@ -55,5 +55,11 @@ args:
         value_name: file.key
         required: false
         default_value: "rustycar.CA.pem"
+  - execute_command:
+      short: e
+      long: executecommand
+      value_name: command
+      required: false
+
 
 

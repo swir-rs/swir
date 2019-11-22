@@ -1,4 +1,4 @@
-FROM openjdk:14-jdk-alpine AS KafkaSink
+FROM openjdk:14-jdk-alpine
 #VOLUME /tmp
 #ARG SPRINGBOOT_APP=build/libs/KafkaSink-0.1.0-SNAPSHOT.jar
 #COPY ${SPRINGBOOT_APP} app.jar
