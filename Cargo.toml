@@ -13,12 +13,12 @@ futures-core-preview = "=0.3.0-alpha.19"
 futures-channel-preview = "=0.3.0-alpha.19"
 futures-util-preview = "=0.3.0-alpha.19"
 futures-executor-preview = "=0.3.0-alpha.19"
-futures = "=0.3.1"
-#futures-core= "=0.3.1"
-#futures-channel = "=0.3.1"
-#futures-util = "=0.3.1"
-#futures-executor = "=0.3.1"
-#futures = { version = "0.3.1"}
+futures = "=0.3.0"
+#futures-core= "=0.3.0"
+#futures-channel = "=0.3.0"
+#futures-util = "=0.3.0"
+#futures-executor = "=0.3.0"
+
 http = "0.1.15"
 http-body = "=0.2.0-alpha.3"
 httparse = "1.0"
@@ -61,5 +61,5 @@ serde = {version = "*", features = ["derive"] }
 serde_json = {version = "= 1.0.41"}
 
 rdkafka  = { version = "~0.21"}
-rdkafka-sys = { version ="1.2.0"}
+rdkafka-sys = { version ="1.0.0"}
 sled = "*"

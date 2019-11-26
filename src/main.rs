@@ -4,10 +4,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-use std::sync;
 use std::{
-    fmt,
-    future::Future,
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -15,19 +12,14 @@ use std::{
     // time::Duration,
 };
 use std::io::{Error as StdError, ErrorKind};
-use std::thread;
 
 use clap::App;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use futures_core::Stream;
-use futures_executor::block_on;
 #[macro_use]
-use futures_util::{future, ready, TryFutureExt, TryStreamExt};
-use futures_util::StreamExt;
-use hyper::{Body, Error, Request, Server, server::{accept::Accept, conn}};
+use futures_util::{ready, TryFutureExt, TryStreamExt};
+use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
-use tokio_executor::Executor;
-use tokio_net::tcp::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 use boxio::BoxedIo;
