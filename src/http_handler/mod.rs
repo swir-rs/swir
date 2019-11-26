@@ -1,16 +1,12 @@
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use futures::future;
+use futures_util::TryStreamExt;
 use http::HeaderValue;
 use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use hyper::rt::{Future, Stream};
 
 use crate::utils::structs::{Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::MessagingToRestContext;
-
-pub type BoxFut = Box<dyn Future<Item=Response<Body>, Error=hyper::Error> + Send>;
-
 
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     match headers.get(http::header::CONTENT_TYPE) {
@@ -25,8 +21,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     }
 }
 
-
-pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> BoxFut {
+pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -34,18 +29,18 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
     debug!("Headers {:?}", headers);
 
     if validate_content_type(headers).is_none() {
-        return Box::new(future::ok(response));
+        return Ok(response)
     }
 
     let (parts, body) = req.into_parts();
 
     debug!("Body {:?}", body);
     let url = parts.uri.clone().to_string();
+
     match (parts.method, parts.uri.path()) {
         (Method::POST, "/publish") => {
-            let mapping = body.concat2()
-                .map(|chunk| { chunk.to_vec() })
-                .map(|payload| {
+            let whole_body = body.try_concat().await;
+            let response1 = whole_body.map(|payload| {
                     let p = &String::from_utf8_lossy(&payload);
                     PublishRequest { payload: p.to_string(), url: url }
                 }).map(move |p| {
@@ -69,13 +64,12 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
                 }
                 response
             });
-            return Box::new(mapping);
+            return response1
         }
 
         (Method::POST, "/subscribe") => {
-            let mapping = body.concat2()
-                .map(|chunk| { chunk.to_vec() })
-                .map(|payload| {
+            let whole_body = body.try_concat().await;
+            let response2 = whole_body.map(|payload| {
                     let p = &String::from_utf8_lossy(&payload);
                     info!("Payload is {:?}", &p);
                     serde_json::from_str(&p)
@@ -110,15 +104,17 @@ pub fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Bo
                 }
                 response
             });
-            return Box::new(mapping);
+            return response2
         }
+
         // The 404 Not Found route...
         _ => {
+            let mut not_found = Response::default();
             *response.status_mut() = StatusCode::NOT_FOUND;
+            return Ok(not_found);
         }
     };
 
-    Box::new(future::ok(response))
 }
 
 
@@ -137,9 +133,11 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
 //    let sender = payload.sender.clone();
 //    let err_sender = payload.sender.clone();
 
-    let f = {
+    let f = async move {
+        let p = p.clone();
         info!("Making request for {}", String::from_utf8_lossy(&p));
-        client.request(req).and_then(move |res| {
+        let resp = client.request(req).await;
+        let res = resp.map(move |res| {
                 debug!("Status POST to the client: {}", res.status());
 //                let mut status = "All good".to_string();
                 if res.status() != hyper::StatusCode::OK {
@@ -149,23 +147,22 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
 //                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
 //                    warn!("Problem with an internal communication {:?}", e);
 //                }
-                res.into_body().concat2()
-            }).map(|_| {})
+//                res.into_body().concat2()
+            res.into_body()
+        }).map(|_| {})
                 .map_err(move |err| {
                     eprintln!("Error {}", err);
 //                    if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
 //                        warn!("Problem with an internal communication {:?}", e);
 //                    }
-                })
-
+                });
     };
     hyper::rt::spawn(f);
 }
 
-pub fn client_handler(rx: Receiver<MessagingToRestContext>) -> impl Future<Item=(), Error=()> {
+pub async fn client_handler(rx: Receiver<MessagingToRestContext>) {
     let client = hyper::Client::builder().keep_alive(true).build_http();
     for payload in rx.iter() {
         send_request(client.clone(), payload);
     }
-    futures::future::ok(())
 }
