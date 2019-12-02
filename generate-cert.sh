@@ -25,4 +25,3 @@ echo "Signing CA CSR"
 openssl ca -verbose -extensions v3_ca -keyfile rustycar.CA.pem -out rustycar.client.signed.crt -selfsign -passin file:pass.txt -md sha256 -enddate 330630235959Z -infiles rustycar.client.csr
 cp demoCA/newcerts/DEADBEEF.pem demoCA/cacert.pem
 
-#Add this cert to Trusted Authorities list on your browser
