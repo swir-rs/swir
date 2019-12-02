@@ -22,5 +22,70 @@ The rationale of this point could be explained better with a simple stakeholder 
 ##Rust
 Rust is a safe language, and side by side benchmarks show that the applications which are written in Rust achieve performance comparable with applications written in C or C++. In choosing an implementation language for a sidecar, these two factors are probably the most important. Rust language secure design guarantees that an attacker can't compromise the sidecar due to problems with memory safety. At the same time, since sidecar is responsible for most of the application's system-level functionality, it is crucial to minimise sidecar's impact on the performance. As Rust has no runtime nor garbage collector, it can run very fast and with small latency.
 
-   
+
+##MVP (not even beta)
+This project is just a starting point to a conversation about sidecars, particularly for solutions consisting of many event-driven components. Even then it has some interesting features mainly because of the quality of crates  created and maintained by Rust community:
+ - SWIR uses [Hyper](https://hyper.rs/) to expose REST interfaces over HTTP or HTTPS 
+ - SWIR uses [rdkafka](https://github.com/fede1024/rust-rdkafka) to talk to [Kafka](https://kafka.apache.org/) brokers
+ - SWIR uses [natsclient](https://github.com/encabulators/natsclient) to talk to [NATS](https://nats.io) brokers
+ - SWIR uses conditional compilation which allows creating sidecars with just NATS or just Kafka dependencies
+ - SpringBoot Java client and other components allowing testing it end to end
+ - SWIR can start the client application (for time being only SpringBoot standalone jars)   
+ 
+##Short Term Roadmap
+- gRPC based interfaces with [Tonic](https://github.com/hyperium/tonic)
+- encryption offloading
+- some example enterprise patterns as documented here https://www.enterpriseintegrationpatterns.com/
+
+##How to use it
+
+#Requirements
+- To compile you will need cargo 1.39.0
+- Linux Ubuntu or similar.
+- Docker and Docker compose to run the infrastructure and the examples
+- Java 1.8 or higher
+- Gradle 
+- openssl to generate certs if you want to enable HTTPs
+ 
+
+#Running 
+Most of the steps are documented in cicd.sh file.
+```shell script
+#necessary certs for HTTPs 
+./generate-cert.sh
+
+#java based components
+
+cd clients/swir-java-client
+./gradlew bootJar
+docker build --tag swir-java-client .
+
+cd ../swir-kafka-sink
+./gradlew bootJar
+docker build --tag swir-kafka-sink .
+
+#optional component to test solution's performance without a sidecar
+cd ../kafka-java-client
+./gradlew bootJar
+docker build --tag kafka-java-client .
+cd ../../
+
+cargo build --release --target-dir target/with_kafka
+cargo build --release --features="with_nats" --target-dir target/with_nats
+
+
+docker build . --build-arg executable=target/with_kafka/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar -t swir:with_kafka
+docker build . --build-arg executable=target/with_nats/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar -t swir:with_nats
+
+# this should deploy the infrastructure 
+# Docker instance names/network name created by docker compose could change 
+docker-compose -f docker/docker-compose-infr.yml up -d
+
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request --partitions 2 --replication-factor 1
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response --partitions 2 --replication-factor 1
+
+# this should deploy swir and other components
+docker-compose -f docker/docker-compose-swir.yml up -d
+
+```
 
