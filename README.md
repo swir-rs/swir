@@ -21,7 +21,9 @@ The rationale of this point could be explained better with a simple stakeholder 
 
 ### Similar Frameworks
 
-SWIR has been influenced by Microsoft's [Distributed Application Runtime - Dapr](https://github.com/dapr/dapr) 
+SWIR has been influenced by Microsoft's [Distributed Application Runtime - Dapr](https://github.com/dapr/dapr). 
+
+It is hard to compete with Microsoft's unlimited resources, but someday perhaps SWIR might achieve a parity :)
 
 
 ## Rust
