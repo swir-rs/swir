@@ -1,6 +1,7 @@
 # SWIR or Sidecar Written in Rust
 
-##Rationale
+## Rationale
+
 In an enterprise world where many teams are using different technology stacks, the introduction of sidecar could offer an avenue to provide a uniform set of capabilities to all applications irrespective of which language their ware implemented. 
 Sidecar approach provides a necessary abstraction layer that protects the application teams from the underlying infrastructure. 
 The applications implementing business logic stay relatively simple, and the sidecar takes on responsibility for providing consistent and the most optimal way to utilise available resources. 
@@ -19,11 +20,11 @@ The rationale of this point could be explained better with a simple stakeholder 
 - **Corporate security teams** - From the security teams perspective, the sidecar approach should be particularly appealing. Instead of having to vet many different technology stacks with many different ways of securing network connectivity or encrypting data, sidecar will deal with most of these aspects and will isolate all complexity in one carefully vetted place. Adherence to security principles could be governed and enforced at the enterprise level through changes to the sidecar and without impacting the schedule or functionality of the business logic. Common but complex things such as the use of encryption could be accessible to applications written in different technology stacks through a simple API call to a sidecar. In a braver scenario, a specialised sidecar could encrypt all highly sensitive fields before being written to persistent storage. Again simplifying the life for the application and security teams and helping the enterprise building a better and more secure solution. 
 
 
-##Rust
+## Rust
 Rust is a safe language, and side by side benchmarks show that the applications which are written in Rust achieve performance comparable with applications written in C or C++. In choosing an implementation language for a sidecar, these two factors are probably the most important. Rust language secure design guarantees that an attacker can't compromise the sidecar due to problems with memory safety. At the same time, since sidecar is responsible for most of the application's system-level functionality, it is crucial to minimise sidecar's impact on the performance. As Rust has no runtime nor garbage collector, it can run very fast and with small latency.
 
 
-##MVP (not even beta)
+## MVP (not even beta)
 This project is just a starting point to a conversation about sidecars, particularly for solutions consisting of many event-driven components. Even then it has some interesting features mainly because of the quality of crates  created and maintained by Rust community:
  - SWIR uses [Hyper](https://hyper.rs/) to expose REST interfaces over HTTP or HTTPS 
  - SWIR uses [rdkafka](https://github.com/fede1024/rust-rdkafka) to talk to [Kafka](https://kafka.apache.org/) brokers
@@ -32,14 +33,14 @@ This project is just a starting point to a conversation about sidecars, particul
  - SpringBoot Java client and other components allowing testing it end to end
  - SWIR can start the client application (for time being only SpringBoot standalone jars)   
  
-##Short Term Roadmap
+## Short Term Roadmap
 - gRPC based interfaces with [Tonic](https://github.com/hyperium/tonic)
 - encryption offloading
 - some example enterprise patterns as documented here https://www.enterpriseintegrationpatterns.com/
 
-##How to use it
+## How to use it
 
-#Requirements
+# Requirements
 - To compile you will need cargo 1.39.0
 - Linux Ubuntu or similar.
 - Docker and Docker compose to run the infrastructure and the examples
@@ -48,7 +49,7 @@ This project is just a starting point to a conversation about sidecars, particul
 - openssl to generate certs if you want to enable HTTPs
  
 
-#Running 
+# Running 
 Most of the steps are documented in cicd.sh file.
 ```shell script
 #necessary certs for HTTPs 
