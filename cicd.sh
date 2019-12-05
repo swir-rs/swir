@@ -1,8 +1,7 @@
-#necessary certs for HTTPs
+#necessary certs for HTTPs but only on the first run
 ./generate-cert.sh
 
 #java based components
-
 cd clients/swir-java-client
 ./gradlew bootJar
 docker build --tag swir-java-client .
@@ -35,4 +34,4 @@ docker-compose -f docker/docker-compose-swir.yml up -d
 
 #use these to produce and receive messasges
 docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"}}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-docker run --network docker_swir-net -it curlimages/curl -v -d '{"messages":1000, "threads":2, "sidecarUrl":"http://docker_swir_1:8080/publish"}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+docker run --network docker_swir-net -it curlimages/curl -v -d '{"messages":10000, "threads":4, "sidecarUrl":"http://docker_swir_1:8080"}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
