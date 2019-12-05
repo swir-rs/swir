@@ -1,4 +1,11 @@
-# SWIR or Sidecar Written in Rust
+# SWIR or Sidecar Written in Rust 
+
+
+![Logo](swir_logo.png)
+
+
+For alternative meaning of [SWIR](https://en.pons.com/translate/polish-english/swir) 
+ 
 
 ## Rationale
 
