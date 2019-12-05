@@ -2,9 +2,8 @@ use std::io;
 use std::io::ErrorKind;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
+use tokio::net::TcpStream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_net::tcp::TcpStream;
 use tokio_rustls::TlsAcceptor;
 
 pub trait Io:
