@@ -42,7 +42,13 @@ public class TestController {
         String url =        body.get("sidecarUrl").textValue();
         processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
+        if(messages % threads !=0){
+            ObjectNode response = om.createObjectNode();
+            response.put("error", " messges doesn't divide by threads ");
+            return response;
+        }
         int offset = messages/threads;
+
         logger.info("url {}",url);
         logger.info("offset {}",offset);
         final AtomicLong totalSendTime  = new AtomicLong(0);

@@ -51,6 +51,12 @@ public class TestController {
         logger.info("offset {}",offset);
         final AtomicLong totalSendTime  = new AtomicLong(0);
 
+        if(messages % threads !=0){
+            ObjectNode response = om.createObjectNode();
+            response.put("error", " messges doesn't divide by threads ");
+            return response;
+        }
+
         Semaphore semaphore  =new Semaphore(threads);
         final AtomicInteger completedCount = new AtomicInteger();
         long totalStart = System.nanoTime();

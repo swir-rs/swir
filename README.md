@@ -1,4 +1,11 @@
-# SWIR or Sidecar Written in Rust
+# SWIR or Sidecar Written in Rust 
+
+
+![Logo](swir_logo.png)
+
+
+For alternative meaning of [SWIR](https://en.pons.com/translate/polish-english/swir) 
+ 
 
 ## Rationale
 
@@ -37,7 +44,11 @@ This project is just a starting point to a conversation about sidecars, particul
  - SWIR uses [natsclient](https://github.com/encabulators/natsclient) to talk to [NATS](https://nats.io) brokers
  - SWIR uses conditional compilation which allows creating sidecars with just NATS or just Kafka dependencies
  - SpringBoot Java client and other components allowing testing it end to end
- - SWIR can start the client application (for time being only SpringBoot standalone jars)   
+ - SWIR can start the client application (for time being only SpringBoot standalone jars)
+ 
+
+ 
+    
  
 ## Short Term Roadmap
 - gRPC based interfaces with [Tonic](https://github.com/hyperium/tonic)
@@ -45,6 +56,9 @@ This project is just a starting point to a conversation about sidecars, particul
 - some example enterprise patterns as documented here https://www.enterpriseintegrationpatterns.com/
 
 ## How to use it
+
+![Diagram](Diagram1.png)
+
 
 # Requirements
 - To compile you will need cargo 1.39.0
