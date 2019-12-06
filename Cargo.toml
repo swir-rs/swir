@@ -43,7 +43,7 @@ tokio-rustls = "0.12.0-alpha.8"
 
 
 rustls = "0.16"
-async-stream = "0.1.2"
+async-stream = "0.2"
 
 
 hyper = { path = "../hyper" , features = ["runtime","stream"]}
@@ -56,6 +56,8 @@ env_logger = "*"
 serde = {version = "*", features = ["derive"] }
 serde_json = {version = "= 1.0.41"}
 
-rdkafka  = { version = "~0.21"}
-rdkafka-sys = { version ="1.0.0"}
+rdkafka = { path = "../rust-rdkafka" }
+rdkafka-sys = { path = "../rust-rdkafka/rdkafka-sys", version = "1.2.1", default-features = false }
+#rdkafka  = { version = "~0.21"}
+#rdkafka-sys = { version ="1.0.0"}
 sled = "*"

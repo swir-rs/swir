@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishRequest {
-    pub(crate) payload: String,
+    pub(crate) payload: Vec<u8>,
     pub(crate) url: String,
 }
 

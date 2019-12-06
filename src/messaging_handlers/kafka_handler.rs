@@ -1,14 +1,14 @@
 use std::borrow::Borrow;
-use std::thread;
-use std::thread::JoinHandle;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
-use futures::stream::Stream;
+use futures::StreamExt;
+use futures::future::FutureExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
-use rdkafka::consumer::{Consumer, ConsumerContext, Rebalance, StreamConsumer};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance};
+use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::error::KafkaResult;
-use rdkafka::message::{Message, ToBytes};
+use rdkafka::message::{Headers, Message};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
 
@@ -16,8 +16,6 @@ use crate::utils;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
-
-pub type Result<T> = std::result::Result<T, String>;
 
 impl ClientContext for CustomContext {}
 
@@ -38,54 +36,21 @@ impl ConsumerContext for CustomContext {
 }
 
 
-pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<RestToMessagingContext>, tx: Sender<utils::structs::MessagingToRestContext>) -> Result<Vec<JoinHandle<()>>> {
-    let context = CustomContext;
+pub async fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<RestToMessagingContext>, tx: Sender<utils::structs::MessagingToRestContext>) {
+    info!("Kafka ");
 
-    let plain_producer: FutureProducer = ClientConfig::new()
+    let f1 = kafka_incoming_event_handler(broker_address.clone(), receiving_topic.clone(), receiving_group, tx, db.clone());
+    let f2 = kafka_event_handler(rx, broker_address, sending_topic, receiving_topic, db);
+    futures::join!(f1,f2);
+}
+
+
+pub async fn kafka_event_handler(rx: Receiver<RestToMessagingContext>, broker_address: String, publish_topic: String, subscribe_topic: String, db: Db) {
+    let kafka_producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker_address)
         .set("message.timeout.ms", "5000")
         .create().expect("Can't start broker");
 
-    let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
-        .set("group.id", &receiving_group)
-        .set("bootstrap.servers", &broker_address)
-        .set("enable.partition.eof", "false")
-        .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "true")
-        //.set("statistics.interval.ms", "30000")
-        //.set("auto.offset.reset", "smallest")
-        .set_log_level(RDKafkaLogLevel::Debug)
-        .create_with_context(context).expect("Can't start broker");
-
-    let mut topics: Vec<&str> = vec!();
-    topics.push(&receiving_topic);
-    let tt = topics.borrow();
-    consumer.subscribe(tt).expect("Can't subscribe to topics");
-
-    let mut threads: Vec<JoinHandle<()>> = vec!();
-    threads.push(create_sending_thread(receiving_topic, sending_topic, db.clone(), rx, plain_producer));
-    threads.push(create_receiving_thread(consumer, tx, db));
-    Ok(threads)
-}
-
-
-fn create_sending_thread(receiving_topic: String, sending_topic: String, db: Db, rx: Receiver<RestToMessagingContext>, producer: FutureProducer) -> JoinHandle<()> {
-    let res = thread::spawn(move || {
-        loop {
-            kafka_event_handler(&rx, &producer, &sending_topic, &receiving_topic, &db);
-        }
-    });
-    res
-}
-
-
-fn create_receiving_thread(consumer: StreamConsumer<CustomContext>, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) -> JoinHandle<()> {
-    let res = thread::spawn(kafka_incoming_event_handler(consumer, tx, db));
-    res
-}
-
-
-pub fn kafka_event_handler(rx: &Receiver<RestToMessagingContext>, kafka_producer: &FutureProducer, publish_topic: &str, subscribe_topic: &str, db: &Db) {
     let job = rx.recv().unwrap();
 
     let sender = job.sender;
@@ -108,38 +73,29 @@ pub fn kafka_event_handler(rx: &Receiver<RestToMessagingContext>, kafka_producer
         Job::Publish(value) => {
             let req = value;
             debug!("Kafka plain sending {:?}", req);
-            let r = FutureRecord::to(publish_topic).payload(ToBytes::to_bytes(&req.payload))
-                .key("some key".to_bytes());
+            let r = FutureRecord::to(publish_topic.as_str()).payload(&req.payload).key("some key");
             let foo = kafka_producer.send(r, 0).map(move |status| {
                 match status {
                     Ok(_) => {
                         sender.send(structs::MessagingResult { status: 1, result: "KAFKA is good".to_string() })
                     }
                     Err(e) => {
-                        sender.send(structs::MessagingResult { status: 1, result: e.0.to_string() })
+                        sender.send(structs::MessagingResult { status: 1, result: e.to_string() })
                     }
                 }
             });
-            if let Err(_) = foo.wait() {
+
+            if let Err(_) = foo.await {
                 warn!("hmmm something is very wrong here. it seems that the channel has been closed");
             }
         }
     }
 }
 
-async fn send_request(payload: std::option::Option<&[u8]>, topic: &str, tx: &Sender<utils::structs::MessagingToRestContext>, db: &Db) {
-    let payload = match payload {
-        None => "".as_bytes(),
-        Some(s) => s
-    };
-    if payload.is_empty() {
-        return;
-    }
-
+fn send_request(p: Vec<u8>, topic: &str, tx: &Sender<utils::structs::MessagingToRestContext>, db: &Db) {
     let mut uri: String = String::from("");
 
-    let p = String::from_utf8_lossy(payload);
-    info!("Processing message  {}", p);
+    debug!("Processing message  {:?}", p);
     if let Ok(maybe_url) = db.get(topic) {
         if let Some(url) = maybe_url {
             let vec = url.to_vec();
@@ -151,7 +107,7 @@ async fn send_request(payload: std::option::Option<&[u8]>, topic: &str, tx: &Sen
     let (s, _r) = bounded(1);
     let p = MessagingToRestContext {
         sender: s,
-        payload: payload.to_vec(),
+        payload: p.to_vec(),
         uri,
     };
 
@@ -164,21 +120,63 @@ async fn send_request(payload: std::option::Option<&[u8]>, topic: &str, tx: &Sen
 //    }
 }
 
-pub async fn kafka_incoming_event_handler(consumer: StreamConsumer<structs::CustomContext>, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) {
-    let stream = consumer.start();
-    for message in stream.wait() {
+type LoggingConsumer = StreamConsumer<CustomContext>;
+
+pub async fn kafka_incoming_event_handler(broker_address: String, receiving_topic: String, receiving_group: String, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) {
+    let context = CustomContext;
+
+    let consumer: LoggingConsumer = ClientConfig::new()
+        .set("group.id", &receiving_group)
+        .set("bootstrap.servers", &broker_address)
+        .set("enable.partition.eof", "false")
+        .set("session.timeout.ms", "6000")
+        .set("enable.auto.commit", "true")
+        //.set("statistics.interval.ms", "30000")
+        //.set("auto.offset.reset", "smallest")
+        .set_log_level(RDKafkaLogLevel::Debug)
+        .create_with_context(context)
+        .expect("Consumer creation failed");
+
+    let mut topics: Vec<&str> = vec!();
+    topics.push(&receiving_topic);
+    let tt = topics.borrow();
+    consumer.subscribe(tt).expect("Can't subscribe to topics");
+
+    consumer
+        .subscribe(&topics.to_vec())
+        .expect("Can't subscribe to specified topics");
+
+    // consumer.start() returns a stream. The stream can be used ot chain together expensive steps,
+    // such as complex computations on a thread pool or asynchronous IO.
+    let mut message_stream = consumer.start();
+
+    while let Some(message) = message_stream.next().await {
         match message {
-            Err(e) => {
-                warn!("Error while reading from stream. {:?}", e);
+            Err(e) => warn!("Kafka error: {}", e),
+            Ok(m) => {
+                let payload = match m.payload_view::<str>() {
+                    None => "",
+                    Some(Ok(s)) => s,
+                    Some(Err(e)) => {
+                        warn!("Error while deserializing message payload: {:?}", e);
+                        ""
+                    }
+                };
+                info!("key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+                      m.key(), payload, m.topic(), m.partition(), m.offset(), m.timestamp());
+                if let Some(headers) = m.headers() {
+                    for i in 0..headers.count() {
+                        let header = headers.get(i).unwrap();
+                        info!("  Header {:#?}: {:?}", header.0, header.1);
+                    }
+                }
+                let t = m.topic().clone();
+                let mut vec = Vec::new();
+                vec.extend(payload.bytes());
+                send_request(vec, t, &tx, &db);
+                consumer.commit_message(&m, CommitMode::Async).unwrap();
             }
-            Ok(Err(e)) => {
-                warn!("Error while reading from stream. {:?} ", e);
-            }
-            Ok(Ok(m)) => {
-                let p = m.payload().clone();
-                hyper::rt::spawn(send_request(p, m.topic().clone(), &tx, &db));
-            }
-        }
+        };
     }
 }
 
