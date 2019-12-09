@@ -1,5 +1,6 @@
-use crossbeam_channel::{Receiver, Sender, unbounded};
-use futures_util::StreamExt;
+use futures::channel::mpsc;
+use futures::channel::oneshot;
+use futures::stream::{Stream, StreamExt, TryStreamExt};
 use http::HeaderValue;
 use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
@@ -31,7 +32,7 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagingContext>) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -42,7 +43,6 @@ pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>)
         return Ok(response)
     }
 
-
     debug!("Body {:?}", req.body());
     let url = req.uri().clone().to_string();
     match (req.method(), req.uri().path()) {
@@ -51,18 +51,19 @@ pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>)
 
             let p = PublishRequest { payload: whole_body, url: url };
             debug!("{:?}", p);
-            let (local_tx, local_rx): (Sender<MessagingResult>, Receiver<MessagingResult>) = unbounded();
-            let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx.clone() };
+            let (local_tx, mut local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+            let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx };
 
-            if let Err(e) = sender.send(job) {
+            if let Err(e) = sender.try_send(job) {
                 warn!("Channel is dead {:?}", e);
                 *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 *response.body_mut() = Body::empty();
             }
 
-            let r = local_rx.recv();
-            debug!("Got result {:?}", r);
-            if let Ok(res) = r {
+            debug!("Waiting for broker");
+            let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+            debug!("Got result {:?}", response_from_broker);
+            if let Ok(res) = response_from_broker {
                 *response.body_mut() = Body::from(res.result);
                 *response.status_mut() = StatusCode::OK;
             } else {
@@ -78,18 +79,18 @@ pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>)
             match maybe_json {
                 Ok(json) => {
                     info!("{:?}", json);
-                    let (local_tx, local_rx): (Sender<MessagingResult>, Receiver<MessagingResult>) = unbounded();
-                    let job = RestToMessagingContext { job: Job::Subscribe(json), sender: local_tx.clone() };
+                    let (local_tx, mut local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+                    let job = RestToMessagingContext { job: Job::Subscribe(json), sender: local_tx };
                     info!("About to send to kafka processor");
-                    if let Err(e) = sender.send(job) {
+                    if let Err(e) = sender.try_send(job) {
                         warn!("Channel is dead {:?}", e);
                         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                         *response.body_mut() = Body::empty();
                     }
                     info!("Waiting for response from kafka");
-                    let r = local_rx.recv();
+                    let r = local_rx.try_recv();
                     info!("Got result {:?}", r);
-                    if let Ok(res) = r {
+                    if let Ok(Some(res)) = r {
                         *response.body_mut() = Body::from(res.result);
                         *response.status_mut() = StatusCode::OK;
                     } else {
@@ -116,7 +117,7 @@ pub async fn handler(req: Request<Body>, sender: Sender<RestToMessagingContext>)
 }
 
 
-fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingToRestContext) {
+async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingToRestContext) {
     let uri = payload.uri;
     let url = uri.parse::<hyper::Uri>().unwrap();
 
@@ -131,7 +132,7 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
 //    let sender = payload.sender.clone();
 //    let err_sender = payload.sender.clone();
 
-    let f = async move {
+
         let p = p.clone();
         info!("Making request for {}", String::from_utf8_lossy(&p));
         let resp = client.request(req).await;
@@ -154,13 +155,12 @@ fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingTo
 //                        warn!("Problem with an internal communication {:?}", e);
 //                    }
             });
-    };
-    tokio::spawn(f);
 }
 
-pub async fn client_handler(rx: Receiver<MessagingToRestContext>) {
+pub async fn client_handler(mut rx: mpsc::Receiver<MessagingToRestContext>) {
     let client = hyper::Client::builder().keep_alive(true).build_http();
-    for payload in rx.iter() {
-        send_request(client.clone(), payload);
+    info!("Client done");
+    while let Some(payload) = rx.next().await {
+        send_request(client.clone(), payload).await
     }
 }

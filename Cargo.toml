@@ -50,7 +50,6 @@ hyper = { path = "../hyper" , features = ["runtime","stream"]}
 #hyper = {version = "0.13.0-alpha.4", features = ["runtime","stream"]}
 
 clap = {version = ">=2.33.0", features = ["yaml"]}
-crossbeam-channel = "0.4.0"
 
 env_logger = "*"
 serde = {version = "*", features = ["derive"] }

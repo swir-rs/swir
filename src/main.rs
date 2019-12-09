@@ -4,6 +4,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
+
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -14,10 +15,10 @@ use std::{
 use std::io::{Error as StdError, ErrorKind};
 
 use clap::App;
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures_core::Stream;
 use futures_util::{
-    ready, TryStreamExt,
+    ready, TryFutureExt, TryStreamExt,
 };
 use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
@@ -26,7 +27,6 @@ use tokio_rustls::TlsAcceptor;
 
 use boxio::BoxedIo;
 use http_handler::client_handler;
-//use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
@@ -120,8 +120,8 @@ async fn main() {
         }
     );
 
-    let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = unbounded();
-    let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = unbounded();
+    let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = channel(1000);
+    let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = channel(1000);
 
     let tx = rest_to_msg_tx.clone();
     let http_service = make_service_fn(move |_| {
@@ -143,7 +143,9 @@ async fn main() {
     });
 
 
-    let kafka = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx.clone(), msg_to_rest_tx.clone());
+    let kafka = async {
+        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_rest_tx).await;
+    };
 
     let server = Server::bind(&plain_socket_addr)
         .serve(http_service);
@@ -152,7 +154,10 @@ async fn main() {
         .serve(https_service);
 
     //utils::command_utils::run_java_command(command.to_string());
-    let client = client_handler(msg_to_rest_rx);
-    futures::join!(tls_server,server,kafka,client);
+    let client = async {
+        client_handler(msg_to_rest_rx).await
+    };
+
+    futures::join!(tls_server,server,client,kafka);
 }
 

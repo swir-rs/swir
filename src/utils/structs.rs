@@ -1,4 +1,4 @@
-use crossbeam_channel::Sender;
+use futures::channel::oneshot::Sender;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]

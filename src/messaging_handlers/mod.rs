@@ -1,4 +1,4 @@
-use crossbeam_channel::{Receiver, Sender};
+use futures::channel::mpsc::{Receiver, Sender};
 use sled::Db;
 
 use crate::utils;
