@@ -1,6 +1,6 @@
 use futures::channel::mpsc;
 use futures::channel::oneshot;
-use futures::stream::{Stream, StreamExt, TryStreamExt};
+use futures::stream::StreamExt;
 use http::HeaderValue;
 use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
@@ -51,7 +51,7 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
 
             let p = PublishRequest { payload: whole_body, url: url };
             debug!("{:?}", p);
-            let (local_tx, mut local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+            let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
             let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx };
 
             if let Err(e) = sender.try_send(job) {
@@ -79,7 +79,7 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
             match maybe_json {
                 Ok(json) => {
                     info!("{:?}", json);
-                    let (local_tx, mut local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+                    let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
                     let job = RestToMessagingContext { job: Job::Subscribe(json), sender: local_tx };
                     info!("About to send to kafka processor");
                     if let Err(e) = sender.try_send(job) {

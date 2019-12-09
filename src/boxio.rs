@@ -2,8 +2,9 @@ use std::io;
 use std::io::ErrorKind;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::net::TcpStream;
+
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 
 pub trait Io:
@@ -50,7 +51,7 @@ impl AsyncWrite for BoxedIo {
 
 pub async fn connect(acceptor: TlsAcceptor, io: TcpStream) -> Result<BoxedIo, std::io::Error> {
     let io = {
-        let tls = acceptor.accept(io).await.map_err(|e| std::io::Error::from(ErrorKind::NotFound))?;
+        let tls = acceptor.accept(io).await.map_err(|_| std::io::Error::from(ErrorKind::NotFound))?;
         BoxedIo::new(tls)
     };
     Ok(io)

@@ -5,8 +5,6 @@ use crate::utils;
 
 use super::utils::structs::RestToMessagingContext;
 
-pub type Result<T> = std::result::Result<T, String>;
-
 #[cfg(feature = "with_nats")]
 mod nats_handler;
 

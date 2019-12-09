@@ -17,8 +17,7 @@ use std::io::{Error as StdError, ErrorKind};
 use clap::App;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures_core::Stream;
-use futures_util::{
-    ready, TryFutureExt, TryStreamExt,
+use futures_util::{ready, TryStreamExt,
 };
 use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
@@ -42,7 +41,7 @@ struct TcpIncoming {
 
 impl TcpIncoming {
     fn bind(addr: SocketAddr) -> Result<Self, StdError> {
-        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|e| StdError::from(ErrorKind::NotFound))?;
+        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
         inner.set_nodelay(true);
         Ok(Self { inner })
     }
@@ -82,8 +81,6 @@ async fn main() {
 
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
     let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
-
-    let addr = plain_socket_addr;
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
@@ -158,6 +155,6 @@ async fn main() {
         client_handler(msg_to_rest_rx).await
     };
 
-    futures::join!(tls_server,server,client,kafka);
+    let (_r1, _r2, _r3, _r4) = futures::join!(tls_server,server,client,kafka);
 }
 

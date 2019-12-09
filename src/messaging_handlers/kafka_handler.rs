@@ -1,9 +1,8 @@
 use std::borrow::Borrow;
 
 use futures::channel::mpsc::{Receiver, Sender};
-use futures::executor;
 use futures::future::FutureExt;
-use futures::stream::{Stream, StreamExt, TryStreamExt};
+use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance};
@@ -42,10 +41,7 @@ pub async fn configure_broker(broker_address: String, sending_topic: String, rec
 
     let f1 = async { kafka_incoming_event_handler(broker_address.clone(), receiving_topic.clone(), receiving_group, tx, db.clone()).await };
     let f2 = async { kafka_event_handler(rx, broker_address.clone(), sending_topic, receiving_topic.clone(), db.clone()).await };
-    let r = futures::join!(f1,f2);
-    if let (e1, e2) = r {
-        error!("Error happened {:?}, {:?}", e1, e2)
-    }
+    let (_r1, _r2) = futures::join!(f1,f2);
 }
 
 
