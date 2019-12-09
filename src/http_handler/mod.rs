@@ -88,9 +88,9 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
                         *response.body_mut() = Body::empty();
                     }
                     info!("Waiting for response from kafka");
-                    let r = local_rx.try_recv();
-                    info!("Got result {:?}", r);
-                    if let Ok(Some(res)) = r {
+                    let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+                    debug!("Got result {:?}", response_from_broker);
+                    if let Ok(res) = response_from_broker {
                         *response.body_mut() = Body::from(res.result);
                         *response.status_mut() = StatusCode::OK;
                     } else {
