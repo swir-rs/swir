@@ -46,3 +46,7 @@ rdkafka-sys = { path = "../rust-rdkafka/rdkafka-sys", version = "1.2.1", default
 #rdkafka  = { version = "~0.21"}
 #rdkafka-sys = { version ="1.0.0"}
 sled = "*"
+natsclient = {path="../natsclient"}
+#
+[features]
+with_nats = []
