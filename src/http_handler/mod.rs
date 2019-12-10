@@ -136,13 +136,13 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
         let p = p.clone();
         info!("Making request for {}", String::from_utf8_lossy(&p));
         let resp = client.request(req).await;
-        let res = resp.map(move |res| {
-            debug!("Status POST to the client: {}", res.status());
+    let _res = resp.map(move |res| {
+        debug!("Status POST to the client: {}", res.status());
 //                let mut status = "All good".to_string();
-            if res.status() != hyper::StatusCode::OK {
-                warn!("Error from the client {}", res.status());
+        if res.status() != hyper::StatusCode::OK {
+            warn!("Error from the client {}", res.status());
 //                    status = "Invalid response from the client".to_string();
-            }
+        }
 //                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
 //                    warn!("Problem with an internal communication {:?}", e);
 //                }

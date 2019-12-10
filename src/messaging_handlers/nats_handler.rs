@@ -11,22 +11,18 @@ use crate::utils;
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 
-pub type Result<T> = std::result::Result<T, String>;
-
-
 pub async fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: mpsc::Receiver<RestToMessagingContext>, tx: mpsc::Sender<utils::structs::MessagingToRestContext>) {
     let cluster = vec!(broker_address);
 
     let mut incoming_client = nats::Client::new(cluster.clone()).unwrap();
-    let mut outgoing_client = nats::Client::new(cluster).unwrap();
+    let outgoing_client = nats::Client::new(cluster).unwrap();
     incoming_client.set_name(&receiving_group);
-    incoming_client.subscribe(receiving_topic.as_str(), Some(&receiving_group));
+    incoming_client.subscribe(receiving_topic.as_str(), Some(&receiving_group)).unwrap();
     info!("NATS subscribed and connected");
     let db_local = db.clone();
     let f1 = async { nats_incoming_event_handler(incoming_client, tx, db).await };
     let f2 = async { nats_event_handler(rx, outgoing_client, &sending_topic, &receiving_topic, db_local).await };
     let (_r1, _r2) = futures::join!(f1,f2);
-//    let (_r1,) = futures::join!(f2);
 }
 
 
@@ -67,7 +63,6 @@ pub async fn nats_event_handler(mut rx: mpsc::Receiver<RestToMessagingContext>, 
 
 pub async fn nats_incoming_event_handler(mut client: Client, tx: mpsc::Sender<utils::structs::MessagingToRestContext>, db: Db) {
     let join = task::spawn_blocking(move || {
-        // do some compute-heavy work or call synchronous code
         info!("Waiting for events ");
         for event in client.events() {
             let db = db.clone();
@@ -81,7 +76,7 @@ pub async fn nats_incoming_event_handler(mut client: Client, tx: mpsc::Sender<ut
                     }
                 }
 
-                let (s, r) = oneshot::channel();
+                let (s, _r) = oneshot::channel();
                 let p = MessagingToRestContext {
                     sender: s,
                     payload: event.msg,
@@ -93,7 +88,7 @@ pub async fn nats_incoming_event_handler(mut client: Client, tx: mpsc::Sender<ut
             });
         }
     });
-    let result = join.await;
+    let _res = join.await;
 }
 
 

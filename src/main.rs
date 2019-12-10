@@ -156,6 +156,5 @@ async fn main() {
     };
 
     let (_r1, _r2, _r3, _r4) = futures::join!(tls_server,server,client,broker);
-    //let (_r1, _r2, _r3) = futures::join!(tls_server,server,client);
 }
 
