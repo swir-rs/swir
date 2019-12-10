@@ -85,7 +85,7 @@ async fn main() {
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
 
-    info!("Using kafka broker on {}", broker_address);
+    info!("Connecting to broker on {}", broker_address);
     info!("Tls port Listening on {}", tls_socket_addr);
     info!("Plain port Listening on {}", plain_socket_addr);
 
@@ -140,7 +140,7 @@ async fn main() {
     });
 
 
-    let kafka = async {
+    let broker = async {
         messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_rest_tx).await;
     };
 
@@ -155,6 +155,7 @@ async fn main() {
         client_handler(msg_to_rest_rx).await
     };
 
-    let (_r1, _r2, _r3, _r4) = futures::join!(tls_server,server,client,kafka);
+    let (_r1, _r2, _r3, _r4) = futures::join!(tls_server,server,client,broker);
+    //let (_r1, _r2, _r3) = futures::join!(tls_server,server,client);
 }
 
