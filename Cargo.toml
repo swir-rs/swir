@@ -11,7 +11,6 @@ categories = ["sidecar"]
 edition = "2018"
 publish = false
 
-
 [dependencies]
 bytes = "0.5"
 futures = "=0.3"
