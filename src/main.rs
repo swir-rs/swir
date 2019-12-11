@@ -1,9 +1,9 @@
 //#![deny(warnings)]
+
 #[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate log;
-
 
 use std::{
     net::SocketAddr,
@@ -12,13 +12,16 @@ use std::{
     task::{Context, Poll},
     // time::Duration,
 };
+use std::borrow::BorrowMut;
 use std::io::{Error as StdError, ErrorKind};
 
 use clap::App;
 use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::oneshot;
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt,
 };
+use hyper::StatusCode;
 use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
 use sled::Config;
@@ -26,18 +29,19 @@ use tokio_rustls::TlsAcceptor;
 use tonic::transport;
 
 use boxio::BoxedIo;
-use client_api::{
-    PublishRequest,
-    PublishResponse, server::{ClientApi, ClientApiServer},
-};
+use client_api::server::ClientApiServer;
+use grpc_handler::client_api;
 use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
+
+use crate::utils::structs::{Job, MessagingResult, RestToMessagingContext};
 
 mod boxio;
 mod http_handler;
 mod messaging_handlers;
 mod utils;
+mod grpc_handler;
 
 #[derive(Debug)]
 struct TcpIncoming {
@@ -65,11 +69,6 @@ impl Stream for TcpIncoming {
 }
 
 
-pub mod client_api {
-    tonic::include_proto!("swir");
-}
-
-pub struct SwirAPI {}
 
 #[tokio::main]
 async fn main() {
@@ -168,26 +167,12 @@ async fn main() {
     };
 
     let addr = "[::1]:50051".parse().unwrap();
-    let swir = SwirAPI {};
+    let swir = grpc_handler::SwirAPI { tx: rest_to_msg_tx };
 
     let grpc = tonic::transport::Server::builder().add_service(ClientApiServer::new(swir)).serve(addr);
 
     let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server,server,client,broker,grpc);
 }
 
-#[tonic::async_trait]
-impl ClientApi for SwirAPI {
-    async fn publish(
-        &self,
-        request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
-    ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> { // Return an instance of type HelloReply
-        println!("Got a request: {:?}", request);
 
-        let reply = client_api::PublishResponse {
-            status: format!("Hello {}!", request.into_inner().topic).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
-        };
-
-        Ok(tonic::Response::new(reply)) // Send back our formatted greeting
-    }
-}
 

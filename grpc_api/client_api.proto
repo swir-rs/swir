@@ -20,20 +20,22 @@ option java_outer_classname = "SwirClientApiProto";
 
 package swir;
 
-// The greeting service definition.
+// The definition of API exposed by Sidecar.
 service ClientApi {
-    // Sends a greeting
+    // Publish message to a topic/queue
     rpc Publish (PublishRequest) returns (PublishResponse) {
     }
 }
 
-// The request message containing the user's name.
+// Publish message structure.
 message PublishRequest {
+    //queue name, will be mapped to a physical queue name
     string topic = 1;
+    //Payload is copied directly into appropriate format
     bytes payload = 2;
 }
 
-// The response message containing the greetings
+// Response message structure
 message PublishResponse {
     string status = 1;
 }
