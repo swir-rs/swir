@@ -1,10 +1,15 @@
 [package]
 name = "rustycar"
 version = "0.1.0"
-authors = ["dawid.nowak <nowakd@gmail.com>"]
+authors = ["Dawid Nowak <nowakd@gmail.com>"]
+repository = "https://github.com/swir-rs/swir"
+readme = "README.md"
+license = "Apache-2.0"
+description = "Sidecar Written in Rust"
+keywords = ["sidecar", "rest", "messaging","cloudcomputing"]
+categories = ["sidecar"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+publish = false
 
 
 [dependencies]
@@ -32,21 +37,18 @@ want = "0.3"
 net2 = { version = "0.2.32", optional = true }
 tokio = { version = "=0.2.2", features = ["full"]}
 tokio-rustls = "0.12.0-alpha.8"
-#tokio-tcp = { version = "=0.2.0-alpha.1", optional = false}
 rustls = "0.16"
 async-stream = "0.2"
-hyper = { path = "../hyper" , features = ["runtime","stream"]}
-#hyper = {version = "0.13.0-alpha.4", features = ["runtime","stream"]}
+hyper = "0.13.0"
+#hyper = { path = "../hyper" , features = ["runtime","stream"]}
 clap = {version = ">=2.33.0", features = ["yaml"]}
 env_logger = "*"
 serde = {version = "*", features = ["derive"] }
 serde_json = {version = "= 1.0.41"}
-rdkafka = { path = "../rust-rdkafka" }
-rdkafka-sys = { path = "../rust-rdkafka/rdkafka-sys", version = "1.2.1", default-features = false }
-#rdkafka  = { version = "~0.21"}
-#rdkafka-sys = { version ="1.0.0"}
+rdkafka = { version="0.22", path = "../rust-rdkafka" }
+rdkafka-sys = { version = "1.2.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
 sled = "*"
-nats = {path="../rust-nats"}
-#
+nats = {version="*"}
+
 [features]
 with_nats = []
