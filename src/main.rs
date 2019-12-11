@@ -23,8 +23,13 @@ use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
 use sled::Config;
 use tokio_rustls::TlsAcceptor;
+use tonic::transport;
 
 use boxio::BoxedIo;
+use client_api::{
+    PublishRequest,
+    PublishResponse, server::{ClientApi, ClientApiServer},
+};
 use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
@@ -58,6 +63,13 @@ impl Stream for TcpIncoming {
         }
     }
 }
+
+
+pub mod client_api {
+    tonic::include_proto!("swir");
+}
+
+pub struct SwirAPI {}
 
 #[tokio::main]
 async fn main() {
@@ -155,6 +167,27 @@ async fn main() {
         client_handler(msg_to_rest_rx).await
     };
 
-    let (_r1, _r2, _r3, _r4) = futures::join!(tls_server,server,client,broker);
+    let addr = "[::1]:50051".parse().unwrap();
+    let swir = SwirAPI {};
+
+    let grpc = tonic::transport::Server::builder().add_service(ClientApiServer::new(swir)).serve(addr);
+
+    let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server,server,client,broker,grpc);
+}
+
+#[tonic::async_trait]
+impl ClientApi for SwirAPI {
+    async fn publish(
+        &self,
+        request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
+    ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> { // Return an instance of type HelloReply
+        println!("Got a request: {:?}", request);
+
+        let reply = client_api::PublishResponse {
+            status: format!("Hello {}!", request.into_inner().topic).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+        };
+
+        Ok(tonic::Response::new(reply)) // Send back our formatted greeting
+    }
 }
 

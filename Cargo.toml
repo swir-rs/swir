@@ -12,7 +12,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
-bytes = "0.5"
+bytes = "0.4"
 futures = "=0.3"
 futures-core= "=0.3"
 futures-channel = "=0.3"
@@ -47,7 +47,17 @@ serde_json = {version = "= 1.0.41"}
 rdkafka = { version="0.22", path = "../rust-rdkafka" }
 rdkafka-sys = { version = "1.2.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
 sled = "*"
-nats = {version="*"}
+nats = {version="*",optional=true}
+
+prost = "0.5"
+prost-derive = "0.5"
+tonic = {version="0.1.0-alpha.6", path ="../tonic/tonic", optional=false}
+
+
+[build-dependencies]
+tonic-build = { version="0.1.0-alpha.6", path ="../tonic/tonic-build" }
 
 [features]
-with_nats = []
+with_nats = ["nats"]
+
+#with_grpc = ["tonic"]
