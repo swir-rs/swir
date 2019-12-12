@@ -25,6 +25,8 @@ service ClientApi {
     // Publish message to a topic/queue
     rpc Publish (PublishRequest) returns (PublishResponse) {
     }
+    rpc Subscribe (SubscribeRequest) returns (stream SubscribeResponse) {
+    }
 }
 
 // Publish message structure.
@@ -38,4 +40,15 @@ message PublishRequest {
 // Response message structure
 message PublishResponse {
     string status = 1;
+}
+
+message SubscribeRequest {
+    //queue name, will be mapped to a physical queue name
+    string topic = 1;
+}
+
+// Response message structure
+message SubscribeResponse {
+    //Payload is copied directly into appropriate format
+    bytes payload = 2;
 }

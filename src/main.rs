@@ -12,24 +12,22 @@ use std::{
     task::{Context, Poll},
     // time::Duration,
 };
-use std::borrow::BorrowMut;
 use std::io::{Error as StdError, ErrorKind};
 
 use clap::App;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::channel::oneshot;
+use futures::lock::Mutex;
 use futures_core::Stream;
-use futures_util::{ready, TryStreamExt,
-};
-use hyper::StatusCode;
+use futures_util::{ready, TryStreamExt};
 use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
+use hyper::StatusCode;
 use sled::Config;
 use tokio_rustls::TlsAcceptor;
 use tonic::transport;
 
 use boxio::BoxedIo;
-use client_api::server::ClientApiServer;
 use grpc_handler::client_api;
 use http_handler::client_handler;
 use http_handler::handler;
@@ -130,6 +128,8 @@ async fn main() {
 
     let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = channel(1000);
     let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = channel(1000);
+    let (msg_to_grpc_tx, msg_to_grpc_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = channel(1000);
+    let msg_to_grpc_rx = Arc::new(Mutex::new(msg_to_grpc_rx));
 
     let tx = rest_to_msg_tx.clone();
     let http_service = make_service_fn(move |_| {
@@ -152,7 +152,7 @@ async fn main() {
 
 
     let broker = async {
-        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_rest_tx).await;
+        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_grpc_tx).await;
     };
 
     let server = Server::bind(&plain_socket_addr)
@@ -167,9 +167,11 @@ async fn main() {
     };
 
     let addr = "[::1]:50051".parse().unwrap();
-    let swir = grpc_handler::SwirAPI { tx: rest_to_msg_tx };
+    let swir = grpc_handler::SwirAPI { tx: rest_to_msg_tx, rx: msg_to_grpc_rx };
 
-    let grpc = tonic::transport::Server::builder().add_service(ClientApiServer::new(swir)).serve(addr);
+
+    let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
+    let grpc = tonic::transport::Server::builder().add_service(svc).serve(addr);
 
     let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server,server,client,broker,grpc);
 }

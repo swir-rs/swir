@@ -7,6 +7,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 
 import java.nio.charset.Charset;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -36,7 +37,7 @@ public class GrpcClient {
         channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
     }
 
-    /** Say hello to server. */
+
     public void publish(String payload) {
         logger.info("Publishing to broker" + payload);
         PublishRequest request = PublishRequest.newBuilder().setTopic("sometopic").setPayload(ByteString.copyFrom("hellopayload", Charset.forName("UTF-8"))).build();
@@ -48,6 +49,24 @@ public class GrpcClient {
             return;
         }
         logger.info("Response status: " + response.getStatus());
+    }
+
+    public void subscribe(String topic) {
+        logger.info("Subscribing to topic " + topic);
+        SubscribeRequest request = SubscribeRequest.newBuilder().setTopic(topic).build();
+
+        try {
+            Iterator<SubscribeResponse> responseIter = blockingStub.subscribe(request);
+            while (responseIter.hasNext()){
+                SubscribeResponse sr = responseIter.next();
+                var s = sr.getPayload().toString();
+                logger.info("Response status " +  s);
+
+            }
+        } catch (StatusRuntimeException e) {
+            logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
+            return;
+        }
     }
 
     /**
@@ -64,6 +83,9 @@ public class GrpcClient {
                 payload = args[0];
             }
             client.publish(payload);
+
+            client.subscribe("Response");
+
         } finally {
             client.shutdown();
         }

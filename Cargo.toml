@@ -34,7 +34,7 @@ want = "0.3"
 
 # Optional
 net2 = { version = "0.2.32", optional = true }
-tokio = { version = "=0.2.2", features = ["full"]}
+tokio = { version = "=0.2.2", features = ["full","sync"]}
 tokio-rustls = "0.12.0-alpha.8"
 rustls = "0.16"
 async-stream = "0.2"
