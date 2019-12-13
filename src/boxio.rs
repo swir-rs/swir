@@ -7,9 +7,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 
-pub trait Io:
-AsyncRead + AsyncWrite + Send + Unpin + 'static
-{}
+pub trait Io: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
 impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
@@ -51,7 +49,10 @@ impl AsyncWrite for BoxedIo {
 
 pub async fn connect(acceptor: TlsAcceptor, io: TcpStream) -> Result<BoxedIo, std::io::Error> {
     let io = {
-        let tls = acceptor.accept(io).await.map_err(|_| std::io::Error::from(ErrorKind::NotFound))?;
+        let tls = acceptor
+            .accept(io)
+            .await
+            .map_err(|_| std::io::Error::from(ErrorKind::NotFound))?;
         BoxedIo::new(tls)
     };
     Ok(io)

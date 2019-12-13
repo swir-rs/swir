@@ -1,15 +1,13 @@
-use std::borrow::BorrowMut;
 use std::sync::Arc;
 
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use hyper::StatusCode;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::mpsc;
-use tonic::{IntoRequest, Response, Status};
+use tonic::{Response, Status};
 
-use crate::utils::structs::{EndpointDesc, Job, MessagingResult, MessagingToRestContext, RestToMessagingContext};
+use crate::utils::structs::{EndpointDesc, Job, MessagingResult, RestToMessagingContext};
 
 pub mod client_api {
     tonic::include_proto!("swir");
@@ -17,8 +15,8 @@ pub mod client_api {
 
 #[derive(Debug)]
 pub struct SwirAPI {
-    pub tx: Sender<crate::utils::structs::RestToMessagingContext>,
-    pub rx: Arc<Mutex<Receiver<crate::utils::structs::MessagingToRestContext>>>,
+    pub tx: mpsc::Sender<crate::utils::structs::RestToMessagingContext>,
+    pub rx: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
 }
 
 #[tonic::async_trait]
@@ -26,12 +24,22 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
     async fn publish(
         &self,
         request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
-    ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> { // Return an instance of type HelloReply
+    ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> {
+        // Return an instance of type HelloReply
         println!("Got a request: {:?}", request);
-        let p = crate::utils::structs::PublishRequest { payload: request.into_inner().payload, url: "".to_string() };
+        let p = crate::utils::structs::PublishRequest {
+            payload: request.into_inner().payload,
+            url: "".to_string(),
+        };
         debug!("{:?}", p);
-        let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-        let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx };
+        let (local_tx, local_rx): (
+            oneshot::Sender<MessagingResult>,
+            oneshot::Receiver<MessagingResult>,
+        ) = oneshot::channel();
+        let job = RestToMessagingContext {
+            job: Job::Publish(p),
+            sender: local_tx,
+        };
         let mut tx = self.tx.clone();
         if let Err(e) = tx.try_send(job) {
             warn!("Channel is dead {:?}", e);
@@ -52,7 +60,8 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         Ok(tonic::Response::new(reply)) // Send back our formatted greeting
     }
 
-    type SubscribeStream = tokio::sync::mpsc::Receiver<Result<client_api::SubscribeResponse, Status>>;
+    type SubscribeStream =
+    tokio::sync::mpsc::Receiver<Result<client_api::SubscribeResponse, Status>>;
 
     async fn subscribe(
         &self,
@@ -62,11 +71,19 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         println!("Topic = {:?}", topic);
 
         let sr = crate::utils::structs::SubscribeRequest {
-            endpoint: EndpointDesc { url: "".to_string() }
+            endpoint: EndpointDesc {
+                url: "".to_string(),
+            },
         };
 
-        let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-        let job = RestToMessagingContext { job: Job::Subscribe(sr), sender: local_tx };
+        let (local_tx, local_rx): (
+            oneshot::Sender<MessagingResult>,
+            oneshot::Receiver<MessagingResult>,
+        ) = oneshot::channel();
+        let job = RestToMessagingContext {
+            job: Job::Subscribe(sr),
+            sender: local_tx,
+        };
         info!("About to send to messaging processor");
         let mut tx = self.tx.clone();
         tx.try_send(job).unwrap();
@@ -80,7 +97,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             let mut loc_rx = loc_rx.lock().await;
             while let Some(messaging_context) = loc_rx.next().await {
                 let s = client_api::SubscribeResponse {
-                    payload: messaging_context.payload
+                    payload: messaging_context.payload,
                 };
                 let r = tx.send(Ok(s)).await;
                 if let Err(e) = r {

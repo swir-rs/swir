@@ -18,7 +18,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
                 return None;
             }
         }
-        None => return None
+        None => return None,
     }
 }
 
@@ -32,7 +32,10 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagingContext>) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(
+    req: Request<Body>,
+    mut sender: mpsc::Sender<RestToMessagingContext>,
+) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -40,7 +43,7 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
     debug!("Headers {:?}", headers);
 
     if validate_content_type(headers).is_none() {
-        return Ok(response)
+        return Ok(response);
     }
 
     debug!("Body {:?}", req.body());
@@ -49,10 +52,19 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
         (&Method::POST, "/publish") => {
             let whole_body = get_whole_body(req).await;
 
-            let p = PublishRequest { payload: whole_body, url: url };
+            let p = PublishRequest {
+                payload: whole_body,
+                url: url,
+            };
             debug!("{:?}", p);
-            let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-            let job = RestToMessagingContext { job: Job::Publish(p), sender: local_tx };
+            let (local_tx, local_rx): (
+                oneshot::Sender<MessagingResult>,
+                oneshot::Receiver<MessagingResult>,
+            ) = oneshot::channel();
+            let job = RestToMessagingContext {
+                job: Job::Publish(p),
+                sender: local_tx,
+            };
 
             if let Err(e) = sender.try_send(job) {
                 warn!("Channel is dead {:?}", e);
@@ -79,8 +91,14 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
             match maybe_json {
                 Ok(json) => {
                     info!("{:?}", json);
-                    let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-                    let job = RestToMessagingContext { job: Job::Subscribe(json), sender: local_tx };
+                    let (local_tx, local_rx): (
+                        oneshot::Sender<MessagingResult>,
+                        oneshot::Receiver<MessagingResult>,
+                    ) = oneshot::channel();
+                    let job = RestToMessagingContext {
+                        job: Job::Subscribe(json),
+                        sender: local_tx,
+                    };
                     info!("About to send to kafka processor");
                     if let Err(e) = sender.try_send(job) {
                         warn!("Channel is dead {:?}", e);
@@ -88,7 +106,8 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
                         *response.body_mut() = Body::empty();
                     }
                     info!("Waiting for response from kafka");
-                    let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+                    let response_from_broker: Result<MessagingResult, oneshot::Canceled> =
+                        local_rx.await;
                     debug!("Got result {:?}", response_from_broker);
                     if let Ok(res) = response_from_broker {
                         *response.body_mut() = Body::from(res.result);
@@ -116,7 +135,6 @@ pub async fn handler(req: Request<Body>, mut sender: mpsc::Sender<RestToMessagin
     }
 }
 
-
 async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingToRestContext) {
     let uri = payload.uri;
     let url = uri.parse::<hyper::Uri>().unwrap();
@@ -125,36 +143,40 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
     let req = Request::builder()
         .method("POST")
         .uri(url)
-        .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .header(
+            hyper::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        )
         .body(Body::from(payload.payload))
         .expect("request builder");
 
-//    let sender = payload.sender.clone();
-//    let err_sender = payload.sender.clone();
+    //    let sender = payload.sender.clone();
+    //    let err_sender = payload.sender.clone();
 
-
-        let p = p.clone();
-        info!("Making request for {}", String::from_utf8_lossy(&p));
-        let resp = client.request(req).await;
-    let _res = resp.map(move |res| {
-        debug!("Status POST to the client: {}", res.status());
-//                let mut status = "All good".to_string();
-        if res.status() != hyper::StatusCode::OK {
-            warn!("Error from the client {}", res.status());
-//                    status = "Invalid response from the client".to_string();
-        }
-//                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
-//                    warn!("Problem with an internal communication {:?}", e);
-//                }
-//                res.into_body().concat2()
+    let p = p.clone();
+    info!("Making request for {}", String::from_utf8_lossy(&p));
+    let resp = client.request(req).await;
+    let _res = resp
+        .map(move |res| {
+            debug!("Status POST to the client: {}", res.status());
+            //                let mut status = "All good".to_string();
+            if res.status() != hyper::StatusCode::OK {
+                warn!("Error from the client {}", res.status());
+                //                    status = "Invalid response from the client".to_string();
+            }
+            //                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
+            //                    warn!("Problem with an internal communication {:?}", e);
+            //                }
+            //                res.into_body().concat2()
             res.into_body()
-        }).map(|_| {})
-            .map_err(move |err| {
-                eprintln!("Error {}", err);
-//                    if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
-//                        warn!("Problem with an internal communication {:?}", e);
-//                    }
-            });
+        })
+        .map(|_| {})
+        .map_err(move |err| {
+            eprintln!("Error {}", err);
+            //                    if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
+            //                        warn!("Problem with an internal communication {:?}", e);
+            //                    }
+        });
 }
 
 pub async fn client_handler(mut rx: mpsc::Receiver<MessagingToRestContext>) {

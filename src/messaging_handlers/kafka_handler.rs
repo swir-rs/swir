@@ -35,25 +35,54 @@ impl ConsumerContext for CustomContext {
     }
 }
 
-
-pub async fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<RestToMessagingContext>, tx: Sender<utils::structs::MessagingToRestContext>) {
+pub async fn configure_broker(
+    broker_address: String,
+    sending_topic: String,
+    receiving_topic: String,
+    receiving_group: String,
+    db: Db,
+    rx: Receiver<RestToMessagingContext>,
+    tx: Sender<utils::structs::MessagingToRestContext>,
+) {
     info!("Kafka ");
 
-    let f1 = async { kafka_incoming_event_handler(broker_address.clone(), receiving_topic.clone(), receiving_group, tx, db.clone()).await };
-    let f2 = async { kafka_event_handler(rx, broker_address.clone(), sending_topic, receiving_topic.clone(), db.clone()).await };
-    let (_r1, _r2) = futures::join!(f1,f2);
+    let f1 = async {
+        kafka_incoming_event_handler(
+            broker_address.clone(),
+            receiving_topic.clone(),
+            receiving_group,
+            tx,
+            db.clone(),
+        )
+            .await
+    };
+    let f2 = async {
+        kafka_event_handler(
+            rx,
+            broker_address.clone(),
+            sending_topic,
+            receiving_topic.clone(),
+            db.clone(),
+        )
+            .await
+    };
+    let (_r1, _r2) = futures::join!(f1, f2);
 }
 
-
-pub async fn kafka_event_handler(mut rx: Receiver<RestToMessagingContext>, broker_address: String, publish_topic: String, subscribe_topic: String, db: Db) {
+pub async fn kafka_event_handler(
+    mut rx: Receiver<RestToMessagingContext>,
+    broker_address: String,
+    publish_topic: String,
+    subscribe_topic: String,
+    db: Db,
+) {
     let kafka_producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker_address)
         .set("message.timeout.ms", "5000")
-        .create().expect("Can't start broker");
-
+        .create()
+        .expect("Can't start broker");
 
     info!("Kafka running");
-
 
     while let Some(job) = rx.next().await {
         let sender = job.sender;
@@ -61,13 +90,22 @@ pub async fn kafka_event_handler(mut rx: Receiver<RestToMessagingContext>, broke
             Job::Subscribe(value) => {
                 let req = value;
                 info!("New registration  {:?}", req);
-                if let Err(e) = db.insert(subscribe_topic.clone(), IVec::from(req.endpoint.url.as_bytes())) {
+                if let Err(e) = db.insert(
+                    subscribe_topic.clone(),
+                    IVec::from(req.endpoint.url.as_bytes()),
+                ) {
                     warn!("Can't store registration {:?}", e);
-                    if let Err(e) = sender.send(structs::MessagingResult { status: 1, result: e.to_string() }) {
+                    if let Err(e) = sender.send(structs::MessagingResult {
+                        status: 1,
+                        result: e.to_string(),
+                    }) {
                         warn!("Can't send response back {:?}", e);
                     }
                 } else {
-                    if let Err(e) = sender.send(structs::MessagingResult { status: 1, result: "All is good".to_string() }) {
+                    if let Err(e) = sender.send(structs::MessagingResult {
+                        status: 1,
+                        result: "All is good".to_string(),
+                    }) {
                         warn!("Can't send response back {:?}", e);
                     }
                 };
@@ -76,16 +114,18 @@ pub async fn kafka_event_handler(mut rx: Receiver<RestToMessagingContext>, broke
             Job::Publish(value) => {
                 let req = value;
                 debug!("Kafka plain sending {:?}", req);
-                let r = FutureRecord::to(publish_topic.as_str()).payload(&req.payload).key("some key");
-                let foo = kafka_producer.send(r, 0).map(move |status| {
-                    match status {
-                        Ok(_) => {
-                            sender.send(structs::MessagingResult { status: 1, result: "KAFKA is good".to_string() })
-                        }
-                        Err(e) => {
-                            sender.send(structs::MessagingResult { status: 1, result: e.to_string() })
-                        }
-                    }
+                let r = FutureRecord::to(publish_topic.as_str())
+                    .payload(&req.payload)
+                    .key("some key");
+                let foo = kafka_producer.send(r, 0).map(move |status| match status {
+                    Ok(_) => sender.send(structs::MessagingResult {
+                        status: 1,
+                        result: "KAFKA is good".to_string(),
+                    }),
+                    Err(e) => sender.send(structs::MessagingResult {
+                        status: 1,
+                        result: e.to_string(),
+                    }),
                 });
 
                 if let Err(_) = foo.await {
@@ -96,7 +136,12 @@ pub async fn kafka_event_handler(mut rx: Receiver<RestToMessagingContext>, broke
     }
 }
 
-fn send_request(p: Vec<u8>, topic: &str, mut tx: Sender<utils::structs::MessagingToRestContext>, db: &Db) {
+fn send_request(
+    p: Vec<u8>,
+    topic: &str,
+    mut tx: Sender<utils::structs::MessagingToRestContext>,
+    db: &Db,
+) {
     let mut uri: String = String::from("");
 
     debug!("Processing message  {:?}", p);
@@ -106,7 +151,6 @@ fn send_request(p: Vec<u8>, topic: &str, mut tx: Sender<utils::structs::Messagin
             uri = String::from_utf8_lossy(vec.borrow()).to_string();
         }
     }
-
 
     let (s, _r) = futures::channel::oneshot::channel();
     let p = MessagingToRestContext {
@@ -118,15 +162,21 @@ fn send_request(p: Vec<u8>, topic: &str, mut tx: Sender<utils::structs::Messagin
     if let Err(e) = tx.try_send(p) {
         warn!("Error from the client {}", e)
     }
-//    match r.recv() {
-//        Ok(r) => debug!("Response from the client {:?}", r),
-//        Err(e) => warn!("Internal communication error  {}", e)
-//    }
+    //    match r.recv() {
+    //        Ok(r) => debug!("Response from the client {:?}", r),
+    //        Err(e) => warn!("Internal communication error  {}", e)
+    //    }
 }
 
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
-pub async fn kafka_incoming_event_handler(broker_address: String, receiving_topic: String, receiving_group: String, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) {
+pub async fn kafka_incoming_event_handler(
+    broker_address: String,
+    receiving_topic: String,
+    receiving_group: String,
+    tx: Sender<utils::structs::MessagingToRestContext>,
+    db: Db,
+) {
     let context = CustomContext;
 
     let consumer: LoggingConsumer = ClientConfig::new()
@@ -141,7 +191,7 @@ pub async fn kafka_incoming_event_handler(broker_address: String, receiving_topi
         .create_with_context(context)
         .expect("Consumer creation failed");
 
-    let mut topics: Vec<&str> = vec!();
+    let mut topics: Vec<&str> = vec![];
     topics.push(&receiving_topic);
     let tt = topics.borrow();
     consumer.subscribe(tt).expect("Can't subscribe to topics");
@@ -183,6 +233,3 @@ pub async fn kafka_incoming_event_handler(broker_address: String, receiving_topi
         };
     }
 }
-
-
-

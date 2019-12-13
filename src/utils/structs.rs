@@ -12,17 +12,15 @@ pub struct EndpointDesc {
     pub(crate) url: String,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SubscribeRequest {
-    pub(crate) endpoint: EndpointDesc
+    pub(crate) endpoint: EndpointDesc,
 }
-
 
 #[derive(Debug)]
 pub struct MessagingResult {
     pub(crate) status: u32,
-    pub(crate) result: String
+    pub(crate) result: String,
 }
 
 #[derive(Debug)]
@@ -44,5 +42,5 @@ pub struct RestToMessagingContext {
 pub struct MessagingToRestContext {
     pub sender: Sender<MessagingResult>,
     pub payload: Vec<u8>,
-    pub uri: String
+    pub uri: String,
 }

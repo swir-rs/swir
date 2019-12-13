@@ -15,31 +15,28 @@ use std::{
 use std::io::{Error as StdError, ErrorKind};
 
 use clap::App;
-use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
-use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
+use hyper::{
+    Body,
+    Request, server::{accept::Accept, conn}, Server,
+};
 use hyper::service::{make_service_fn, service_fn};
-use hyper::StatusCode;
 use sled::Config;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc;
 use tokio_rustls::TlsAcceptor;
-use tonic::transport;
 
 use boxio::BoxedIo;
-use grpc_handler::client_api;
 use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
-use crate::utils::structs::{Job, MessagingResult, RestToMessagingContext};
-
 mod boxio;
+mod grpc_handler;
 mod http_handler;
 mod messaging_handlers;
 mod utils;
-mod grpc_handler;
 
 #[derive(Debug)]
 struct TcpIncoming {
@@ -48,7 +45,8 @@ struct TcpIncoming {
 
 impl TcpIncoming {
     fn bind(addr: SocketAddr) -> Result<Self, StdError> {
-        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
+        let mut inner =
+            conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
         inner.set_nodelay(true);
         Ok(Self { inner })
     }
@@ -66,8 +64,6 @@ impl Stream for TcpIncoming {
     }
 }
 
-
-
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -76,20 +72,28 @@ async fn main() {
     info!("Application arguments {:?}", matches);
 
     let external_address = matches.value_of("address").unwrap();
-    let tls_port: u16 = matches.value_of("tlsport").unwrap_or_default().parse().expect("Unable to parse socket port");
-    let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
+    let tls_port: u16 = matches
+        .value_of("tlsport")
+        .unwrap_or_default()
+        .parse()
+        .expect("Unable to parse socket port");
+    let plain_port: u16 = matches
+        .value_of("plainport")
+        .unwrap_or_default()
+        .parse()
+        .expect("Unable to parse socket port");
     let sending_topic = matches.value_of("sending_topic").unwrap();
     let broker_address = matches.value_of("broker").unwrap();
     let command = matches.value_of("execute_command").unwrap();
     let receiving_topic = matches.value_of("receiving_topic").unwrap();
-
 
     let receiving_group = matches.value_of("receiving_group").unwrap_or_default();
     let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
     let http_tls_key = matches.value_of("http_tls_key").unwrap();
 
     let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
-    let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
+    let plain_socket_addr =
+        std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
@@ -103,11 +107,13 @@ async fn main() {
     let key = load_private_key(&http_tls_key).unwrap();
 
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-    config.set_single_cert(certs, key).expect("invalid key or certificate");
+    config
+        .set_single_cert(certs, key)
+        .expect("invalid key or certificate");
     let tls = TlsAcceptor::from(Arc::new(config));
 
-    let incoming = hyper::server::accept::from_stream::<_, _, StdError>(
-        async_stream::try_stream! {
+    let incoming =
+        hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
             let mut tcp = TcpIncoming::bind(tls_socket_addr)?;
              while let Some(stream) = tcp.try_next().await? {
                 {
@@ -123,12 +129,20 @@ async fn main() {
                 }
                 yield boxio::BoxedIo::new(stream)
             }
-        }
-    );
+        });
 
-    let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = channel(1000);
-    let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = channel(1000);
-    let (msg_to_grpc_tx, msg_to_grpc_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = channel(1000);
+    let (rest_to_msg_tx, rest_to_msg_rx): (
+        mpsc::Sender<utils::structs::RestToMessagingContext>,
+        mpsc::Receiver<utils::structs::RestToMessagingContext>,
+    ) = mpsc::channel(1000);
+    let (msg_to_rest_tx, msg_to_rest_rx): (
+        mpsc::Sender<utils::structs::MessagingToRestContext>,
+        mpsc::Receiver<utils::structs::MessagingToRestContext>,
+    ) = mpsc::channel(1000);
+    let (msg_to_grpc_tx, msg_to_grpc_rx): (
+        mpsc::Sender<utils::structs::MessagingToRestContext>,
+        mpsc::Receiver<utils::structs::MessagingToRestContext>,
+    ) = mpsc::channel(1000);
     let msg_to_grpc_rx = Arc::new(Mutex::new(msg_to_grpc_rx));
 
     let tx = rest_to_msg_tx.clone();
@@ -150,31 +164,36 @@ async fn main() {
         }
     });
 
-
     let broker = async {
-        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_rest_tx).await;
+        messaging_handlers::configure_broker(
+            broker_address.to_string(),
+            sending_topic.to_string(),
+            receiving_topic.to_string(),
+            receiving_group.to_string(),
+            db.clone(),
+            rest_to_msg_rx,
+            msg_to_rest_tx,
+        )
+            .await;
     };
 
-    let server = Server::bind(&plain_socket_addr)
-        .serve(http_service);
+    let server = Server::bind(&plain_socket_addr).serve(http_service);
 
-    let tls_server = Server::builder(incoming)
-        .serve(https_service);
+    let tls_server = Server::builder(incoming).serve(https_service);
 
     //utils::command_utils::run_java_command(command.to_string());
-    let client = async {
-        client_handler(msg_to_rest_rx).await
-    };
+    let client = async { client_handler(msg_to_rest_rx).await };
 
     let addr = "[::1]:50051".parse().unwrap();
-    let swir = grpc_handler::SwirAPI { tx: rest_to_msg_tx, rx: msg_to_grpc_rx };
-
+    let swir = grpc_handler::SwirAPI {
+        tx: rest_to_msg_tx,
+        rx: msg_to_grpc_rx,
+    };
 
     let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
-    let grpc = tonic::transport::Server::builder().add_service(svc).serve(addr);
+    let grpc = tonic::transport::Server::builder()
+        .add_service(svc)
+        .serve(addr);
 
-    let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server,server,client,broker,grpc);
+    let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server, server, client, broker, grpc);
 }
-
-
-
