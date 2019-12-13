@@ -1,10 +1,10 @@
-use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::stream::StreamExt;
 use http::HeaderValue;
 use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
+use tokio::sync::mpsc;
 
 use crate::utils::structs::{Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::MessagingToRestContext;

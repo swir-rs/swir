@@ -1,11 +1,11 @@
 use std::borrow::BorrowMut;
 use std::sync::Arc;
 
-use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use hyper::StatusCode;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::mpsc;
 use tonic::{IntoRequest, Response, Status};
 

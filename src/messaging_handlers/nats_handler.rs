@@ -1,9 +1,9 @@
-use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use nats::*;
 use sled::{Db, IVec};
+use tokio::sync::mpsc;
 use tokio::task;
 
 use crate::utils;

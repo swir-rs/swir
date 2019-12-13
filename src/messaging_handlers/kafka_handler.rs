@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use futures::channel::mpsc::{Receiver, Sender};
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
@@ -11,6 +10,7 @@ use rdkafka::error::KafkaResult;
 use rdkafka::message::{Headers, Message};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::utils;
 

@@ -15,7 +15,6 @@ use std::{
 use std::io::{Error as StdError, ErrorKind};
 
 use clap::App;
-use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures_core::Stream;
@@ -24,6 +23,7 @@ use hyper::{Body, Request, Server, server::{accept::Accept, conn}};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::StatusCode;
 use sled::Config;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_rustls::TlsAcceptor;
 use tonic::transport;
 
@@ -152,7 +152,7 @@ async fn main() {
 
 
     let broker = async {
-        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_grpc_tx).await;
+        messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx, msg_to_rest_tx).await;
     };
 
     let server = Server::bind(&plain_socket_addr)

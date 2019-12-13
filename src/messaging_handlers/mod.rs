@@ -1,5 +1,5 @@
-use futures::channel::mpsc::{Receiver, Sender};
 use sled::Db;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::utils;
 
