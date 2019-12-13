@@ -1,5 +1,3 @@
-use futures::channel::oneshot;
-use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use nats::*;
 use sled::{Db, IVec};
@@ -12,21 +10,26 @@ use super::super::utils::structs;
 use super::super::utils::structs::*;
 
 pub async fn configure_broker(
-    broker_address: String,
-    sending_topic: String,
-    receiving_topic: String,
-    receiving_group: String,
+    broker_address: Vec<String>,
+    producer_topics: Vec<String>,
+    consumer_topics: Vec<String>,
+    consumer_groups: Vec<String>,
     db: Db,
     rx: mpsc::Receiver<RestToMessagingContext>,
     tx: mpsc::Sender<utils::structs::MessagingToRestContext>,
 ) {
-    let cluster = vec![broker_address];
+    let cluster = broker_address;
 
     let mut incoming_client = nats::Client::new(cluster.clone()).unwrap();
     let outgoing_client = nats::Client::new(cluster).unwrap();
-    incoming_client.set_name(&receiving_group);
+
+    let consumer_group = consumer_groups.get(0).unwrap();
+    let consumer_topic = consumer_topics.get(0).unwrap();
+    let producer_topic = producer_topics.get(0).unwrap();
+
+    incoming_client.set_name(&consumer_group);
     incoming_client
-        .subscribe(receiving_topic.as_str(), Some(&receiving_group))
+        .subscribe(consumer_topic.as_str(), Some(&consumer_group))
         .unwrap();
     info!("NATS subscribed and connected");
     let db_local = db.clone();
@@ -35,8 +38,8 @@ pub async fn configure_broker(
         nats_event_handler(
             rx,
             outgoing_client,
-            &sending_topic,
-            &receiving_topic,
+            producer_topic,
+            consumer_topic,
             db_local,
         )
             .await
@@ -47,8 +50,8 @@ pub async fn configure_broker(
 pub async fn nats_event_handler(
     mut rx: mpsc::Receiver<RestToMessagingContext>,
     mut nats: Client,
-    publish_topic: &str,
-    subscribe_topic: &str,
+    producer_topic: &str,
+    consumer_topic: &str,
     db: Db,
 ) {
     while let Some(job) = rx.next().await {
@@ -57,7 +60,7 @@ pub async fn nats_event_handler(
             Job::Subscribe(value) => {
                 let req = value;
                 info!("New registration  {:?}", req);
-                if let Err(e) = db.insert(subscribe_topic, IVec::from(req.endpoint.url.as_bytes()))
+                if let Err(e) = db.insert(consumer_topic, IVec::from(req.endpoint.url.as_bytes()))
                 {
                     warn!("Can't store registration {:?}", e);
                     if let Err(e) = sender.send(structs::MessagingResult {
@@ -78,7 +81,7 @@ pub async fn nats_event_handler(
 
             Job::Publish(value) => {
                 let req = value;
-                let foo = nats.publish(publish_topic, &req.payload);
+                let foo = nats.publish(producer_topic, &req.payload);
                 match foo {
                     Ok(_) => {
                         sender.send(structs::MessagingResult {
@@ -117,7 +120,7 @@ pub async fn nats_incoming_event_handler(
                     }
                 }
 
-                let (s, _r) = oneshot::channel();
+                let (s, _r) = futures::channel::oneshot::channel();
                 let p = MessagingToRestContext {
                     sender: s,
                     payload: event.msg,

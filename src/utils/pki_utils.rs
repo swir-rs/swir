@@ -1,12 +1,12 @@
-use std::{fs, io, str};
+use std::{fs, io};
 
 use rustls::internal::pemfile;
 
 // Load public certificate from file.
-pub fn load_certs(filename: &str) -> io::Result<Vec<rustls::Certificate>> {
+pub fn load_certs(filename: String) -> io::Result<Vec<rustls::Certificate>> {
     // Open certificate file.
-    let certfile = fs::File::open(filename)
-        .map_err(|e| error(format!("failed to open {}: {}", filename, e)))?;
+    let certfile = fs::File::open(&filename)
+        .map_err(|e| error(format!("failed to open {}: {}", &filename, e)))?;
     let mut reader = io::BufReader::new(certfile);
 
     // Load and return certificate.
@@ -21,10 +21,10 @@ pub fn load_certs(filename: &str) -> io::Result<Vec<rustls::Certificate>> {
 }
 
 // Load private key from file.
-pub fn load_private_key(filename: &str) -> io::Result<rustls::PrivateKey> {
+pub fn load_private_key(filename: String) -> io::Result<rustls::PrivateKey> {
     // Open keyfile.
-    let keyfile = fs::File::open(filename)
-        .map_err(|e| error(format!("failed to open {}: {}", filename, e)))?;
+    let keyfile = fs::File::open(&filename)
+        .map_err(|e| error(format!("failed to open {}: {}", &filename, e)))?;
     let mut reader = io::BufReader::new(keyfile);
 
     // Load and return a single private key.

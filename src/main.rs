@@ -1,8 +1,6 @@
 //#![deny(warnings)]
 
 #[macro_use]
-extern crate clap;
-#[macro_use]
 extern crate log;
 
 use std::{
@@ -10,11 +8,9 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    // time::Duration,
 };
 use std::io::{Error as StdError, ErrorKind};
 
-use clap::App;
 use futures::lock::Mutex;
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
@@ -67,44 +63,34 @@ impl Stream for TcpIncoming {
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let yaml = load_yaml!("cli.yml");
-    let matches = App::from_yaml(yaml).get_matches();
-    info!("Application arguments {:?}", matches);
+    let swir_config = utils::config::Swir::new().unwrap();
 
-    let external_address = matches.value_of("address").unwrap();
-    let tls_port: u16 = matches
-        .value_of("tlsport")
-        .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse socket port");
-    let plain_port: u16 = matches
-        .value_of("plainport")
-        .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse socket port");
-    let sending_topic = matches.value_of("sending_topic").unwrap();
-    let broker_address = matches.value_of("broker").unwrap();
-    let command = matches.value_of("execute_command").unwrap();
-    let receiving_topic = matches.value_of("receiving_topic").unwrap();
+    let client_ip = swir_config.client_ip;
+    let client_https_port: u16 = swir_config.client_https_port;
+    let client_http_port: u16 = swir_config.client_http_port;
+    let client_grpc_port: u16 = swir_config.client_grpc_port;
 
-    let receiving_group = matches.value_of("receiving_group").unwrap_or_default();
-    let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
-    let http_tls_key = matches.value_of("http_tls_key").unwrap();
+    let consumer_topics = swir_config.messaging.kafka.consumer_topics;
+    let brokers = swir_config.messaging.kafka.brokers;
+    let client_executable = swir_config.client_executable;
+    let producer_topics = swir_config.messaging.kafka.producer_topics;
+    let consumer_group = swir_config.messaging.kafka.consumer_groups;
 
-    let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
-    let plain_socket_addr =
-        std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
+    let http_tls_certificate = swir_config.client_tls_certificate;
+    let http_tls_key = swir_config.client_tls_private_key;
+
+    let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
+    let client_http_addr =
+        std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
+    let client_grpc_addr =
+        std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
 
-    info!("Connecting to broker on {}", broker_address);
-    info!("Tls port Listening on {}", tls_socket_addr);
-    info!("Plain port Listening on {}", plain_socket_addr);
-
-    let certs = load_certs(&http_tls_certificate).unwrap();
+    let certs = load_certs(http_tls_certificate).unwrap();
     // Load private key.
-    let key = load_private_key(&http_tls_key).unwrap();
+    let key = load_private_key(http_tls_key).unwrap();
 
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
     config
@@ -114,7 +100,7 @@ async fn main() {
 
     let incoming =
         hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
-            let mut tcp = TcpIncoming::bind(tls_socket_addr)?;
+            let mut tcp = TcpIncoming::bind(client_https_addr)?;
              while let Some(stream) = tcp.try_next().await? {
                 {
                         let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
@@ -166,10 +152,10 @@ async fn main() {
 
     let broker = async {
         messaging_handlers::configure_broker(
-            broker_address.to_string(),
-            sending_topic.to_string(),
-            receiving_topic.to_string(),
-            receiving_group.to_string(),
+            brokers,
+            consumer_topics,
+            producer_topics,
+            consumer_group,
             db.clone(),
             rest_to_msg_rx,
             msg_to_rest_tx,
@@ -177,14 +163,12 @@ async fn main() {
             .await;
     };
 
-    let server = Server::bind(&plain_socket_addr).serve(http_service);
+    let server = Server::bind(&client_http_addr).serve(http_service);
 
     let tls_server = Server::builder(incoming).serve(https_service);
 
-    //utils::command_utils::run_java_command(command.to_string());
     let client = async { client_handler(msg_to_rest_rx).await };
 
-    let addr = "[::1]:50051".parse().unwrap();
     let swir = grpc_handler::SwirAPI {
         tx: rest_to_msg_tx,
         rx: msg_to_grpc_rx,
@@ -193,7 +177,11 @@ async fn main() {
     let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
     let grpc = tonic::transport::Server::builder()
         .add_service(svc)
-        .serve(addr);
+        .serve(client_grpc_addr);
+
+    if let Some(command) = client_executable {
+        utils::command_utils::run_java_command(command);
+    }
 
     let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server, server, client, broker, grpc);
 }

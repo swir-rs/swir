@@ -1,0 +1,26 @@
+client_ip: "127.0.0.1"
+client_http_port: 8080
+client_https_port: 8443
+client_grpc_port: 51111
+client_tls_private_key: "rustycar.CA.pem"
+client_tls_certificate: "demoCA/cacert.pem"
+#client_executable: "client.jar"
+messaging:
+  kafka:
+    brokers:
+      - "127.0.0.1:9092"
+    consumer_topics:
+      - "Response"
+    consumer_groups:
+      - "swir"
+    producer_topics:
+      - "Request"
+  nats:
+    brokers:
+      - "127.0.0.1:4222"
+    consumer_topics:
+      - "Response"
+    consumer_groups:
+      - "swir"
+    producer_topics:
+      - "Request"

@@ -91,7 +91,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         info!("Waiting for response from kafka");
         local_rx.await.unwrap();
 
-        let mut loc_rx = self.rx.clone();
+        let loc_rx = self.rx.clone();
         let (mut tx, rx) = tokio::sync::mpsc::channel(4);
         tokio::spawn(async move {
             let mut loc_rx = loc_rx.lock().await;

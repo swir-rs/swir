@@ -36,10 +36,10 @@ impl ConsumerContext for CustomContext {
 }
 
 pub async fn configure_broker(
-    broker_address: String,
-    sending_topic: String,
-    receiving_topic: String,
-    receiving_group: String,
+    broker_address: Vec<String>,
+    producer_topics: Vec<String>,
+    consumer_topics: Vec<String>,
+    consumer_groups: Vec<String>,
     db: Db,
     rx: Receiver<RestToMessagingContext>,
     tx: Sender<utils::structs::MessagingToRestContext>,
@@ -49,8 +49,8 @@ pub async fn configure_broker(
     let f1 = async {
         kafka_incoming_event_handler(
             broker_address.clone(),
-            receiving_topic.clone(),
-            receiving_group,
+            consumer_topics.clone(),
+            consumer_groups,
             tx,
             db.clone(),
         )
@@ -60,8 +60,8 @@ pub async fn configure_broker(
         kafka_event_handler(
             rx,
             broker_address.clone(),
-            sending_topic,
-            receiving_topic.clone(),
+            producer_topics,
+            consumer_topics.clone(),
             db.clone(),
         )
             .await
@@ -71,18 +71,20 @@ pub async fn configure_broker(
 
 pub async fn kafka_event_handler(
     mut rx: Receiver<RestToMessagingContext>,
-    broker_address: String,
-    publish_topic: String,
-    subscribe_topic: String,
+    broker_address: Vec<String>,
+    producer_topics: Vec<String>,
+    subscribe_topics: Vec<String>,
     db: Db,
 ) {
     let kafka_producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &broker_address)
+        .set("bootstrap.servers", broker_address.get(0).unwrap())
         .set("message.timeout.ms", "5000")
         .create()
         .expect("Can't start broker");
 
     info!("Kafka running");
+    let subscribe_topic = subscribe_topics.get(0).unwrap();
+    let producer_topic = producer_topics.get(0).unwrap();
 
     while let Some(job) = rx.next().await {
         let sender = job.sender;
@@ -114,7 +116,7 @@ pub async fn kafka_event_handler(
             Job::Publish(value) => {
                 let req = value;
                 debug!("Kafka plain sending {:?}", req);
-                let r = FutureRecord::to(publish_topic.as_str())
+                let r = FutureRecord::to(producer_topic.as_str())
                     .payload(&req.payload)
                     .key("some key");
                 let foo = kafka_producer.send(r, 0).map(move |status| match status {
@@ -171,17 +173,19 @@ fn send_request(
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
 pub async fn kafka_incoming_event_handler(
-    broker_address: String,
-    receiving_topic: String,
-    receiving_group: String,
+    broker_address: Vec<String>,
+    consumer_topics: Vec<String>,
+    consumer_groups: Vec<String>,
     tx: Sender<utils::structs::MessagingToRestContext>,
     db: Db,
 ) {
     let context = CustomContext;
+    let consumer_group = consumer_groups.get(0).unwrap();
+    let broker_address = broker_address.get(0).unwrap();
 
     let consumer: LoggingConsumer = ClientConfig::new()
-        .set("group.id", &receiving_group)
-        .set("bootstrap.servers", &broker_address)
+        .set("group.id", consumer_group)
+        .set("bootstrap.servers", broker_address)
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true")
@@ -191,17 +195,11 @@ pub async fn kafka_incoming_event_handler(
         .create_with_context(context)
         .expect("Consumer creation failed");
 
-    let mut topics: Vec<&str> = vec![];
-    topics.push(&receiving_topic);
-    let tt = topics.borrow();
-    consumer.subscribe(tt).expect("Can't subscribe to topics");
 
-    consumer
-        .subscribe(&topics.to_vec())
-        .expect("Can't subscribe to specified topics");
+    let topics: Vec<&str> = consumer_topics.iter().map(|x| &**x).collect();
+    consumer.subscribe(&topics).expect("Can't subscribe to topics");
 
-    // consumer.start() returns a stream. The stream can be used ot chain together expensive steps,
-    // such as complex computations on a thread pool or asynchronous IO.
+
     let mut message_stream = consumer.start();
 
     while let Some(message) = message_stream.next().await {

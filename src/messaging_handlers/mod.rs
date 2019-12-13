@@ -10,10 +10,10 @@ mod nats_handler;
 
 #[cfg(feature = "with_nats")]
 pub async fn configure_broker(
-    broker_address: String,
-    sending_topic: String,
-    receiving_topic: String,
-    receiving_group: String,
+    broker_address: Vec<String>,
+    sending_topic: Vec<String>,
+    receiving_topic: Vec<String>,
+    receiving_group: Vec<String>,
     db: Db,
     rx: Receiver<RestToMessagingContext>,
     tx: Sender<utils::structs::MessagingToRestContext>,
@@ -35,10 +35,10 @@ mod kafka_handler;
 
 #[cfg(not(feature = "with_nats"))]
 pub async fn configure_broker(
-    broker_address: String,
-    sending_topic: String,
-    receiving_topic: String,
-    receiving_group: String,
+    broker_address: Vec<String>,
+    sending_topic: Vec<String>,
+    receiving_topic: Vec<String>,
+    receiving_group: Vec<String>,
     db: Db,
     rx: Receiver<RestToMessagingContext>,
     tx: Sender<utils::structs::MessagingToRestContext>,
