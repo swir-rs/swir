@@ -5,22 +5,31 @@ client_grpc_port: 51111
 client_tls_private_key: "rustycar.CA.pem"
 client_tls_certificate: "demoCA/cacert.pem"
 #client_executable: "client.jar"
-messaging:
+channels:
   kafka:
-    brokers:
-      - "127.0.0.1:9092"
-    consumer_topics:
-      - "Response"
-    consumer_groups:
-      - "swir"
-    producer_topics:
-      - "Request"
+    - brokers:
+        - "127.0.0.1:9092"
+        - "127.0.0.1:9094"
+      consumer_topics:
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topics:
+            - "Response"
+      producer_topics:
+        - producer_topic: "Request"
+          client_topics:
+            - "ProduceToAppA"
+
   nats:
-    brokers:
-      - "127.0.0.1:4222"
-    consumer_topics:
-      - "Response"
-    consumer_groups:
-      - "swir"
-    producer_topics:
-      - "Request"
+    - brokers:
+        - "nats://127.0.0.1:4222"
+      consumer_topics:
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topics:
+            - "Response"
+      producer_topics:
+        - producer_topic: "Request"
+          client_topics:
+            - "ProduceToAppB"
+

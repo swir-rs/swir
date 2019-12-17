@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::channel::oneshot;
@@ -13,10 +14,17 @@ pub mod client_api {
     tonic::include_proto!("swir");
 }
 
+
 #[derive(Debug)]
 pub struct SwirAPI {
-    pub tx: mpsc::Sender<crate::utils::structs::RestToMessagingContext>,
+    pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
     pub rx: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
+}
+
+impl SwirAPI {
+    fn find_channel(&self, topic_name: String) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
+        self.from_client_to_backend_channel_sender.get(&topic_name)
+    }
 }
 
 #[tonic::async_trait]
@@ -27,8 +35,9 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
     ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> {
         // Return an instance of type HelloReply
         println!("Got a request: {:?}", request);
+        let request = request.into_inner();
         let p = crate::utils::structs::PublishRequest {
-            payload: request.into_inner().payload,
+            payload: request.payload,
             url: "".to_string(),
         };
         debug!("{:?}", p);
@@ -40,10 +49,17 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             job: Job::Publish(p),
             sender: local_tx,
         };
-        let mut tx = self.tx.clone();
-        if let Err(e) = tx.try_send(job) {
-            warn!("Channel is dead {:?}", e);
+
+
+        if let Some(tx) = self.find_channel(request.topic) {
+            let mut tx = tx.clone();
+            if let Err(e) = tx.try_send(job) {
+                warn!("Channel is dead {:?}", e);
+            }
+        } else {
+            return Err(tonic::Status::invalid_argument("Invalid topic"))
         }
+
 
         debug!("Waiting for broker");
         let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
@@ -70,6 +86,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         let topic = request.into_inner().topic;
         println!("Topic = {:?}", topic);
 
+
         let sr = crate::utils::structs::SubscribeRequest {
             endpoint: EndpointDesc {
                 url: "".to_string(),
@@ -85,8 +102,15 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             sender: local_tx,
         };
         info!("About to send to messaging processor");
-        let mut tx = self.tx.clone();
-        tx.try_send(job).unwrap();
+
+        if let Some(tx) = self.find_channel(topic) {
+            let mut tx = tx.clone();
+            if let Err(e) = tx.try_send(job) {
+                warn!("Channel is dead {:?}", e);
+            }
+        } else {
+            return Err(tonic::Status::invalid_argument("Invalid topic"))
+        }
 
         info!("Waiting for response from kafka");
         local_rx.await.unwrap();

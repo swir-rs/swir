@@ -1,59 +1,72 @@
+use std::sync::Arc;
+
+use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use nats::*;
 use sled::{Db, IVec};
 use tokio::sync::mpsc;
 use tokio::task;
 
+use async_trait::async_trait;
+
+use crate::messaging_handlers::Broker;
 use crate::utils;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 
-pub async fn configure_broker(
-    broker_address: Vec<String>,
-    producer_topics: Vec<String>,
-    consumer_topics: Vec<String>,
-    consumer_groups: Vec<String>,
-    db: Db,
-    rx: mpsc::Receiver<RestToMessagingContext>,
-    tx: mpsc::Sender<utils::structs::MessagingToRestContext>,
-) {
-    let cluster = broker_address;
-
-    let mut incoming_client = nats::Client::new(cluster.clone()).unwrap();
-    let outgoing_client = nats::Client::new(cluster).unwrap();
-
-    let consumer_group = consumer_groups.get(0).unwrap();
-    let consumer_topic = consumer_topics.get(0).unwrap();
-    let producer_topic = producer_topics.get(0).unwrap();
-
-    incoming_client.set_name(&consumer_group);
-    incoming_client
-        .subscribe(consumer_topic.as_str(), Some(&consumer_group))
-        .unwrap();
-    info!("NATS subscribed and connected");
-    let db_local = db.clone();
-    let f1 = async { nats_incoming_event_handler(incoming_client, tx, db).await };
-    let f2 = async {
-        nats_event_handler(
-            rx,
-            outgoing_client,
-            producer_topic,
-            consumer_topic,
-            db_local,
-        )
-            .await
-    };
-    let (_r1, _r2) = futures::join!(f1, f2);
+pub struct NatsBroker {
+    pub broker_address: Vec<String>,
+    pub consumer_topics: Vec<String>,
+    pub consumer_groups: Vec<String>,
+    pub producer_topics: Vec<String>,
+    pub db: Db,
+    pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
+    pub tx: Box<mpsc::Sender<MessagingToRestContext>>,
 }
 
-pub async fn nats_event_handler(
-    mut rx: mpsc::Receiver<RestToMessagingContext>,
+
+#[async_trait]
+impl Broker for NatsBroker {
+    async fn configure_broker(&self) {
+        let cluster = self.broker_address.clone();
+
+        let mut incoming_client = nats::Client::new(cluster.clone()).unwrap();
+        let outgoing_client = nats::Client::new(cluster).unwrap();
+
+        let consumer_group = self.consumer_groups.get(0).unwrap();
+        let consumer_topic = self.consumer_topics.get(0).unwrap();
+        let producer_topic = self.producer_topics.get(0).unwrap();
+
+        incoming_client.set_name(&consumer_group);
+        incoming_client
+            .subscribe(consumer_topic.as_str(), Some(&consumer_group))
+            .unwrap();
+        info!("NATS subscribed and connected");
+        let db_local = self.db.clone();
+        let f1 = async { nats_incoming_event_handler(incoming_client, self.tx.clone(), self.db.clone()).await };
+        let f2 = async {
+            nats_event_handler(
+                self.rx.clone(),
+                outgoing_client,
+                producer_topic,
+                consumer_topic,
+                db_local,
+            )
+                .await
+        };
+        let (_r1, _r2) = futures::join!(f1, f2);
+    }
+}
+
+async fn nats_event_handler(
+    rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
     mut nats: Client,
     producer_topic: &str,
     consumer_topic: &str,
     db: Db,
 ) {
+    let mut rx = rx.lock().await;
     while let Some(job) = rx.next().await {
         let sender = job.sender;
         match job.job {
@@ -101,9 +114,9 @@ pub async fn nats_event_handler(
     }
 }
 
-pub async fn nats_incoming_event_handler(
+async fn nats_incoming_event_handler(
     mut client: Client,
-    tx: mpsc::Sender<utils::structs::MessagingToRestContext>,
+    tx: Box<mpsc::Sender<utils::structs::MessagingToRestContext>>,
     db: Db,
 ) {
     let join = task::spawn_blocking(move || {

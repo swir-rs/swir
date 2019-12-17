@@ -1,13 +1,29 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use futures::channel::oneshot;
+use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use http::HeaderValue;
-use hyper::{Body, Client, HeaderMap, Method, Request, Response, StatusCode};
+use hyper::{Body, Client, header, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use tokio::sync::mpsc;
 
 use crate::utils::structs::{Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::MessagingToRestContext;
+
+fn find_channel<'a>(headers: &HeaderMap<HeaderValue>, from_client_to_backend_channel_sender: &'a Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>) -> Option<&'a Box<mpsc::Sender<RestToMessagingContext>>> {
+    let topic_header = header::HeaderName::from_lowercase(b"Topic").unwrap();
+    let maybe_topic_header = headers.get(topic_header);
+    if let Some(topic) = maybe_topic_header {
+        let topic_name = String::from_utf8_lossy(topic.as_bytes()).to_string();
+        from_client_to_backend_channel_sender.get(&topic_name)
+    } else {
+        None
+    }
+}
+
 
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     match headers.get(http::header::CONTENT_TYPE) {
@@ -34,15 +50,15 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
 
 pub async fn handler(
     req: Request<Body>,
-    mut sender: mpsc::Sender<RestToMessagingContext>,
+    from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>
 ) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
-    let headers = req.headers();
+    let headers = req.headers().clone();
     debug!("Headers {:?}", headers);
 
-    if validate_content_type(headers).is_none() {
+    if validate_content_type(&headers).is_none() {
         return Ok(response);
     }
 
@@ -50,11 +66,13 @@ pub async fn handler(
     let url = req.uri().clone().to_string();
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
+
             let whole_body = get_whole_body(req).await;
 
             let p = PublishRequest {
                 payload: whole_body,
                 url: url,
+
             };
             debug!("{:?}", p);
             let (local_tx, local_rx): (
@@ -65,6 +83,16 @@ pub async fn handler(
                 job: Job::Publish(p),
                 sender: local_tx,
             };
+
+            let maybe_channel = find_channel(&headers, &from_client_to_backend_channel_sender);
+            let mut sender = if let Some(channel) = maybe_channel {
+                channel.clone()
+            } else {
+                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                *response.body_mut() = Body::empty();
+                return Ok(response);
+            };
+
 
             if let Err(e) = sender.try_send(job) {
                 warn!("Channel is dead {:?}", e);
@@ -99,6 +127,17 @@ pub async fn handler(
                         job: Job::Subscribe(json),
                         sender: local_tx,
                     };
+
+                    let maybe_channel = find_channel(&headers, &from_client_to_backend_channel_sender);
+                    let mut sender = if let Some(channel) = maybe_channel {
+                        channel.clone()
+                    } else {
+                        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                        *response.body_mut() = Body::empty();
+                        return Ok(response);
+                    };
+
+
                     info!("About to send to kafka processor");
                     if let Err(e) = sender.try_send(job) {
                         warn!("Channel is dead {:?}", e);
@@ -179,9 +218,10 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
         });
 }
 
-pub async fn client_handler(mut rx: mpsc::Receiver<MessagingToRestContext>) {
+pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>) {
     let client = hyper::Client::builder().keep_alive(true).build_http();
     info!("Client done");
+    let mut rx = rx.lock().await;
     while let Some(payload) = rx.next().await {
         send_request(client.clone(), payload).await
     }

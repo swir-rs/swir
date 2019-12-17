@@ -47,7 +47,7 @@ rdkafka = { version="0.22", path = "../rust-rdkafka" }
 rdkafka-sys = { version = "1.2.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
 sled = "*"
 nats = {version="*",optional=true}
-
+async-trait="*"
 prost = "0.5"
 prost-derive = "0.5"
 tonic = {version="0.1.0-alpha.6", path ="../tonic/tonic", optional=false}

@@ -28,6 +28,8 @@ use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
+use crate::utils::config::MemoryChannel;
+
 mod boxio;
 mod grpc_handler;
 mod http_handler;
@@ -60,24 +62,21 @@ impl Stream for TcpIncoming {
     }
 }
 
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let swir_config = utils::config::Swir::new().unwrap();
+    let swir_config = utils::config::Swir::new();
+    let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
 
-    let client_ip = swir_config.client_ip;
-    let client_https_port: u16 = swir_config.client_https_port;
-    let client_http_port: u16 = swir_config.client_http_port;
-    let client_grpc_port: u16 = swir_config.client_grpc_port;
+    let client_ip = swir_config.client_ip.clone();
+    let client_https_port: u16 = swir_config.client_https_port.clone();
+    let client_http_port: u16 = swir_config.client_http_port.clone();
+    let client_grpc_port: u16 = swir_config.client_grpc_port.clone();
+    let client_executable = swir_config.client_executable.clone();
 
-    let consumer_topics = swir_config.messaging.kafka.consumer_topics;
-    let brokers = swir_config.messaging.kafka.brokers;
-    let client_executable = swir_config.client_executable;
-    let producer_topics = swir_config.messaging.kafka.producer_topics;
-    let consumer_group = swir_config.messaging.kafka.consumer_groups;
-
-    let http_tls_certificate = swir_config.client_tls_certificate;
-    let http_tls_key = swir_config.client_tls_private_key;
+    let http_tls_certificate = swir_config.client_tls_certificate.clone();
+    let http_tls_key = swir_config.client_tls_private_key.clone();
 
     let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
     let client_http_addr =
@@ -117,48 +116,44 @@ async fn main() {
             }
         });
 
-    let (rest_to_msg_tx, rest_to_msg_rx): (
-        mpsc::Sender<utils::structs::RestToMessagingContext>,
-        mpsc::Receiver<utils::structs::RestToMessagingContext>,
-    ) = mpsc::channel(1000);
-    let (msg_to_rest_tx, msg_to_rest_rx): (
-        mpsc::Sender<utils::structs::MessagingToRestContext>,
-        mpsc::Receiver<utils::structs::MessagingToRestContext>,
-    ) = mpsc::channel(1000);
+
     let (msg_to_grpc_tx, msg_to_grpc_rx): (
         mpsc::Sender<utils::structs::MessagingToRestContext>,
         mpsc::Receiver<utils::structs::MessagingToRestContext>,
     ) = mpsc::channel(1000);
     let msg_to_grpc_rx = Arc::new(Mutex::new(msg_to_grpc_rx));
 
-    let tx = rest_to_msg_tx.clone();
+
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let http_service = make_service_fn(move |_| {
-        let tx = tx.clone();
-        async {
+        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        async move {
+            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(req, tx.clone())
-            }))
-        }
-    });
-    let tx = rest_to_msg_tx.clone();
-    let https_service = make_service_fn(move |_| {
-        let tx = tx.clone();
-        async {
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(req, tx.clone())
+                handler(req, from_client_to_backend_channel_sender.clone())
             }))
         }
     });
 
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let https_service = make_service_fn(move |_| {
+        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        async move {
+            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
+                handler(req, from_client_to_backend_channel_sender.clone())
+            }))
+        }
+    });
+
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let to_client_receiver = mc.to_client_receiver.clone();
+
     let broker = async {
         messaging_handlers::configure_broker(
-            brokers,
-            consumer_topics,
-            producer_topics,
-            consumer_group,
+            swir_config.channels,
             db.clone(),
-            rest_to_msg_rx,
-            msg_to_rest_tx,
+            mc,
         )
             .await;
     };
@@ -167,10 +162,10 @@ async fn main() {
 
     let tls_server = Server::builder(incoming).serve(https_service);
 
-    let client = async { client_handler(msg_to_rest_rx).await };
+    let client = async { client_handler(to_client_receiver).await };
 
     let swir = grpc_handler::SwirAPI {
-        tx: rest_to_msg_tx,
+        from_client_to_backend_channel_sender,
         rx: msg_to_grpc_rx,
     };
 

@@ -1,6 +1,7 @@
-use std::borrow::Borrow;
+use std::sync::Arc;
 
 use futures::future::FutureExt;
+use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
@@ -10,14 +11,27 @@ use rdkafka::error::KafkaResult;
 use rdkafka::message::{Headers, Message};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use sled::{Db, IVec};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc;
 
+use async_trait::async_trait;
+
+use crate::messaging_handlers::Broker;
 use crate::utils;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 
 impl ClientContext for CustomContext {}
+
+pub struct KafkaBroker {
+    pub broker_address: Vec<String>,
+    pub consumer_topics: Vec<String>,
+    pub consumer_groups: Vec<String>,
+    pub producer_topics: Vec<String>,
+    pub db: Db,
+    pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
+    pub tx: Box<mpsc::Sender<MessagingToRestContext>>,
+}
 
 impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
@@ -35,42 +49,37 @@ impl ConsumerContext for CustomContext {
     }
 }
 
-pub async fn configure_broker(
-    broker_address: Vec<String>,
-    producer_topics: Vec<String>,
-    consumer_topics: Vec<String>,
-    consumer_groups: Vec<String>,
-    db: Db,
-    rx: Receiver<RestToMessagingContext>,
-    tx: Sender<utils::structs::MessagingToRestContext>,
-) {
-    info!("Kafka ");
-
-    let f1 = async {
-        kafka_incoming_event_handler(
-            broker_address.clone(),
-            consumer_topics.clone(),
-            consumer_groups,
-            tx,
-            db.clone(),
-        )
-            .await
-    };
-    let f2 = async {
-        kafka_event_handler(
-            rx,
-            broker_address.clone(),
-            producer_topics,
-            consumer_topics.clone(),
-            db.clone(),
-        )
-            .await
-    };
-    let (_r1, _r2) = futures::join!(f1, f2);
+#[async_trait]
+impl Broker for KafkaBroker {
+    async fn configure_broker(&self) {
+        info!("Kafka ");
+        let f1 = async {
+            kafka_incoming_event_handler(
+                self.broker_address.clone(),
+                self.consumer_topics.clone(),
+                self.consumer_groups.clone(),
+                self.tx.clone(),
+                self.db.clone(),
+            )
+                .await
+        };
+        let f2 = async {
+            kafka_event_handler(
+                self.rx.clone(),
+                self.broker_address.clone(),
+                self.producer_topics.clone(),
+                self.consumer_topics.clone(),
+                self.db.clone(),
+            )
+                .await
+        };
+        let (_r1, _r2) = futures::join!(f1, f2);
+    }
 }
 
-pub async fn kafka_event_handler(
-    mut rx: Receiver<RestToMessagingContext>,
+
+async fn kafka_event_handler(
+    rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
     broker_address: Vec<String>,
     producer_topics: Vec<String>,
     subscribe_topics: Vec<String>,
@@ -85,6 +94,8 @@ pub async fn kafka_event_handler(
     info!("Kafka running");
     let subscribe_topic = subscribe_topics.get(0).unwrap();
     let producer_topic = producer_topics.get(0).unwrap();
+
+    let mut rx = rx.lock().await;
 
     while let Some(job) = rx.next().await {
         let sender = job.sender;
@@ -141,7 +152,7 @@ pub async fn kafka_event_handler(
 fn send_request(
     p: Vec<u8>,
     topic: &str,
-    mut tx: Sender<utils::structs::MessagingToRestContext>,
+    mut tx: Box<mpsc::Sender<utils::structs::MessagingToRestContext>>,
     db: &Db,
 ) {
     let mut uri: String = String::from("");
@@ -150,7 +161,7 @@ fn send_request(
     if let Ok(maybe_url) = db.get(topic) {
         if let Some(url) = maybe_url {
             let vec = url.to_vec();
-            uri = String::from_utf8_lossy(vec.borrow()).to_string();
+            uri = String::from_utf8_lossy(&vec).to_string();
         }
     }
 
@@ -172,11 +183,11 @@ fn send_request(
 
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
-pub async fn kafka_incoming_event_handler(
+async fn kafka_incoming_event_handler(
     broker_address: Vec<String>,
     consumer_topics: Vec<String>,
     consumer_groups: Vec<String>,
-    tx: Sender<utils::structs::MessagingToRestContext>,
+    tx: Box<mpsc::Sender<utils::structs::MessagingToRestContext>>,
     db: Db,
 ) {
     let context = CustomContext;
