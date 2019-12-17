@@ -1,6 +1,22 @@
 use futures::channel::oneshot::Sender;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+pub enum CustomerInterfaceType {
+    REST,
+    GRPC,
+}
+
+impl CustomerInterfaceType {
+    pub fn from_str(s: &str) -> Result<CustomerInterfaceType, ()> {
+        match s {
+            "REST" => Ok(CustomerInterfaceType::REST),
+            "GRPC" => Ok(CustomerInterfaceType::GRPC),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishRequest {
     pub(crate) payload: Vec<u8>,
@@ -15,6 +31,8 @@ pub struct EndpointDesc {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
+    pub(crate) customer_topic: String,
+    pub(crate) customer_interface_type: CustomerInterfaceType,
 }
 
 #[derive(Debug)]

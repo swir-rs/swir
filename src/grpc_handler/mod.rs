@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tonic::{Response, Status};
 
 use crate::utils::structs::{EndpointDesc, Job, MessagingResult, RestToMessagingContext};
+use crate::utils::structs::CustomerInterfaceType::GRPC;
 
 pub mod client_api {
     tonic::include_proto!("swir");
@@ -18,7 +19,7 @@ pub mod client_api {
 #[derive(Debug)]
 pub struct SwirAPI {
     pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
-    pub rx: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
+    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
 }
 
 impl SwirAPI {
@@ -91,6 +92,8 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             endpoint: EndpointDesc {
                 url: "".to_string(),
             },
+            customer_topic: topic.clone(),
+            customer_interface_type: GRPC,
         };
 
         let (local_tx, local_rx): (
@@ -115,7 +118,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         info!("Waiting for response from kafka");
         local_rx.await.unwrap();
 
-        let loc_rx = self.rx.clone();
+        let loc_rx = self.to_client_receiver.clone();
         let (mut tx, rx) = tokio::sync::mpsc::channel(4);
         tokio::spawn(async move {
             let mut loc_rx = loc_rx.lock().await;

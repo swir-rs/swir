@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+
 use futures::future::join_all;
 use sled::Db;
 
 use async_trait::async_trait;
 
 use crate::utils::config::{Channels, MemoryChannel};
+use crate::utils::structs::CustomerInterfaceType;
 
 mod kafka_handler;
 #[cfg(feature = "with_nats")]
@@ -28,9 +31,12 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
             continue;
         }
         let mce = mce.unwrap();
-
         let rx = mce.from_client_receiver.to_owned();
-        let tx = mce.to_client_sender.to_owned();
+        let tx_rest = mce.to_client_sender_for_rest.to_owned();
+        let tx_grpc = mce.to_client_sender_for_grpc.to_owned();
+        let mut tx_map = HashMap::new();
+        tx_map.insert(CustomerInterfaceType::REST, tx_rest);
+        tx_map.insert(CustomerInterfaceType::GRPC, tx_grpc);
 
         let mut consumer_topics = vec!();
         let mut consumer_groups = vec!();
@@ -52,22 +58,23 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
             producer_topics,
             db: db.clone(),
             rx,
-            tx,
+            tx: Box::new(tx_map),
         };
         brokers.push(Box::new(kafka_broker));
     }
 
     #[cfg(feature = "with_nats")] {
+        i = 0;
         for nats in messaging.nats {
             let mce = mc.nats_memory_channels.get(i);
             i = i + 1;
             if let None = mce {
+                warn!("No memory channel for {:?}", nats);
                 continue;
             }
             let mce = mce.unwrap();
 
             let rx = mce.from_client_receiver.to_owned();
-            let tx = mce.to_client_sender.to_owned();
 
             let mut consumer_topics = vec!();
             let mut consumer_groups = vec!();
@@ -81,6 +88,12 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
                 producer_topics.push(pt.producer_topic);
             }
 
+            let tx_rest = mce.to_client_sender_for_rest.to_owned();
+            let tx_grpc = mce.to_client_sender_for_grpc.to_owned();
+            let mut tx_map = HashMap::new();
+            tx_map.insert(CustomerInterfaceType::REST, tx_rest);
+            tx_map.insert(CustomerInterfaceType::GRPC, tx_grpc);
+
             let nats_broker = nats_handler::NatsBroker {
                 broker_address: nats.brokers,
                 consumer_topics,
@@ -88,14 +101,14 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
                 producer_topics,
                 db: db.clone(),
                 rx,
-                tx,
+                tx: Box::new(tx_map),
             };
             brokers.push(Box::new(nats_broker));
         }
     }
 
-
-    for broker in brokers {
+    debug!("Brokers to configure {}", brokers.len());
+    for broker in brokers.iter() {
         let f = async move { broker.configure_broker().await };
         futures.push(f);
     }

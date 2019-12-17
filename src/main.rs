@@ -11,7 +11,6 @@ use std::{
 };
 use std::io::{Error as StdError, ErrorKind};
 
-use futures::lock::Mutex;
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
 use hyper::{
@@ -20,7 +19,6 @@ use hyper::{
 };
 use hyper::service::{make_service_fn, service_fn};
 use sled::Config;
-use tokio::sync::mpsc;
 use tokio_rustls::TlsAcceptor;
 
 use boxio::BoxedIo;
@@ -117,13 +115,6 @@ async fn main() {
         });
 
 
-    let (msg_to_grpc_tx, msg_to_grpc_rx): (
-        mpsc::Sender<utils::structs::MessagingToRestContext>,
-        mpsc::Receiver<utils::structs::MessagingToRestContext>,
-    ) = mpsc::channel(1000);
-    let msg_to_grpc_rx = Arc::new(Mutex::new(msg_to_grpc_rx));
-
-
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let http_service = make_service_fn(move |_| {
         let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
@@ -147,7 +138,8 @@ async fn main() {
     });
 
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
-    let to_client_receiver = mc.to_client_receiver.clone();
+    let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
+    let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
 
     let broker = async {
         messaging_handlers::configure_broker(
@@ -162,11 +154,11 @@ async fn main() {
 
     let tls_server = Server::builder(incoming).serve(https_service);
 
-    let client = async { client_handler(to_client_receiver).await };
+    let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
 
     let swir = grpc_handler::SwirAPI {
         from_client_to_backend_channel_sender,
-        rx: msg_to_grpc_rx,
+        to_client_receiver: to_client_receiver_for_grpc,
     };
 
     let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
