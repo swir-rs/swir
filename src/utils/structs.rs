@@ -23,9 +23,15 @@ pub struct PublishRequest {
     pub(crate) url: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EndpointDesc {
     pub(crate) url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClientSubscribeRequest {
+    pub(crate) endpoint: EndpointDesc,
+    pub(crate) customer_topic: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

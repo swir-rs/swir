@@ -38,9 +38,9 @@ public class GrpcClient {
     }
 
 
-    public void publish(String payload) {
+    public void publish(String customerTopic, String payload) {
         logger.info("Publishing to broker" + payload);
-        PublishRequest request = PublishRequest.newBuilder().setTopic("sometopic").setPayload(ByteString.copyFrom("hellopayload", Charset.forName("UTF-8"))).build();
+        PublishRequest request = PublishRequest.newBuilder().setTopic(customerTopic).setPayload(ByteString.copyFrom("hellopayload", Charset.forName("UTF-8"))).build();
         PublishResponse response;
         try {
             response = blockingStub.publish(request);
@@ -75,16 +75,17 @@ public class GrpcClient {
      */
     public static void main(String[] args) throws Exception {
         // Access a service running on the local machine on port 50051
-        GrpcClient client = new GrpcClient("[::1]", 50051);
+        GrpcClient client = new GrpcClient("127.0.0.1", 51111);
         try {
             String payload = "beer is good ";
             // Use the arg as the name to greet if provided
             if (args.length > 0) {
                 payload = args[0];
             }
-            client.publish(payload);
+            client.publish("ProduceToAppA", payload);
+            client.publish("ProduceToAppB", payload);
 
-            client.subscribe("Response");
+            client.subscribe("ProduceToAppA");
 
         } finally {
             client.shutdown();
