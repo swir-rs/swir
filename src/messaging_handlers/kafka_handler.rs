@@ -71,13 +71,14 @@ impl KafkaBroker {
                         let s = serde_json::to_string(&req).unwrap();
                         if let Err(e) = self.db.insert(topic, IVec::from(s.as_bytes())) {
                             warn!("Can't store registration {:?}", e);
-                            if let Err(e) = sender.send(structs::MessagingResult { status: 1, result: e.to_string() }) {
+                            if let Err(e) = sender.send(structs::MessagingResult {
+                                status: BackendStatusCodes::ERROR(e.to_string()),
+                            }) {
                                 warn!("Can't send response back {:?}", e);
                             }
                         } else {
                             if let Err(e) = sender.send(structs::MessagingResult {
-                                status: 1,
-                                result: "All is good".to_string(),
+                                status: BackendStatusCodes::OK("KAFKA is good".to_string()),
                             }) {
                                 warn!("Can't send response back {:?}", e);
                             }
@@ -85,8 +86,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: 1,
-                            result: "Can't find topic ".to_string(),
+                            status: BackendStatusCodes::NO_TOPIC("Can't find produce topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }
@@ -102,10 +102,11 @@ impl KafkaBroker {
                         let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
                         let foo = kafka_producer.send(r, 0).map(move |status| match status {
                             Ok(_) => sender.send(structs::MessagingResult {
-                                status: 1,
-                                result: "KAFKA is good".to_string(),
+                                status: BackendStatusCodes::OK("KAFKA is good".to_string()),
                             }),
-                            Err(e) => sender.send(structs::MessagingResult { status: 1, result: e.to_string() }),
+                            Err(e) => sender.send(structs::MessagingResult {
+                                status: BackendStatusCodes::ERROR(e.to_string()),
+                            }),
                         });
 
                         if let Err(_) = foo.await {
@@ -114,8 +115,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: 1,
-                            result: "Can't find topic ".to_string(),
+                            status: BackendStatusCodes::NO_TOPIC("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }

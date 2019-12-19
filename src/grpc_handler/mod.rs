@@ -17,17 +17,12 @@ pub mod client_api {
 
 #[derive(Debug)]
 pub struct SwirAPI {
-    pub from_client_to_backend_channel_sender:
-        Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
-    pub to_client_receiver:
-        Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
+    pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
+    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
 }
 
 impl SwirAPI {
-    fn find_channel(
-        &self,
-        topic_name: &String,
-    ) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
+    fn find_channel(&self, topic_name: &String) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 }
@@ -48,10 +43,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
                 client_topic: request.topic.clone(),
             };
             debug!("{:?}", p);
-            let (local_tx, local_rx): (
-                oneshot::Sender<MessagingResult>,
-                oneshot::Receiver<MessagingResult>,
-            ) = oneshot::channel();
+            let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
             let job = RestToMessagingContext {
                 job: Job::Publish(p),
                 sender: local_tx,
@@ -67,7 +59,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             debug!("Got result {:?}", response_from_broker);
             let mut msg = String::new();
             if let Ok(res) = response_from_broker {
-                msg.push_str(res.result.as_str());
+                msg.push_str(&res.status.to_string());
             } else {
                 msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
             }
@@ -80,28 +72,19 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         }
     }
 
-    type SubscribeStream =
-        tokio::sync::mpsc::Receiver<Result<client_api::SubscribeResponse, Status>>;
+    type SubscribeStream = tokio::sync::mpsc::Receiver<Result<client_api::SubscribeResponse, Status>>;
 
-    async fn subscribe(
-        &self,
-        request: tonic::Request<client_api::SubscribeRequest>,
-    ) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
+    async fn subscribe(&self, request: tonic::Request<client_api::SubscribeRequest>) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
         let topic = request.into_inner().topic;
         println!("Topic = {:?}", topic);
 
         let sr = crate::utils::structs::SubscribeRequest {
-            endpoint: EndpointDesc {
-                url: "".to_string(),
-            },
+            endpoint: EndpointDesc { url: "".to_string() },
             client_topic: topic.clone(),
             client_interface_type: GRPC,
         };
 
-        let (local_tx, local_rx): (
-            oneshot::Sender<MessagingResult>,
-            oneshot::Receiver<MessagingResult>,
-        ) = oneshot::channel();
+        let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
         let job = RestToMessagingContext {
             job: Job::Subscribe(sr),
             sender: local_tx,
@@ -125,9 +108,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
         tokio::spawn(async move {
             let mut loc_rx = loc_rx.lock().await;
             while let Some(messaging_context) = loc_rx.next().await {
-                let s = client_api::SubscribeResponse {
-                    payload: messaging_context.payload,
-                };
+                let s = client_api::SubscribeResponse { payload: messaging_context.payload };
                 let r = tx.send(Ok(s)).await;
                 if let Err(e) = r {
                     error!("{:?}", e);

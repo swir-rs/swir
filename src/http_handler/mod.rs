@@ -10,7 +10,8 @@ use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
-use crate::utils::structs::{ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
+use crate::utils::structs::BackendStatusCodes::NO_TOPIC;
+use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
@@ -40,6 +41,23 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
             }
         }
         None => return None,
+    }
+}
+
+fn set_http_response(backend_status: BackendStatusCodes, response: &mut Response<Body>) {
+    match backend_status {
+        BackendStatusCodes::OK(msg) => {
+            *response.status_mut() = StatusCode::OK;
+            *response.body_mut() = Body::from(msg);
+        }
+        BackendStatusCodes::ERROR(msg) => {
+            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            *response.body_mut() = Body::from(msg);
+        }
+        BackendStatusCodes::NO_TOPIC(msg) => {
+            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            *response.body_mut() = Body::from(msg);
+        }
     }
 }
 
@@ -75,8 +93,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             let mut sender = if let Some(channel) = maybe_channel {
                 channel.clone()
             } else {
-                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                *response.body_mut() = Body::empty();
+                set_http_response(BackendStatusCodes::NO_TOPIC("No mapping for this topic".to_string()), &mut response);
                 return Ok(response);
             };
 
@@ -103,8 +120,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
             debug!("Got result {:?}", response_from_broker);
             if let Ok(res) = response_from_broker {
-                *response.body_mut() = Body::from(res.result);
-                *response.status_mut() = StatusCode::OK;
+                set_http_response(res.status, &mut response);
             } else {
                 *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 *response.body_mut() = Body::empty();
@@ -132,8 +148,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                     let mut sender = if let Some(channel) = maybe_channel {
                         channel.clone()
                     } else {
-                        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                        *response.body_mut() = Body::from("No backend channel");
+                        set_http_response(BackendStatusCodes::NO_TOPIC("No mapping for this topic".to_string()), &mut response);
                         return Ok(response);
                     };
 
@@ -152,8 +167,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                     let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
                     debug!("Got result {:?}", response_from_broker);
                     if let Ok(res) = response_from_broker {
-                        *response.body_mut() = Body::from(res.result);
-                        *response.status_mut() = StatusCode::OK;
+                        set_http_response(res.status, &mut response);
                     } else {
                         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                         *response.body_mut() = Body::empty();

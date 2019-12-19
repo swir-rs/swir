@@ -1,4 +1,8 @@
+use std::fmt;
+
 use futures::channel::oneshot::Sender;
+use serde::export::fmt::Error;
+use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
@@ -42,9 +46,25 @@ pub struct SubscribeRequest {
 }
 
 #[derive(Debug)]
+pub enum BackendStatusCodes {
+    OK(String),
+    ERROR(String),
+    NO_TOPIC(String),
+}
+
+impl fmt::Display for BackendStatusCodes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self {
+            BackendStatusCodes::OK(msg) => write!(f, "BackendStatusCodes::OK {}", msg),
+            BackendStatusCodes::ERROR(msg) => write!(f, "BackendStatusCodes::ERR {}", msg),
+            BackendStatusCodes::NO_TOPIC(msg) => write!(f, "BackendStatusCodes::NO_TOPIC {}", msg),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MessagingResult {
-    pub(crate) status: u32,
-    pub(crate) result: String,
+    pub(crate) status: BackendStatusCodes,
 }
 
 #[derive(Debug)]
