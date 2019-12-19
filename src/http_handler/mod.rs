@@ -10,26 +10,24 @@ use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
-use crate::utils::structs::{
-    ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest,
-    RestToMessagingContext,
-};
+use crate::utils::structs::{ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 
-fn find_channel<'a>(
-    headers: &HeaderMap<HeaderValue>,
-    from_client_to_backend_channel_sender: &'a Box<
-        HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>,
-    >,
-) -> Option<&'a Box<mpsc::Sender<RestToMessagingContext>>> {
+fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
     let topic_header = header::HeaderName::from_lowercase(b"topic").unwrap();
     let maybe_topic_header = headers.get(topic_header);
     if let Some(topic) = maybe_topic_header {
-        let topic_name = String::from_utf8_lossy(topic.as_bytes()).to_string();
-        from_client_to_backend_channel_sender.get(&topic_name)
+        String::from_utf8_lossy(topic.as_bytes()).to_string()
     } else {
-        None
+        "".to_string()
     }
+}
+
+fn find_channel_by_topic<'a>(
+    client_topic: &'a String,
+    from_client_to_backend_channel_sender: &'a Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
+) -> Option<&'a Box<mpsc::Sender<RestToMessagingContext>>> {
+    from_client_to_backend_channel_sender.get(client_topic)
 }
 
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
@@ -55,12 +53,7 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-pub async fn handler(
-    req: Request<Body>,
-    from_client_to_backend_channel_sender: Box<
-        HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>,
-    >,
-) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -72,32 +65,32 @@ pub async fn handler(
     }
 
     debug!("Body {:?}", req.body());
-    let url = req.uri().clone().to_string();
+
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
             let whole_body = get_whole_body(req).await;
 
-            let p = PublishRequest {
-                payload: whole_body,
-                url: url,
-            };
-            debug!("{:?}", p);
-            let (local_tx, local_rx): (
-                oneshot::Sender<MessagingResult>,
-                oneshot::Receiver<MessagingResult>,
-            ) = oneshot::channel();
-            let job = RestToMessagingContext {
-                job: Job::Publish(p),
-                sender: local_tx,
-            };
-
-            let maybe_channel = find_channel(&headers, &from_client_to_backend_channel_sender);
+            let client_topic = extract_topic_from_headers(&headers);
+            let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
             let mut sender = if let Some(channel) = maybe_channel {
                 channel.clone()
             } else {
                 *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 *response.body_mut() = Body::empty();
                 return Ok(response);
+            };
+
+            let p = PublishRequest {
+                payload: whole_body,
+                client_topic: client_topic,
+            };
+
+            debug!("{:?}", p);
+
+            let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+            let job = RestToMessagingContext {
+                job: Job::Publish(p),
+                sender: local_tx,
             };
 
             if let Err(e) = sender.try_send(job) {
@@ -124,32 +117,29 @@ pub async fn handler(
             let maybe_json = serde_json::from_slice(&whole_body);
             match maybe_json {
                 Ok(json) => {
-                    let mut json: ClientSubscribeRequest = json;
+                    let json: ClientSubscribeRequest = json;
                     info!("{:?}", json);
-                    let (local_tx, local_rx): (
-                        oneshot::Sender<MessagingResult>,
-                        oneshot::Receiver<MessagingResult>,
-                    ) = oneshot::channel();
+                    let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
 
                     let sb = SubscribeRequest {
-                        customer_interface_type: CustomerInterfaceType::REST,
-                        customer_topic: json.customer_topic.clone(),
+                        client_interface_type: CustomerInterfaceType::REST,
+                        client_topic: json.client_topic.clone(),
                         endpoint: json.endpoint.clone(),
                     };
 
-                    let job = RestToMessagingContext {
-                        job: Job::Subscribe(sb),
-                        sender: local_tx,
-                    };
+                    let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
 
-                    let maybe_channel =
-                        find_channel(&headers, &from_client_to_backend_channel_sender);
                     let mut sender = if let Some(channel) = maybe_channel {
                         channel.clone()
                     } else {
                         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                         *response.body_mut() = Body::from("No backend channel");
                         return Ok(response);
+                    };
+
+                    let job = RestToMessagingContext {
+                        job: Job::Subscribe(sb),
+                        sender: local_tx,
                     };
 
                     info!("About to send to kafka processor");
@@ -159,8 +149,7 @@ pub async fn handler(
                         *response.body_mut() = Body::empty();
                     }
                     info!("Waiting for response from kafka");
-                    let response_from_broker: Result<MessagingResult, oneshot::Canceled> =
-                        local_rx.await;
+                    let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
                     debug!("Got result {:?}", response_from_broker);
                     if let Ok(res) = response_from_broker {
                         *response.body_mut() = Body::from(res.result);
@@ -196,10 +185,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
     let req = Request::builder()
         .method("POST")
         .uri(url)
-        .header(
-            hyper::header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json"),
-        )
+        .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/json"))
         .body(Body::from(payload.payload))
         .expect("request builder");
 

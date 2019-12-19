@@ -13,12 +13,10 @@ channels:
       consumer_topics:
         - consumer_topic: "Response"
           consumer_group: "swir"
-          client_topics:
-            - "Response"
+          client_topic: "SubscribeToAppA"
       producer_topics:
         - producer_topic: "Request"
-          client_topics:
-            - "ProduceToAppA"
+          client_topic: "ProduceToAppA"
 
   nats:
     - brokers:
@@ -26,10 +24,8 @@ channels:
       consumer_topics:
         - consumer_topic: "Response"
           consumer_group: "swir"
-          client_topics:
-            - "Response"
+          client_topic: "SubscribeToAppB"
       producer_topics:
         - producer_topic: "Request"
-          client_topics:
-            - "ProduceToAppB"
+          client_topic: "ProduceToAppB"
 

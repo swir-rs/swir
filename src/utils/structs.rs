@@ -20,7 +20,7 @@ impl CustomerInterfaceType {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishRequest {
     pub(crate) payload: Vec<u8>,
-    pub(crate) url: String,
+    pub(crate) client_topic: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -31,14 +31,14 @@ pub struct EndpointDesc {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClientSubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
-    pub(crate) customer_topic: String,
+    pub(crate) client_topic: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
-    pub(crate) customer_topic: String,
-    pub(crate) customer_interface_type: CustomerInterfaceType,
+    pub(crate) client_topic: String,
+    pub(crate) client_interface_type: CustomerInterfaceType,
 }
 
 #[derive(Debug)]

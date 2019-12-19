@@ -11,14 +11,14 @@ use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext};
 #[derive(Debug, Deserialize)]
 pub struct ProducerTopic {
     pub producer_topic: String,
-    pub client_topics: Vec<String>,
+    pub client_topic: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ConsumerTopic {
     pub consumer_topic: String,
     pub consumer_group: String,
-    pub client_topics: Vec<String>,
+    pub client_topic: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,11 +28,63 @@ pub struct Kafka {
     pub consumer_topics: Vec<ConsumerTopic>,
 }
 
+impl Kafka {
+    pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut i: usize = 0;
+        let mut maybe_topic = None;
+        for t in self.producer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.producer_topic.clone());
+            }
+            i = i + 1;
+        }
+        maybe_topic
+    }
+
+    pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut i: usize = 0;
+        let mut maybe_topic = None;
+        for t in self.consumer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.consumer_topic.clone());
+            }
+            i = i + 1;
+        }
+        maybe_topic
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Nats {
     pub brokers: Vec<String>,
     pub producer_topics: Vec<ProducerTopic>,
     pub consumer_topics: Vec<ConsumerTopic>,
+}
+
+impl Nats {
+    pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut i: usize = 0;
+        let mut maybe_topic = None;
+        for t in self.producer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.producer_topic.clone());
+            }
+            i = i + 1;
+        }
+        maybe_topic
+    }
+
+    pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut i: usize = 0;
+        let mut maybe_topic = None;
+        for t in self.consumer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.consumer_topic.clone());
+            }
+            i = i + 1;
+        }
+        maybe_topic
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,10 +185,17 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 
         kafka_memory_channels.push(mme);
         for producer_topic in kafka_channels.producer_topics.iter() {
-            for client_topic in producer_topic.client_topics.iter() {
-                from_client_to_backend_channel_sender
-                    .insert(client_topic.clone(), from_client_sender.clone());
-            }
+            from_client_to_backend_channel_sender.insert(
+                producer_topic.client_topic.clone(),
+                from_client_sender.clone(),
+            );
+        }
+
+        for consumer_topic in kafka_channels.consumer_topics.iter() {
+            from_client_to_backend_channel_sender.insert(
+                consumer_topic.client_topic.clone(),
+                from_client_sender.clone(),
+            );
         }
     }
     let mut nats_memory_channels = vec![];
@@ -155,10 +214,17 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
         };
         nats_memory_channels.push(mme);
         for producer_topic in nats_channels.producer_topics.iter() {
-            for client_topic in producer_topic.client_topics.iter() {
-                from_client_to_backend_channel_sender
-                    .insert(client_topic.clone(), from_client_sender.clone());
-            }
+            from_client_to_backend_channel_sender.insert(
+                producer_topic.client_topic.clone(),
+                from_client_sender.clone(),
+            );
+        }
+
+        for consumer_topic in nats_channels.consumer_topics.iter() {
+            from_client_to_backend_channel_sender.insert(
+                consumer_topic.client_topic.clone(),
+                from_client_sender.clone(),
+            );
         }
     }
 
