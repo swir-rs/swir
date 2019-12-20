@@ -100,7 +100,7 @@ impl client_api::clientapi_server::ClientApi for SwirAPI {
             return Err(tonic::Status::invalid_argument("Invalid topic"));
         }
 
-        info!("Waiting for response from kafka");
+        info!("Waiting for response from broker");
         local_rx.await.unwrap();
 
         let loc_rx = self.to_client_receiver.clone();

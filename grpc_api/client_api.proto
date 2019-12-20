@@ -50,5 +50,5 @@ message SubscribeRequest {
 // Response message structure
 message SubscribeResponse {
     //Payload is copied directly into appropriate format
-    bytes payload = 2;
+    bytes payload = 1;
 }

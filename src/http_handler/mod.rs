@@ -77,17 +77,11 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 
     let headers = req.headers().clone();
     debug!("Headers {:?}", headers);
-
-    if validate_content_type(&headers).is_none() {
-        return Ok(response);
-    }
-
     debug!("Body {:?}", req.body());
 
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
             let whole_body = get_whole_body(req).await;
-
             let client_topic = extract_topic_from_headers(&headers);
             let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
             let mut sender = if let Some(channel) = maybe_channel {
@@ -129,6 +123,10 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
         }
 
         (&Method::POST, "/subscribe") => {
+            if validate_content_type(&headers).is_none() {
+                return Ok(response);
+            }
+
             let whole_body = get_whole_body(req).await;
             let maybe_json = serde_json::from_slice(&whole_body);
             match maybe_json {
@@ -199,7 +197,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
     let req = Request::builder()
         .method("POST")
         .uri(url)
-        .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/json"))
+        .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
         .body(Body::from(payload.payload))
         .expect("request builder");
 
