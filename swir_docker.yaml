@@ -1,26 +1,30 @@
-client_ip: "127.0.0.1"
+client_ip: "0.0.0.0"
 client_http_port: 8080
 client_https_port: 8443
 client_grpc_port: 51111
 client_tls_private_key: "rustycar.CA.pem"
 client_tls_certificate: "demoCA/cacert.pem"
 #client_executable: "client.jar"
-messaging:
+channels:
   kafka:
-    brokers:
-      - "kafka:9094"
-    consumer_topics:
-      - "Response"
-    consumer_groups:
-      - "swir"
-    producer_topics:
-      - "Request"
+    - brokers:
+        - "docker_kafka_1:9094"
+      consumer_topics:
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topic: "SubscribeToAppA"
+      producer_topics:
+        - producer_topic: "Request"
+          client_topic: "ProduceToAppA"
+
   nats:
-    brokers:
-      - "127.0.0.1:4222"
-    consumer_topics:
-      - "Response"
-    consumer_groups:
-      - "swir"
-    producer_topics:
-      - "Request"
+    - brokers:
+        - "nats://docker_nats_1:4222"
+      consumer_topics:
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topic: "SubscribeToAppB"
+      producer_topics:
+        - producer_topic: "Request"
+          client_topic: "ProduceToAppB"
+

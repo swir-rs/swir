@@ -3,7 +3,7 @@ services:
   swir:
     networks:
       - swir-net
-    image: swir:with_kafka
+    image: swir:latest
     ports:
       - "8080:8080"
       - "8443:8443"

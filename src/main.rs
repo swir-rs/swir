@@ -3,6 +3,17 @@
 #[macro_use]
 extern crate log;
 
+use boxio::BoxedIo;
+use futures_core::Stream;
+use futures_util::{ready, TryStreamExt};
+use http_handler::client_handler;
+use http_handler::handler;
+use hyper::{
+    Body,
+    Request, server::{accept::Accept, conn}, Server,
+};
+use hyper::service::{make_service_fn, service_fn};
+use sled::Config;
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -10,20 +21,7 @@ use std::{
     task::{Context, Poll},
 };
 use std::io::{Error as StdError, ErrorKind};
-
-use futures_core::Stream;
-use futures_util::{ready, TryStreamExt};
-use hyper::{
-    Body,
-    Request, server::{accept::Accept, conn}, Server,
-};
-use hyper::service::{make_service_fn, service_fn};
-use sled::Config;
 use tokio_rustls::TlsAcceptor;
-
-use boxio::BoxedIo;
-use http_handler::client_handler;
-use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
 use crate::utils::config::MemoryChannel;
@@ -41,8 +39,7 @@ struct TcpIncoming {
 
 impl TcpIncoming {
     fn bind(addr: SocketAddr) -> Result<Self, StdError> {
-        let mut inner =
-            conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
+        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
         inner.set_nodelay(true);
         Ok(Self { inner })
     }
@@ -60,10 +57,9 @@ impl Stream for TcpIncoming {
     }
 }
 
-
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    env_logger::builder().format_timestamp_nanos().init();
     let swir_config = utils::config::Swir::new();
     let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
 
@@ -77,10 +73,8 @@ async fn main() {
     let http_tls_key = swir_config.client_tls_private_key.clone();
 
     let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
-    let client_http_addr =
-        std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
-    let client_grpc_addr =
-        std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
+    let client_http_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
+    let client_grpc_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
@@ -90,39 +84,33 @@ async fn main() {
     let key = load_private_key(http_tls_key).unwrap();
 
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-    config
-        .set_single_cert(certs, key)
-        .expect("invalid key or certificate");
+    config.set_single_cert(certs, key).expect("invalid key or certificate");
     let tls = TlsAcceptor::from(Arc::new(config));
 
-    let incoming =
-        hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
-            let mut tcp = TcpIncoming::bind(client_https_addr)?;
-             while let Some(stream) = tcp.try_next().await? {
-                {
-                        let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
-                            Ok(io) => io,
-                            Err(error) => {
-                                error!("Unable to accept incoming connection. {:?}", error);
-                                continue
-                            },
-                        };
-                        yield BoxedIo::new(io);
-                        continue;
-                }
-                yield boxio::BoxedIo::new(stream)
+    let incoming = hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
+        let mut tcp = TcpIncoming::bind(client_https_addr)?;
+         while let Some(stream) = tcp.try_next().await? {
+            {
+                    let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
+                        Ok(io) => io,
+                        Err(error) => {
+                            error!("Unable to accept incoming connection. {:?}", error);
+                            continue
+                        },
+                    };
+                    yield BoxedIo::new(io);
+                    continue;
             }
-        });
-
+            yield boxio::BoxedIo::new(stream)
+        }
+    });
 
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let http_service = make_service_fn(move |_| {
         let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
         async move {
             let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(req, from_client_to_backend_channel_sender.clone())
-            }))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
         }
     });
 
@@ -131,9 +119,7 @@ async fn main() {
         let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
         async move {
             let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(req, from_client_to_backend_channel_sender.clone())
-            }))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
         }
     });
 
@@ -142,12 +128,7 @@ async fn main() {
     let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
 
     let broker = async {
-        messaging_handlers::configure_broker(
-            swir_config.channels,
-            db.clone(),
-            mc,
-        )
-            .await;
+        messaging_handlers::configure_broker(swir_config.channels, db.clone(), mc).await;
     };
 
     let server = Server::bind(&client_http_addr).serve(http_service);
@@ -162,9 +143,7 @@ async fn main() {
     };
 
     let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
-    let grpc = tonic::transport::Server::builder()
-        .add_service(svc)
-        .serve(client_grpc_addr);
+    let grpc = tonic::transport::Server::builder().add_service(svc).serve(client_grpc_addr);
 
     if let Some(command) = client_executable {
         utils::command_utils::run_java_command(command);

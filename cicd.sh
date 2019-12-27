@@ -1,5 +1,5 @@
 #necessary certs for HTTPs but only on the first run
-./generate-cert.sh
+#./generate-cert.sh
 
 #java based components
 cd clients/swir-java-client
@@ -16,11 +16,8 @@ cd ../kafka-java-client
 docker build --tag kafka-java-client .
 cd ../../
 
-cargo build --release --target-dir target/with_kafka
-cargo build --release --features="with_nats" --target-dir target/with_nats
-
-docker build . --build-arg executable=target/with_kafka/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar -t swir:with_kafka
-docker build . --build-arg executable=target/with_nats/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar -t swir:with_nats
+cargo build --release --features="with_nats"
+docker build . --build-arg executable=target/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir
 
 # this should deploy the infrastructure
 # Docker instance names/network name created by docker compose could change
@@ -33,5 +30,15 @@ docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create 
 docker-compose -f docker/docker-compose-swir.yml up -d
 
 #use these to produce and receive messasges
-docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"}}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-docker run --network docker_swir-net -it curlimages/curl -v -d '{"messages":10000, "threads":4, "sidecarUrl":"http://docker_swir_1:8080"}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+
+#docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+#docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+
+
+docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+
+#docker run --network docker_swir-net -it curlimages/curl -v -d '{"messages":10000, "threads":4, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+
+
+#docker cp docker_swir_1:/pcap.logs ~/Workspace/rustycar/

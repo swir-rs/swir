@@ -3,6 +3,7 @@ package io.swir.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
 import io.swir.client.payload.Payload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,8 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @RestController
 public class TestController {
     private static Logger logger = LoggerFactory.getLogger(TestController.class);
-    @Autowired
-    ObjectMapper om;
+    private final CBORFactory f;
+
 
     @Autowired
     RestTemplate restTemplate;
@@ -32,19 +34,25 @@ public class TestController {
     @Autowired
     AtomicInteger processedCounter;
 
-    ExecutorService ex = Executors.newCachedThreadPool();
+    ExecutorService ex = Executors.newFixedThreadPool(4);
+
+    TestController(){
+        f = new CBORFactory();
+    }
 
     @PostMapping("/test")
     public JsonNode handleSwirIncomingStream(@RequestBody() JsonNode body) throws InterruptedException {
         logger.info("Test {}", body);
-        int messages = body.get("messages").intValue();
-        int threads = body.get("threads").intValue();
+        var messages = body.get("messages").intValue();
+        var threads = body.get("threads").intValue();
+        var clientTopic = body.get("clientTopic").textValue();
         String url =        body.get("sidecarUrl").textValue();
         processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
+        ObjectMapper omCbor = new ObjectMapper(f);
         if(messages % threads !=0){
             ObjectNode response = om.createObjectNode();
-            response.put("error", " messges doesn't divide by threads ");
+            response.put("error", " messages doesn't divide by threads ");
             return response;
         }
         int offset = messages/threads;
@@ -55,10 +63,12 @@ public class TestController {
         Semaphore semaphore  =new Semaphore(threads);
 
         WebClient client = WebClient.create(url);
+        Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
 
         final AtomicInteger completedCount = new AtomicInteger();
         semaphore.acquire(threads);
         long totalStart = System.nanoTime();
+
         for(int i = 0; i <threads; i++) {
             final int k = i;
             ex.submit(new Runnable() {
@@ -68,8 +78,12 @@ public class TestController {
                     try {
                         for (int j = 0; j < offset; j++) {
                             final int c = k * offset + j;
-                            final WebClient.RequestHeadersSpec<?> request = client.post().uri("/publish").body(BodyInserters.fromPublisher(Mono.just(new Payload().setName("client").setSurname("fooo").setCounter(c)), Payload.class));
-                            Disposable resp = request.retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
+                            var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+                            logger.info("sending request {}",p);
+                            final WebClient.RequestHeadersSpec<?> request = client.post().uri("/publish")
+                                    .headers(httpHeaders -> httpHeaders.setAll(headersMap))
+                                    .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
+                                     Disposable resp = request.retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
                         }
                     }catch(Exception e){
                         logger.error("not right",e);

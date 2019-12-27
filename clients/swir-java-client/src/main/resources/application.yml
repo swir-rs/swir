@@ -1,5 +1,3 @@
 
 server:
   port : 8090
-  http2:
-    enabled: true

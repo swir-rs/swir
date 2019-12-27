@@ -53,7 +53,7 @@ public class TestController {
 
         if(messages % threads !=0){
             ObjectNode response = om.createObjectNode();
-            response.put("error", " messges doesn't divide by threads ");
+            response.put("error", " messages doesn't divide by threads ");
             return response;
         }
 

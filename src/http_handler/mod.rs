@@ -1,18 +1,17 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use http::HeaderValue;
+use hyper::{Body, Client, header, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::utils::structs::BackendStatusCodes::NO_TOPIC;
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
+use crate::utils::structs::BackendStatusCodes::NO_TOPIC;
 
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
     let topic_header = header::HeaderName::from_lowercase(b"topic").unwrap();
@@ -82,6 +81,9 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
             let whole_body = get_whole_body(req).await;
+            let wb = whole_body.clone();
+            let wb = String::from_utf8_lossy(&wb);
+            info!("Publish start {}", wb);
             let client_topic = extract_topic_from_headers(&headers);
             let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
             let mut sender = if let Some(channel) = maybe_channel {
@@ -95,8 +97,6 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                 payload: whole_body,
                 client_topic: client_topic,
             };
-
-            debug!("{:?}", p);
 
             let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
             let job = RestToMessagingContext {
@@ -119,6 +119,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                 *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 *response.body_mut() = Body::empty();
             }
+            info!("Publish end {}", wb);
             return Ok(response);
         }
 
@@ -155,13 +156,12 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                         sender: local_tx,
                     };
 
-                    info!("About to send to kafka processor");
                     if let Err(e) = sender.try_send(job) {
                         warn!("Channel is dead {:?}", e);
                         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                         *response.body_mut() = Body::empty();
                     }
-                    info!("Waiting for response from kafka");
+
                     let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
                     debug!("Got result {:?}", response_from_broker);
                     if let Ok(res) = response_from_broker {
@@ -204,12 +204,12 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
     //    let sender = payload.sender.clone();
     //    let err_sender = payload.sender.clone();
 
-    let p = p.clone();
-    info!("Making request for {}", String::from_utf8_lossy(&p));
+    let p = String::from_utf8_lossy(&p);
+    info!("Making request for {}", p);
     let resp = client.request(req).await;
     let _res = resp
         .map(move |res| {
-            debug!("Status POST to the client: {}", res.status());
+            info!("Status POST to the client: {} {} ", res.status(), p);
             //                let mut status = "All good".to_string();
             if res.status() != hyper::StatusCode::OK {
                 warn!("Error from the client {}", res.status());
