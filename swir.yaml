@@ -10,10 +10,11 @@ channels:
     - brokers:
         - "127.0.0.1:9092"
         - "127.0.0.1:9094"
-      consumer_topics:
-        - consumer_topic: "Response"
-          consumer_group: "swir"
-          client_topic: "SubscribeToAppA"
+      consumer_topics: []
+#        - 
+#consumer_topic: "Response"
+#          consumer_group: "swir"
+#          client_topic: "SubscribeToAppA"
       producer_topics:
         - producer_topic: "Request"
           client_topic: "ProduceToAppA"
@@ -25,7 +26,7 @@ channels:
         - consumer_topic: "Response"
           consumer_group: "swir"
           client_topic: "SubscribeToAppB"
-      producer_topics:
-        - producer_topic: "Request"
-          client_topic: "ProduceToAppB"
+      producer_topics:[]
+#        - producer_topic: "Request"
+#          client_topic: "ProduceToAppB"
 

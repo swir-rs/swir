@@ -38,7 +38,6 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
 
         let kafka_broker = kafka_handler::KafkaBroker {
             kafka,
-            db: db.clone(),
             rx,
             tx: Box::new(tx_map),
 	    subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
@@ -65,10 +64,10 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
             tx_map.insert(CustomerInterfaceType::GRPC, tx_grpc);
 
             let nats_broker = nats_handler::NatsBroker {
-                nats,
-                db: db.clone(),
+                nats,             
                 rx,
                 tx: Box::new(tx_map),
+		subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
             };
             brokers.push(Box::new(nats_broker));
         }

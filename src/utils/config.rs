@@ -137,12 +137,18 @@ impl Swir {
 //  from_client_sender [client topic3] ------->  broker 2
 //
 //
+//  For REST frontend there is only one channel and all subscriptions are using it since the receiving side of that channel is with Hyper Rest Client
+//  
 //                     <----------------- broker 1 < ---- to_client_sender
 //  to_client_receiver <----------------- broker 2 < ---- to_client_sender
 //                     <----------------- broker 3 < ---- to_client_sender
-//
-//
-//
+
+//  For gRPC there can be multiple channels since each subscribe call is creates a stream
+//  
+//  to_client_receiver1 <----------------- broker 1 < ---- to_client_sender1
+//  to_client_receiver2 <----------------- broker 2 < ---- to_client_sender2
+//  to_client_receiver3 <----------------- broker 3 < ---- to_client_sender3
+
 
 pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
@@ -200,6 +206,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 
             for consumer_topic in nats_channels.consumer_topics.iter() {
                 from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+		to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
             }
         }
     }

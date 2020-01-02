@@ -8,7 +8,6 @@ client_tls_certificate: "/demoCA/cacert.pem"
 channels:
   kafka:
     - brokers: ${kafka_brokers}
-
       consumer_topics:
         - consumer_topic: ${consumer_topic_1}
           consumer_group: ${consumer_group_1}

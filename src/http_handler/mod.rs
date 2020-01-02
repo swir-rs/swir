@@ -156,7 +156,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 			let mut sender = if let Some(channel) = maybe_channel {
                             channel.clone()
 			} else {
-                            set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
+                            set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
                             return Ok(response);
 			};
 
