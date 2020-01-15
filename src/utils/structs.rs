@@ -12,13 +12,13 @@ pub enum CustomerInterfaceType {
 }
 
 impl CustomerInterfaceType {
-    pub fn from_str(s: &str) -> Result<CustomerInterfaceType, ()> {
-        match s {
-            "REST" => Ok(CustomerInterfaceType::REST),
-            "GRPC" => Ok(CustomerInterfaceType::GRPC),
-            _ => Err(()),
-        }
-    }
+    //    pub fn from_str(s: &str) -> Result<CustomerInterfaceType, ()> {
+    //        match s {
+    //            "REST" => Ok(CustomerInterfaceType::REST),
+    //            "GRPC" => Ok(CustomerInterfaceType::GRPC),
+    //            _ => Err(()),
+    //        }
+    //    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

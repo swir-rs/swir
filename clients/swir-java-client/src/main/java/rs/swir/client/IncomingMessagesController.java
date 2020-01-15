@@ -10,8 +10,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
+import rs.swir.client.payload.Payload;
 
-import javax.validation.Payload;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
@@ -28,6 +30,9 @@ public class IncomingMessagesController {
 
 
     @Autowired
+    AtomicBoolean testStarted;
+
+    @Autowired
     AtomicInteger processedCounter;
 
     @PostMapping("/response")
@@ -35,12 +40,17 @@ public class IncomingMessagesController {
         Payload p = null;
         try {
             p = om.readValue(body, Payload.class);
-            logger.info("Incoming message {}", p.toString());
+            if(testStarted.get()) {
+                processedCounter.incrementAndGet();
+                logger.info("Incoming message {}", p.toString());
+            }else{
+                logger.warn("Incoming message {}", p.toString());
+            }
+
         } catch (Exception e) {
             logger.error(e.getLocalizedMessage());
         }
 
-        processedCounter.incrementAndGet();
         return null;
     }
 }

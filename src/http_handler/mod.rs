@@ -236,6 +236,7 @@ pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>
     info!("Client done");
     let mut rx = rx.lock().await;
     while let Some(payload) = rx.next().await {
-        send_request(client.clone(), payload).await
+        let client = client.clone();
+        tokio::spawn(async move { send_request(client, payload).await });
     }
 }

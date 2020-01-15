@@ -10,7 +10,7 @@ COPY $client /client.jar
 COPY $swir_config /swir.yaml
 RUN chmod +x /rustycar
 ENV RUST_BACKTRACE=full
-ENV RUST_LOG=info
+ENV RUST_LOG=info,hyper=info
 
 EXPOSE 8080 8443 8090
 ENTRYPOINT ["./rustycar"]

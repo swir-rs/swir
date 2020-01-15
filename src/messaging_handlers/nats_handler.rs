@@ -103,14 +103,15 @@ impl NatsBroker {
                     if let Some(url) = maybe_url {
                         let vec = url.to_bytes();
                         let subscribe_request: SubscribeRequest = serde_json::from_slice(&vec).unwrap();
-
-                        let mut tx = tx.get(&subscribe_request.client_interface_type).unwrap().clone();
                         let (s, _r) = futures::channel::oneshot::channel();
+
                         let p = MessagingToRestContext {
                             sender: s,
                             payload: event.msg,
                             uri: subscribe_request.endpoint.url.clone(),
                         };
+
+                        let mut tx = tx.get(&subscribe_request.client_interface_type).unwrap().clone();
                         if let Err(e) = tx.try_send(p) {
                             warn!("Error from the client {}", e)
                         }

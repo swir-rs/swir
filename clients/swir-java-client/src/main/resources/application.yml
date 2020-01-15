@@ -1,3 +1,4 @@
-
 server:
   port : 8090
+
+sidecarUrl: ${sidecar_url}

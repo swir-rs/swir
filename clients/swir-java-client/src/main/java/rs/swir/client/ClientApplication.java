@@ -2,13 +2,28 @@ package rs.swir.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.reactive.ClientHttpConnector;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
+import java.io.IOException;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -17,15 +32,47 @@ public class ClientApplication {
 
 	private static Logger logger = LoggerFactory.getLogger(ClientApplication.class);
 
+	@Bean
+	RestTemplateBuilder getRestTemplateBuilder(){
+		return new RestTemplateBuilder();
+	}
 
 	@Bean
-	public RestTemplate produceRestTemplate(){
-		return new RestTemplate();
+	public RestTemplate produceRestTemplate(RestTemplateBuilder restTemplateBuilder){
+		return restTemplateBuilder
+				.setConnectTimeout(Duration.ofMillis(500))
+           .setReadTimeout(Duration.ofSeconds(20))
+           .build();
+	}
+
+	@Bean
+	public WebClient produceWebClient(){
+		int connectTimeOut = 1000;
+		int readTimeOut = 20;
+		long writeTimeOut = 20;
+
+		HttpClient httpClient = HttpClient.create().tcpConfiguration(tcpClient -> {
+			tcpClient = tcpClient.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeOut);
+
+			tcpClient = tcpClient.doOnConnected(conn -> conn
+					.addHandlerLast(new ReadTimeoutHandler(readTimeOut, TimeUnit.SECONDS))
+					.addHandlerLast(new WriteTimeoutHandler(writeTimeOut, TimeUnit.SECONDS))
+			);
+			return tcpClient;
+		});
+
+		ClientHttpConnector connector = new ReactorClientHttpConnector(httpClient);
+		return WebClient.builder().clientConnector(connector).build();
 	}
 
 	@Bean
 	public AtomicInteger produceExpectedMessagesCounter(){
 		return new AtomicInteger();
+	}
+
+	@Bean
+	public AtomicBoolean produceTestStatus(){
+		return new AtomicBoolean();
 	}
 
 

@@ -36,6 +36,8 @@ services:
     networks:
       - swir-net
     image: swir-java-client:v2
+    environment:
+      - sidecar_url=http://swir:8080/publish
     depends_on:
       - "swir"
 # Optional. Enable only to do some benchmarks without SWIR
