@@ -106,8 +106,7 @@ pub struct MemoryChannel {
     pub nats_memory_channels: Vec<MemoryChannelEndpoint>,
     pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
-    pub from_client_to_backend_channel_sender:
-        Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
+    pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +125,8 @@ impl Swir {
     pub fn new() -> Box<Swir> {
         let mut s = Config::new();
         s.merge(File::with_name("swir.yaml")).unwrap();
+        s.merge(config::Environment::with_prefix("APP")).unwrap();
+
         let s = s.try_into().unwrap();
         println!("SWIR Config : {:?}", s);
         Box::new(s)
@@ -152,15 +153,9 @@ impl Swir {
 //
 
 pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
-    let (to_client_sender_for_rest, to_client_receiver_for_rest): (
-        mpsc::Sender<MessagingToRestContext>,
-        mpsc::Receiver<MessagingToRestContext>,
-    ) = mpsc::channel(1000);
+    let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(1000);
 
-    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (
-        mpsc::Sender<MessagingToRestContext>,
-        mpsc::Receiver<MessagingToRestContext>,
-    ) = mpsc::channel(1000);
+    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(1000);
 
     let to_client_sender_for_rest = Box::new(to_client_sender_for_rest);
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));
@@ -172,10 +167,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let mut from_client_to_backend_channel_sender = HashMap::new();
 
     for kafka_channels in config.channels.kafka.iter() {
-        let (from_client_sender, from_client_receiver): (
-            mpsc::Sender<RestToMessagingContext>,
-            mpsc::Receiver<RestToMessagingContext>,
-        ) = mpsc::channel(1000);
+        let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(1000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
             to_client_sender_for_rest: to_client_sender_for_rest.clone(),
@@ -185,46 +177,34 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 
         kafka_memory_channels.push(mme);
         for producer_topic in kafka_channels.producer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(
-                producer_topic.client_topic.clone(),
-                from_client_sender.clone(),
-            );
+            from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
         }
 
         for consumer_topic in kafka_channels.consumer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(
-                consumer_topic.client_topic.clone(),
-                from_client_sender.clone(),
-            );
+            from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
         }
     }
     let mut nats_memory_channels = vec![];
-    for nats_channels in config.channels.nats.iter() {
-        let (from_client_sender, from_client_receiver): (
-            mpsc::Sender<RestToMessagingContext>,
-            mpsc::Receiver<RestToMessagingContext>,
-        ) = mpsc::channel(1000);
+    #[cfg(feature = "with_nats")]
+    {
+        for nats_channels in config.channels.nats.iter() {
+            let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(1000);
 
-        let from_client_sender = Box::new(from_client_sender);
+            let from_client_sender = Box::new(from_client_sender);
 
-        let mme = MemoryChannelEndpoint {
-            from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-            to_client_sender_for_rest: to_client_sender_for_rest.clone(),
-            to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
-        };
-        nats_memory_channels.push(mme);
-        for producer_topic in nats_channels.producer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(
-                producer_topic.client_topic.clone(),
-                from_client_sender.clone(),
-            );
-        }
+            let mme = MemoryChannelEndpoint {
+                from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
+                to_client_sender_for_rest: to_client_sender_for_rest.clone(),
+                to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
+            };
+            nats_memory_channels.push(mme);
+            for producer_topic in nats_channels.producer_topics.iter() {
+                from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+            }
 
-        for consumer_topic in nats_channels.consumer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(
-                consumer_topic.client_topic.clone(),
-                from_client_sender.clone(),
-            );
+            for consumer_topic in nats_channels.consumer_topics.iter() {
+                from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+            }
         }
     }
 

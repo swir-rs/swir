@@ -1,0 +1,28 @@
+plugins {
+	id 'org.springframework.boot' version '2.2.2.RELEASE'
+	id 'io.spring.dependency-management' version '1.0.8.RELEASE'
+	id 'java'
+}
+
+group = 'rs.swir.performance'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '1.8'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	compile 'io.nats:nats-spring-boot-starter:0.4.0'
+	compile 'io.nats:nats-spring-cloud-stream-binder:0.4.0'
+	compile 'io.nats:spring-nats:0.3.2'
+	compile 'io.nats:jnats:2.5.2'
+	compile 'org.springframework.cloud:spring-cloud-stream:2.2.0.RELEASE'
+	compile 'org.springframework.integration:spring-integration-core:5.1.6.RELEASE'
+	compile 'org.springframework.integration:spring-integration-tuple:1.0.0.RELEASE'
+
+}
+
+test {
+	useJUnitPlatform()
+}

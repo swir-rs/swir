@@ -28,7 +28,7 @@ impl SwirAPI {
 }
 
 #[tonic::async_trait]
-impl client_api::clientapi_server::ClientApi for SwirAPI {
+impl client_api::client_api_server::ClientApi for SwirAPI {
     async fn publish(
         &self,
         request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest

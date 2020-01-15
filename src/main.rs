@@ -3,25 +3,27 @@
 #[macro_use]
 extern crate log;
 
-use boxio::BoxedIo;
-use futures_core::Stream;
-use futures_util::{ready, TryStreamExt};
-use http_handler::client_handler;
-use http_handler::handler;
-use hyper::{
-    Body,
-    Request, server::{accept::Accept, conn}, Server,
-};
-use hyper::service::{make_service_fn, service_fn};
-use sled::Config;
+use std::io::{Error as StdError, ErrorKind};
 use std::{
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use std::io::{Error as StdError, ErrorKind};
+
+use futures_core::Stream;
+use futures_util::{ready, TryStreamExt};
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{
+    server::{accept::Accept, conn},
+    Body, Request, Server,
+};
+use sled::Config;
 use tokio_rustls::TlsAcceptor;
+
+use boxio::BoxedIo;
+use http_handler::client_handler;
+use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
 use crate::utils::config::MemoryChannel;
@@ -61,6 +63,7 @@ impl Stream for TcpIncoming {
 async fn main() {
     env_logger::builder().format_timestamp_nanos().init();
     let swir_config = utils::config::Swir::new();
+
     let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
 
     let client_ip = swir_config.client_ip.clone();
@@ -142,7 +145,7 @@ async fn main() {
         to_client_receiver: to_client_receiver_for_grpc,
     };
 
-    let svc = grpc_handler::client_api::clientapi_server::ClientApiServer::new(swir);
+    let svc = grpc_handler::client_api::client_api_server::ClientApiServer::new(swir);
     let grpc = tonic::transport::Server::builder().add_service(svc).serve(client_grpc_addr);
 
     if let Some(command) = client_executable {

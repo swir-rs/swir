@@ -47,17 +47,17 @@ pub struct SubscribeRequest {
 
 #[derive(Debug)]
 pub enum BackendStatusCodes {
-    OK(String),
-    ERROR(String),
-    NO_TOPIC(String),
+    Ok(String),
+    Error(String),
+    NoTopic(String),
 }
 
 impl fmt::Display for BackendStatusCodes {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self {
-            BackendStatusCodes::OK(msg) => write!(f, "BackendStatusCodes::OK {}", msg),
-            BackendStatusCodes::ERROR(msg) => write!(f, "BackendStatusCodes::ERR {}", msg),
-            BackendStatusCodes::NO_TOPIC(msg) => write!(f, "BackendStatusCodes::NO_TOPIC {}", msg),
+            BackendStatusCodes::Ok(msg) => write!(f, "BackendStatusCodes::Ok {}", msg),
+            BackendStatusCodes::Error(msg) => write!(f, "BackendStatusCodes::ERR {}", msg),
+            BackendStatusCodes::NoTopic(msg) => write!(f, "BackendStatusCodes::NoTopic {}", msg),
         }
     }
 }

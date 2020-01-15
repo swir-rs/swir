@@ -3,20 +3,39 @@ services:
   swir:
     networks:
       - swir-net
-    image: swir:latest
+    image: swir:v2
     ports:
       - "8080:8080"
       - "8443:8443"
+    environment:
+      - kafka_brokers=[kafka:9094]
+      - nats_brokers=nats://nats:4222
+      - consumer_topic_1=Response
+      - consumer_group_1=swir
+      - client_consumer_topic_1=SubscribeToAppA
+      - producer_topic_1=Request
+      - client_producer_topic_1=ProduceToAppA
+
   swir-kafka-sink:
     networks:
       - swir-net
-    image: swir-kafka-sink
+    image: swir-kafka-sink:v2
+    environment:
+      - bootstrap_servers=kafka:9094
+    depends_on:
+      - "swir"
+  swir-nats-sink:
+    networks:
+      - swir-net
+    image: swir-nats-sink:v2
+    environment:
+      - bootstrap_servers=nats://nats:4222
     depends_on:
       - "swir"
   swir-java-client:
     networks:
       - swir-net
-    image: swir-java-client
+    image: swir-java-client:v2
     depends_on:
       - "swir"
 # Optional. Enable only to do some benchmarks without SWIR

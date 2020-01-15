@@ -1,4 +1,4 @@
-package io.swir.client.payload;
+package rs.swir.client.payload;
 
 
 public class Payload {

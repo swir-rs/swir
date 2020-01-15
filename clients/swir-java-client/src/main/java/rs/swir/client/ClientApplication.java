@@ -1,4 +1,4 @@
-package io.swir.client;
+package rs.swir.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;

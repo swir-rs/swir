@@ -11,6 +11,7 @@ use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance};
 use rdkafka::error::KafkaResult;
 use rdkafka::message::{Headers, Message};
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::TopicPartitionList;
 use sled::{Db, IVec};
 use tokio::sync::mpsc;
 
@@ -36,11 +37,13 @@ impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
         info!("Pre rebalance {:?}", rebalance);
     }
+
     fn post_rebalance(&self, rebalance: &Rebalance) {
         info!("Post rebalance {:?}", rebalance);
     }
-    fn commit_callback(&self, result: KafkaResult<()>, _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList) {
-        debug!("Committing offsets: {:?}", result);
+
+    fn commit_callback(&self, result: KafkaResult<()>, _offsets: &TopicPartitionList) {
+        info!("Committing offsets: {:?}", result);
     }
 }
 
@@ -72,13 +75,13 @@ impl KafkaBroker {
                         if let Err(e) = self.db.insert(topic, IVec::from(s.as_bytes())) {
                             warn!("Can't store registration {:?}", e);
                             if let Err(e) = sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::ERROR(e.to_string()),
+                                status: BackendStatusCodes::Error(e.to_string()),
                             }) {
                                 warn!("Can't send response back {:?}", e);
                             }
                         } else {
                             if let Err(e) = sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::OK("KAFKA is good".to_string()),
+                                status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
                             }) {
                                 warn!("Can't send response back {:?}", e);
                             }
@@ -86,7 +89,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: BackendStatusCodes::NO_TOPIC("Can't find produce topic".to_string()),
+                            status: BackendStatusCodes::NoTopic("Can't find produce topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }
@@ -102,10 +105,10 @@ impl KafkaBroker {
                         let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
                         let foo = kafka_producer.send(r, 0).map(move |status| match status {
                             Ok(_) => sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::OK("KAFKA is good".to_string()),
+                                status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
                             }),
                             Err(e) => sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::ERROR(e.to_string()),
+                                status: BackendStatusCodes::Error(e.to_string()),
                             }),
                         });
 
@@ -115,7 +118,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: BackendStatusCodes::NO_TOPIC("Can't find subscribe topic".to_string()),
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }

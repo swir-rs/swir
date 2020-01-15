@@ -6,7 +6,7 @@ plugins {
 
 group = 'rs.swir.performance'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '1.8'
+sourceCompatibility = '1.10'
 
 repositories {
 	mavenCentral()

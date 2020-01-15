@@ -1,0 +1,17 @@
+server:
+  port: 9000
+spring:
+  cloud:
+    stream:
+      bindings:
+        input:
+          destination: Request
+          binder: nats
+        output:
+          destination: Response
+          binder: nats
+nats:
+  spring:
+    server: ${bootstrap_servers}
+
+

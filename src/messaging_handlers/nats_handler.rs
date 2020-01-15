@@ -41,13 +41,13 @@ impl NatsBroker {
                         if let Err(e) = self.db.insert(topic, IVec::from(s.as_bytes())) {
                             warn!("Can't store registration {:?}", e);
                             if let Err(e) = sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::ERROR(e.to_string()),
+                                status: BackendStatusCodes::Error(e.to_string()),
                             }) {
                                 warn!("Can't send response back {:?}", e);
                             }
                         } else {
                             if let Err(e) = sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::OK("NATS is good".to_string()),
+                                status: BackendStatusCodes::Ok("NATS is good".to_string()),
                             }) {
                                 warn!("Can't send response back {:?}", e);
                             }
@@ -55,7 +55,7 @@ impl NatsBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: BackendStatusCodes::NO_TOPIC("Can't find subscribe topic".to_string()),
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }
@@ -70,19 +70,19 @@ impl NatsBroker {
                         match foo {
                             Ok(_) => {
                                 sender.send(structs::MessagingResult {
-                                    status: BackendStatusCodes::OK("NATS is good".to_string()),
+                                    status: BackendStatusCodes::Ok("NATS is good".to_string()),
                                 });
                             }
                             Err(e) => {
                                 sender.send(structs::MessagingResult {
-                                    status: BackendStatusCodes::ERROR(e.to_string()),
+                                    status: BackendStatusCodes::Error(e.to_string()),
                                 });
                             }
                         }
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
-                            status: BackendStatusCodes::NO_TOPIC("Can't find subscribe topic".to_string()),
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
                         }

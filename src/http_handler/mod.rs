@@ -1,17 +1,18 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use http::HeaderValue;
-use hyper::{Body, Client, header, HeaderMap, Method, Request, Response, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use std::collections::HashMap;
-use std::sync::Arc;
+use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
+use crate::utils::structs::BackendStatusCodes::NoTopic;
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
-use crate::utils::structs::BackendStatusCodes::NO_TOPIC;
 
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
     let topic_header = header::HeaderName::from_lowercase(b"topic").unwrap();
@@ -45,15 +46,15 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
 
 fn set_http_response(backend_status: BackendStatusCodes, response: &mut Response<Body>) {
     match backend_status {
-        BackendStatusCodes::OK(msg) => {
+        BackendStatusCodes::Ok(msg) => {
             *response.status_mut() = StatusCode::OK;
             *response.body_mut() = Body::from(msg);
         }
-        BackendStatusCodes::ERROR(msg) => {
+        BackendStatusCodes::Error(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::from(msg);
         }
-        BackendStatusCodes::NO_TOPIC(msg) => {
+        BackendStatusCodes::NoTopic(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::from(msg);
         }
@@ -89,7 +90,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             let mut sender = if let Some(channel) = maybe_channel {
                 channel.clone()
             } else {
-                set_http_response(BackendStatusCodes::NO_TOPIC("No mapping for this topic".to_string()), &mut response);
+                set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
                 return Ok(response);
             };
 
@@ -147,7 +148,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                     let mut sender = if let Some(channel) = maybe_channel {
                         channel.clone()
                     } else {
-                        set_http_response(BackendStatusCodes::NO_TOPIC("No mapping for this topic".to_string()), &mut response);
+                        set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
                         return Ok(response);
                     };
 
