@@ -1,5 +1,6 @@
 package rs.swir.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -8,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,10 +23,7 @@ import rs.swir.client.payload.Payload;
 
 import javax.validation.constraints.NotNull;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,7 +46,12 @@ public class TestController {
     @Autowired
     AtomicBoolean testStarted;
 
-    ExecutorService ex = Executors.newFixedThreadPool(4);
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
+
+    ExecutorService ex = Executors.newCachedThreadPool();
+    @Value("${kafkaProducerTopic}")
+    String kafkaProducerTopic;
 
     @Autowired
     WebClient client;
@@ -65,6 +70,12 @@ public class TestController {
         if(body.hasNonNull("missedPackets")) {
             missedPacketsThreshold = body.get("missedPackets").intValue();
         }
+        String testType;
+        if(body.hasNonNull("testType")) {
+            testType = body.get("testType").textValue();
+        }else{
+            testType = "sidecar";
+        }
         processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
         ObjectMapper omCbor = new ObjectMapper(f);
@@ -81,9 +92,9 @@ public class TestController {
         final AtomicLong totalSendTime  = new AtomicLong(0);
         Semaphore semaphore  =new Semaphore(threads);
 
-        Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
+        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
 
-        final AtomicInteger completedCount = new AtomicInteger();
+        final AtomicInteger sentCount = new AtomicInteger();
         semaphore.acquire(threads);
         long totalStart = System.nanoTime();
 
@@ -91,24 +102,17 @@ public class TestController {
             final int k = i;
             ex.submit(new Runnable() {
                 public void run() {
-                    logger.info("Executing run  {}",k);
+                    logger.info("Executing run {} {}",testType, k);
                     long start = System.nanoTime();
                     try {
                         for (int j = 0; j < offset; j++) {
                             final int c = k * offset + j;
-                            var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
-                            logger.info("sending request {}",p);
-                            final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl)
-                                    .headers(httpHeaders -> httpHeaders.setAll(headersMap))
-                                    .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
-
-                            Disposable resp = request.retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
-
-//                             var response = request.exchange().block();
-//                             var body = response.bodyToMono(String.class).block();
-//                             logger.info("Got response {} {} for {}",response.rawStatusCode(),body,c);
-//                             completedCount.incrementAndGet();
-
+                            switch(testType){
+                                case "sidecar":
+                                    sendMessageViaSidecar(c, om, clientTopic, sentCount);break;
+                                case "kafka":
+                                    sendMessageToKafkaDirectly(c,om,kafkaProducerTopic,sentCount);break;
+                            }
                         }
                     }catch(Exception e){
                         logger.error("not right",e);
@@ -127,10 +131,10 @@ public class TestController {
         int missingPacketCounter = 0;
         boolean missedPackets = false;
 
-        while(completedCount.get()!=messages){
+        while(sentCount.get()!=messages){
             Thread.sleep(100);
         }
-        logger.info("sent count {} {}",completedCount.get(),messages);
+        logger.info("sent count {} {}",sentCount.get(),messages);
 
         while(processedCounter.get()!=(messages) && !missedPackets){
             int count = processedCounter.get();
@@ -161,6 +165,39 @@ public class TestController {
         response.put("packets missed ",messages- processedCounter.get());
         logger.info("{}",response);
         return response;
+    }
+
+    void sendMessageViaSidecar(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
+        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+        logger.info("sending request {}",p);
+        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl)
+                .headers(httpHeaders -> httpHeaders.setAll(headersMap))
+                .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
+
+        var resp = request.exchange().subscribe();
+//        if(resp.rawStatusCode()!=200){
+//            logger.error("Got response {} for {}",resp.rawStatusCode(),c);
+//        }
+        sentCount.incrementAndGet();
+
+//        retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
+
+        //                             var response = request.exchange().block();
+//                             var body = response.bodyToMono(String.class).block();
+//                             logger.info("Got response {} {} for {}",response.rawStatusCode(),body,c);
+
+
+    }
+
+
+    void sendMessageToKafkaDirectly(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException, ExecutionException, InterruptedException {
+        Payload p = new Payload().setName("kafka-native").setSurname("fooo").setCounter(c);
+        logger.info("sending request {}",p);
+        var f = kafkaTemplate.send(clientTopic, om.writeValueAsString(p));
+        f.get();
+        sentCount.incrementAndGet();
+
     }
 }
 

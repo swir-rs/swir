@@ -22,8 +22,24 @@ services:
     image: swir-kafka-sink:v2
     environment:
       - bootstrap_servers=kafka:9094
+      - sink_consumer_topic=Request
+      - sink_consumer_group=swir
+      - sink_producer_topic=Response
     depends_on:
       - "swir"
+
+  swir-kafka-sink-nosidecar:
+    networks:
+      - swir-net
+    image: swir-kafka-sink:v2
+    environment:
+      - bootstrap_servers=kafka:9094
+      - sink_consumer_topic=RequestNoSidecar
+      - sink_consumer_group=swir
+      - sink_producer_topic=ResponseNoSidecar
+    depends_on:
+      - "swir"
+
   swir-nats-sink:
     networks:
       - swir-net
@@ -38,6 +54,10 @@ services:
     image: swir-java-client:v2
     environment:
       - sidecar_url=http://swir:8080/publish
+      - bootstrap_servers=kafka:9094
+      - consumer_topic=ResponseNoSidecar
+      - consumer_group=swir
+      - producer_topic=RequestNoSidecar
     depends_on:
       - "swir"
 # Optional. Enable only to do some benchmarks without SWIR

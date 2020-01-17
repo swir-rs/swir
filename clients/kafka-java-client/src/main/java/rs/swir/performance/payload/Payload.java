@@ -1,4 +1,4 @@
-package io.swir.performance.payload;
+package rs.swir.performance.payload;
 
 public class Payload {
     private String name;

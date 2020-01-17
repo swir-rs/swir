@@ -19,6 +19,7 @@ dependencies {
 	compile 'org.springframework.boot:spring-boot-starter-webflux'
 	compile 'org.springframework.boot:spring-boot-starter-jetty'
 	compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.10.1'
+	compile 'org.springframework.kafka:spring-kafka'
 	testImplementation('org.springframework.boot:spring-boot-starter-test') {
 		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
 	}

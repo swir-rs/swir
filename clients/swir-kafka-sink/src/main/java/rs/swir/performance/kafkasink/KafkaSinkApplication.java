@@ -1,4 +1,4 @@
-package io.swir.performance.kafkasink;
+package rs.swir.performance.kafkasink;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

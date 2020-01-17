@@ -1,4 +1,21 @@
 server:
-  port : 8090
+  port: 8090
 
 sidecarUrl: ${sidecar_url}
+kafkaProducerTopic:  ${producer_topic}
+kafkaConsumerTopic: ${consumer_topic}
+
+spring:
+  kafka:
+    consumer:
+      bootstrap-servers:  ${bootstrap_servers}
+      group-id: ${consumer_group}
+      topic: ${consumer_topic}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      bootstrap-servers: ${bootstrap_servers}
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+

@@ -47,7 +47,7 @@ public class ClientApplication {
 
 	@Bean
 	public WebClient produceWebClient(){
-		int connectTimeOut = 1000;
+		int connectTimeOut = 5000;
 		int readTimeOut = 20;
 		long writeTimeOut = 20;
 

@@ -201,21 +201,21 @@ impl KafkaBroker {
                             ""
                         }
                     };
-                    info!(
-                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
-                        m.key(),
-                        payload,
-                        m.topic(),
-                        m.partition(),
-                        m.offset(),
-                        m.timestamp()
-                    );
-                    if let Some(headers) = m.headers() {
-                        for i in 0..headers.count() {
-                            let header = headers.get(i).unwrap();
-                            info!("  Header {:#?}: {:?}", header.0, header.1);
-                        }
-                    }
+//                    info!(
+//                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+//                        m.key(),
+//                        payload,
+//                        m.topic(),
+//                        m.partition(),
+//                        m.offset(),
+//                        m.timestamp()
+//                    );
+//                    if let Some(headers) = m.headers() {
+//                        for i in 0..headers.count() {
+//                            let header = headers.get(i).unwrap();
+//                            info!("  Header {:#?}: {:?}", header.0, header.1);
+//                        }
+//                    }
                     let t = Vec::from(m.topic());
                     let vec = Vec::from(payload);
                     let db = self.db.clone();
