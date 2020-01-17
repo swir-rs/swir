@@ -9,8 +9,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,10 +19,12 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import reactor.core.Disposable;
+
 import rs.swir.client.payload.Payload;
 
 import javax.validation.constraints.NotNull;
+
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -55,6 +58,8 @@ public class TestController {
 
     @Autowired
     WebClient client;
+
+
     TestController(){
         f = new CBORFactory();
     }
@@ -109,7 +114,7 @@ public class TestController {
                             final int c = k * offset + j;
                             switch(testType){
                                 case "sidecar":
-                                    sendMessageViaSidecar(c, om, clientTopic, sentCount);break;
+                                    sendMessageViaSidecarFlux(c, om, clientTopic, sentCount);break;
                                 case "kafka":
                                     sendMessageToKafkaDirectly(c,om,kafkaProducerTopic,sentCount);break;
                             }
@@ -167,7 +172,7 @@ public class TestController {
         return response;
     }
 
-    void sendMessageViaSidecar(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
+    void sendMessageViaSidecarFlux(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
         var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
         logger.info("sending request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
@@ -175,18 +180,19 @@ public class TestController {
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 
-        var resp = request.exchange().subscribe();
-//        if(resp.rawStatusCode()!=200){
-//            logger.error("Got response {} for {}",resp.rawStatusCode(),c);
-//        }
+        var resp = request.exchange().delaySubscription(Duration.ofMillis(10)).subscribe();
         sentCount.incrementAndGet();
+    }
 
-//        retrieve().bodyToMono(String.class).map(f->{logger.info("Got response {} for {}",f,c);completedCount.incrementAndGet();return f;}).subscribe();
-
-        //                             var response = request.exchange().block();
-//                             var body = response.bodyToMono(String.class).block();
-//                             logger.info("Got response {} {} for {}",response.rawStatusCode(),body,c);
-
+    void sendMessageViaSidecarClassic(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
+        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+        logger.info("sending request {}",p);
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("content-type", "application/octet-stream");
+        headers.add("topic", clientTopic);
+        var request = new HttpEntity<>(om.writeValueAsString(p), headers);
+        restTemplate.postForEntity(sidecarUrl,request,String.class);
+        sentCount.incrementAndGet();
 
     }
 

@@ -60,13 +60,6 @@ services:
       - producer_topic=RequestNoSidecar
     depends_on:
       - "swir"
-# Optional. Enable only to do some benchmarks without SWIR
-#  kafka-java-client:
-#    networks:
-#      - swir-net
-#    image: kafka-java-client
-#    depends_on:
-#      - "swir"
 networks:
   swir-net:
     external:

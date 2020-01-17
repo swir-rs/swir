@@ -39,10 +39,8 @@ public class ClientApplication {
 
 	@Bean
 	public RestTemplate produceRestTemplate(RestTemplateBuilder restTemplateBuilder){
-		return restTemplateBuilder
-				.setConnectTimeout(Duration.ofMillis(500))
-           .setReadTimeout(Duration.ofSeconds(20))
-           .build();
+		return restTemplateBuilder.setConnectTimeout(Duration.ofMillis(500))
+				.setReadTimeout(Duration.ofSeconds(20)).build();
 	}
 
 	@Bean
