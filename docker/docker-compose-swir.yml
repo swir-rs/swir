@@ -53,7 +53,7 @@ services:
       - swir-net
     image: swir-java-client:v2
     environment:
-      - sidecar_url=http://swir:8080/publish
+      - sidecar_url=h2://swir:8080/publish
       - bootstrap_servers=kafka:9094
       - consumer_topic=ResponseNoSidecar
       - consumer_group=swir

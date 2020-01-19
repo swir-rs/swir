@@ -1,6 +1,5 @@
 server:
   port: 8090
-
 sidecarUrl: ${sidecar_url}
 kafkaProducerTopic:  ${producer_topic}
 kafkaConsumerTopic: ${consumer_topic}
@@ -19,4 +18,8 @@ spring:
       bootstrap-servers: ${bootstrap_servers}
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  logging:
+    level:
+      root=INFO
+      org.springframework=INFO
 

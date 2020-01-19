@@ -180,7 +180,7 @@ public class TestController {
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 
-        var resp = request.exchange().delaySubscription(Duration.ofMillis(10)).subscribe();
+        var resp = request.exchange().delaySubscription(Duration.ofMillis(2)).subscribe();
         sentCount.incrementAndGet();
     }
 

@@ -34,7 +34,7 @@ docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create 
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic ResponseNoSidecar --partitions 2 --replication-factor 1
 
 # this should deploy swir and other components
-docker-compose -f docker/docker-compose-swir.yml up -d
+docker-compose  -f docker/docker-compose-swir.yml up -d
 
 #use these to produce and receive messasges
 
