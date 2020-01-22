@@ -55,11 +55,11 @@ protobuf {
     }
 }
 
-
+//
 //jar {
 //    manifest {
 //        attributes(
-//                'Main-Class': 'rs.swir.api.client.GrpcClient'
+//                'Main-Class': 'rs.swir.api.client.GrpcServer'
 //        )
 //    }
 //}
@@ -79,14 +79,14 @@ sourceSets {
 }
 startScripts.enabled = false
 
-task swirClient(type: CreateStartScripts) {
-    mainClassName = 'rs.swir.api.client.GrpcClient'
-    applicationName = 'swir-grpc-client'
+task swirServer(type: CreateStartScripts) {
+    mainClassName = 'rs.swir.api.server.GrpcServer'
+    applicationName = 'swir-grpc-sink'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
-    from(swirClient)
+    from(swirServer)
     fileMode = 0755
 }

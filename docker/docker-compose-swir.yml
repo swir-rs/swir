@@ -7,6 +7,7 @@ services:
     ports:
       - "8080:8080"
       - "8443:8443"
+      - "50051:50051"
     environment:
       - kafka_brokers=[kafka:9094]
       - nats_brokers=nats://nats:4222
@@ -25,6 +26,17 @@ services:
       - sink_consumer_topic=Request
       - sink_consumer_group=swir
       - sink_producer_topic=Response
+    depends_on:
+      - "swir"
+
+  swir-grpc-sink:
+    networks:
+      - swir-net
+    image: swir-grpc-sink:v2
+    ports:
+      - "50050:50052"
+    environment:
+      - grpc_port=50052
     depends_on:
       - "swir"
 

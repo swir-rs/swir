@@ -8,8 +8,8 @@ use hyper::StatusCode;
 use tokio::sync::mpsc;
 use tonic::{Response, Status};
 
-use crate::utils::structs::CustomerInterfaceType::GRPC;
 use crate::utils::structs::{EndpointDesc, Job, MessagingResult, RestToMessagingContext};
+use crate::utils::structs::CustomerInterfaceType::GRPC;
 
 pub mod client_api {
     tonic::include_proto!("swir");
@@ -34,7 +34,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
     ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> {
         // Return an instance of type HelloReply
-        println!("Got a request: {:?}", request);
+        debug!("Got a request: {:?}", request);
         let request = request.into_inner();
 
         if let Some(tx) = self.find_channel(&request.topic) {
@@ -104,15 +104,15 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         local_rx.await.unwrap();
 
         let loc_rx = self.to_client_receiver.clone();
-        let (mut tx, rx) = tokio::sync::mpsc::channel(4);
+        let (mut tx, rx) = tokio::sync::mpsc::channel(1000);
         tokio::spawn(async move {
             let mut loc_rx = loc_rx.lock().await;
             while let Some(messaging_context) = loc_rx.next().await {
                 let s = client_api::SubscribeResponse { payload: messaging_context.payload };
-                let r = tx.send(Ok(s)).await;
-                if let Err(e) = r {
-                    error!("{:?}", e);
-                }
+                let r = tx.send(Ok(s)).await.expect("Should not panic!");
+                //                if let Err(e) = r {
+                //                    error!("{:?}", e);
+                //                }
             }
         });
         Ok(Response::new(rx))

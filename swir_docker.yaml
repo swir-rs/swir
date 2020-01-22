@@ -1,7 +1,7 @@
 client_ip: "0.0.0.0"
 client_http_port: 8080
 client_https_port: 8443
-client_grpc_port: 51111
+client_grpc_port: 50051
 client_tls_private_key: "/rustycar.CA.pem"
 client_tls_certificate: "/demoCA/cacert.pem"
 #client_executable: "client.jar"

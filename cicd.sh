@@ -5,16 +5,24 @@
 
 #java based components
 cd clients/swir-java-client
-./gradlew bootJar
+./gradlew clean bootJar
 docker build --tag swir-java-client:v2 .
 
 cd ../swir-kafka-sink
-./gradlew bootJar
+./gradlew clean bootJar
 docker build --tag swir-kafka-sink:v2 .
 
 cd ../swir-nats-sink
-./gradlew bootJar
+./gradlew clean bootJar
 docker build --tag swir-nats-sink:v2 .
+
+cd ../swir-grpc-client
+./gradlew clean build installDist assembleDist
+docker build --tag swir-grpc-client:v2 .
+
+cd ../swir-grpc-sink
+./gradlew clean build installDist assembleDist
+docker build --tag swir-grpc-sink:v2 .
 cd ../../
 
 cargo build --release --features="with_nats"
@@ -41,8 +49,8 @@ docker-compose  -f docker/docker-compose-swir.yml up -d
 #docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
 #docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
 
-docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
+#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
 
 
 
@@ -55,3 +63,7 @@ docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint"
 #docker cp docker_swir_1:/pcap.logs ~/Workspace/rustycar/
 #docker-compose -f docker/docker-compose-swir.yml down --remove-orphans
 #docker logs docker_swir_1 > logs 2>&1
+
+#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=100 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v2
+#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50052 -e messages=100000 -e threads=100 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v2
+#docker run -ti --network docker_swir-net  --rm -e grpc_port=4444 swir-grpc-sink:v2

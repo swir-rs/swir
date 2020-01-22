@@ -1,24 +1,37 @@
 
 package rs.swir.api.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
+import rs.swir.api.client.payload.Payload;
 
-import java.nio.charset.Charset;
+
 import java.util.Iterator;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 public class GrpcClient {
-    private static final Logger logger = Logger.getLogger(GrpcClient.class.getName());
+    final ExecutorService ex = Executors.newCachedThreadPool();
+    private static final Logger logger = LoggerFactory.getLogger(GrpcClient.class.getName());
 
     private final ManagedChannel channel;
     private final ClientApiGrpc.ClientApiBlockingStub blockingStub;
 
-    /** Construct client connecting to HelloWorld server at {@code host:port}. */
+    /**
+     * Construct client connecting to HelloWorld server at {@code host:port}.
+     */
     public GrpcClient(String host, int port) {
         this(ManagedChannelBuilder.forAddress(host, port)
                 // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
@@ -27,7 +40,9 @@ public class GrpcClient {
                 .build());
     }
 
-    /** Construct client for accessing HelloWorld server using the existing channel. */
+    /**
+     * Construct client for accessing HelloWorld server using the existing channel.
+     */
     GrpcClient(ManagedChannel channel) {
         this.channel = channel;
         blockingStub = ClientApiGrpc.newBlockingStub(channel);
@@ -38,57 +53,166 @@ public class GrpcClient {
     }
 
 
-    public void publish(String customerTopic, String payload) {
-        logger.info("Publishing to broker" + payload);
-        PublishRequest request = PublishRequest.newBuilder().setTopic(customerTopic).setPayload(ByteString.copyFrom("hellopayload", Charset.forName("UTF-8"))).build();
-        PublishResponse response;
-        try {
-            response = blockingStub.publish(request);
-        } catch (StatusRuntimeException e) {
-            logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-            return;
-        }
-        logger.info("Response status: " + response.getStatus());
+    public void subscribeForMessagesFromSidecar(final String topic, final AtomicInteger processedCounter) {
+        ex.submit(() -> {
+            logger.info(String.format("Subscribing to topic %s", topic));
+            SubscribeRequest request = SubscribeRequest.newBuilder().setTopic(topic).build();
+
+
+            Iterator<SubscribeResponse> responseIter = blockingStub.subscribe(request);
+            while (responseIter.hasNext()) {
+                try {
+                    SubscribeResponse sr = responseIter.next();
+                    var s = new String(sr.getPayload().toByteArray());
+                    logger.debug(String.format("Message from Sidecar %s", s));
+                    int count = processedCounter.incrementAndGet();
+                    if (count % 1000 == 0) {
+                        logger.info(String.format("Received  %s", count));
+                    }
+                } catch (StatusRuntimeException e) {
+                    logger.warn(String.format("RPC failed: %s", e.getStatus()));
+                    return;
+                }
+            }
+        });
     }
 
-    public void subscribe(String topic) {
-        logger.info("Subscribing to topic " + topic);
-        SubscribeRequest request = SubscribeRequest.newBuilder().setTopic(topic).build();
 
+    public static void main(String[] args) throws Exception {
+        logger.info(String.format("GrpcClient"));
+        String sidecarHostname = System.getenv("sidecar_hostname");
+        int sidecarPort = Integer.parseInt(System.getenv("sidecar_port"));
+
+        var client = new GrpcClient(sidecarHostname, sidecarPort);
         try {
-            Iterator<SubscribeResponse> responseIter = blockingStub.subscribe(request);
-            while (responseIter.hasNext()){
-                SubscribeResponse sr = responseIter.next();
-                var s = sr.getPayload().toString();
-                logger.info("Response status " +  s);
-
-            }
-        } catch (StatusRuntimeException e) {
-            logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-            return;
+            client.executeTest(args);
+        } finally {
+            client.shutdown();
         }
+        System.exit(1);
     }
 
     /**
      * Greet server. If provided, the first element of {@code args} is the name to use in the
      * greeting.
      */
-    public static void main(String[] args) throws Exception {
-        // Access a service running on the local machine on port 50051
-        GrpcClient client = new GrpcClient("127.0.0.1", 51111);
-        try {
-            String payload = "beer is good ";
-            // Use the arg as the name to greet if provided
-            if (args.length > 0) {
-                payload = args[0];
-            }
-            client.publish("ProduceToAppA", payload);
-            client.publish("ProduceToAppB", payload);
+    public void executeTest(String[] args) throws Exception {
 
-            client.subscribe("ProduceToAppA");
 
-        } finally {
-            client.shutdown();
+        var messages = Integer.parseInt(System.getenv("messages"));
+        var threads = Integer.parseInt(System.getenv("threads"));
+        var clientRequestTopic = System.getenv("client_request_topic");
+        var clientResponseTopic = System.getenv("client_response_topic");
+        var missedPacketsThreshold = 50;
+
+        var processedCounter = new AtomicInteger(0);
+        var testStarted = new AtomicBoolean(false);
+        processedCounter.set(0);
+
+        var om = new ObjectMapper();
+
+        if (messages % threads != 0) {
+            ObjectNode response = om.createObjectNode();
+            response.put("error", " messages doesn't divide by threads ");
+            logger.warn("messages doesn't divide by threads");
+            return;
         }
+        int offset = messages / threads;
+
+        logger.info(String.format("offset %d", offset));
+
+        subscribeForMessagesFromSidecar(clientResponseTopic, processedCounter);
+
+        testStarted.set(true);
+        final AtomicLong totalSendTime = new AtomicLong(0);
+        Semaphore semaphore = new Semaphore(threads);
+
+        final AtomicInteger sentCount = new AtomicInteger();
+        semaphore.acquire(threads);
+        long totalStart = System.nanoTime();
+
+        for (int i = 0; i < threads; i++) {
+            final int k = i;
+            ex.submit(new Runnable() {
+                public void run() {
+                    logger.debug(String.format("Executing run %d ", k));
+                    long start = System.nanoTime();
+                    try {
+                        for (int j = 0; j < offset; j++) {
+                            final int c = k * offset + j;
+                            sendMessageToSidecar(blockingStub, c, om, clientRequestTopic, sentCount);
+                        }
+                    } catch (Exception e) {
+                        logger.warn(e.getMessage(), e);
+                    } finally {
+                        long stop = System.nanoTime();
+                        totalSendTime.addAndGet((stop - start));
+                        logger.debug(String.format("Run %d completed in %d", k, (stop - start)));
+                        semaphore.release();
+                    }
+
+                }
+            });
+        }
+        ;
+        semaphore.acquire(threads);
+        int oldCount = 0;
+        int missingPacketCounter = 0;
+        boolean missedPackets = false;
+
+        while (sentCount.get() != messages) {
+            Thread.sleep(100);
+        }
+        logger.info(String.format("sent count %d %d", sentCount.get(), messages));
+
+        while (processedCounter.get() != (messages) && !missedPackets) {
+            int count = processedCounter.get();
+            logger.info(String.format("completed count %d %d", count, oldCount));
+            if (oldCount == count) {
+                missingPacketCounter++;
+                logger.warn(String.format("Count has not changed %d", missingPacketCounter));
+            }
+            if (missingPacketCounter > missedPacketsThreshold) {
+                missedPackets = true;
+                logger.warn(String.format("Count has not changed %d", missingPacketCounter));
+            }
+            oldCount = count;
+            Thread.sleep(100);
+        }
+        long ts = totalSendTime.get();
+        long totalEnd = System.nanoTime();
+        long tt = totalEnd - totalStart;
+        testStarted.set(false);
+        ObjectNode response = om.createObjectNode();
+        response.put("totalSendTimeNs", ts);
+        response.put("totalSendTimeMs", TimeUnit.MILLISECONDS.convert(ts, TimeUnit.NANOSECONDS));
+        response.put("totalSendTimeS", TimeUnit.SECONDS.convert(ts, TimeUnit.NANOSECONDS));
+        response.put("totalTimeNs", tt);
+        response.put("totalTimeMs", TimeUnit.MILLISECONDS.convert(tt, TimeUnit.NANOSECONDS));
+        response.put("totalTimeS", TimeUnit.SECONDS.convert(tt, TimeUnit.NANOSECONDS));
+        response.put("throughput msg/sec", ((double) messages / tt) * TimeUnit.NANOSECONDS.convert(1, TimeUnit.SECONDS));
+        response.put("packets missed ", messages - processedCounter.get());
+        logger.info(String.format("{%s}", response));
+
+        ex.shutdown();
+
+        return;
+    }
+
+
+    void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
+        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+        logger.debug(String.format("sending request %s", p));
+        PublishRequest request = PublishRequest.newBuilder().setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+        PublishResponse response;
+        try {
+            response = blockingStub.publish(request);
+            sentCount.incrementAndGet();
+            logger.debug(String.format("Response status: %s", response.getStatus()));
+        } catch (StatusRuntimeException e) {
+            logger.warn(String.format("RPC failed: %s %s", e.getMessage(), p), e);
+            return;
+        }
+
     }
 }

@@ -129,22 +129,24 @@ impl KafkaBroker {
                     let req = value;
                     debug!("Kafka plain sending {:?}", req);
                     let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
-
+                    let kafka_producer = kafka_producer.clone();
                     if let Some(topic) = maybe_topic {
-                        let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
-                        let foo = kafka_producer.send(r, 0).map(move |status| match status {
-                            Ok(_) => sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
-                            }),
-                            Err(e) => sender.send(structs::MessagingResult {
-                                status: BackendStatusCodes::Error(e.to_string()),
-                            }),
-                        });
                         tokio::spawn(async move {
-                            if let Err(_) = foo.await {
-                                warn!("hmmm something is very wrong here. it seems that the channel has been closed");
-                            }
+                            let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
+                            let foo = kafka_producer.send(r, 0).map(move |status| match status {
+                                Ok(_) => sender.send(structs::MessagingResult {
+                                    status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
+                                }),
+                                Err(e) => sender.send(structs::MessagingResult {
+                                    status: BackendStatusCodes::Error(e.to_string()),
+                                }),
+                            });
+
+                            foo.await.expect("Should not panic!");
                         });
+                        //                            if let Err(e) = foo.await {
+                        //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);
+                        //                            }
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
@@ -157,7 +159,6 @@ impl KafkaBroker {
             }
         }
     }
-
 
     async fn kafka_incoming_event_handler(&self) {
         let context = CustomContext;
@@ -201,21 +202,21 @@ impl KafkaBroker {
                             ""
                         }
                     };
-//                    info!(
-//                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
-//                        m.key(),
-//                        payload,
-//                        m.topic(),
-//                        m.partition(),
-//                        m.offset(),
-//                        m.timestamp()
-//                    );
-//                    if let Some(headers) = m.headers() {
-//                        for i in 0..headers.count() {
-//                            let header = headers.get(i).unwrap();
-//                            info!("  Header {:#?}: {:?}", header.0, header.1);
-//                        }
-//                    }
+                    debug!(
+                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+                        m.key(),
+                        payload,
+                        m.topic(),
+                        m.partition(),
+                        m.offset(),
+                        m.timestamp()
+                    );
+                    //                    if let Some(headers) = m.headers() {
+                    //                        for i in 0..headers.count() {
+                    //                            let header = headers.get(i).unwrap();
+                    //                            info!("  Header {:#?}: {:?}", header.0, header.1);
+                    //                        }
+                    //                    }
                     let t = Vec::from(m.topic());
                     let vec = Vec::from(payload);
                     let db = self.db.clone();
@@ -229,81 +230,80 @@ impl KafkaBroker {
         }
     }
 
-
-//    async fn kafka_incoming_event_handler(&self) {
-//        let context = CustomContext;
-//
-//        let mut consumer_topics = vec![];
-//        let mut consumer_groups = vec![];
-//        for ct in self.kafka.consumer_topics.iter() {
-//            consumer_topics.push(ct.consumer_topic.clone());
-//            consumer_groups.push(ct.consumer_group.clone());
-//        }
-//
-//        let consumer_group = consumer_groups.get(0).unwrap().clone();
-//        let broker_address = self.kafka.brokers.get(0).unwrap().clone();
-//
-//        //        let consumer: LoggingConsumer = ClientConfig::new()
-//
-//        let db = self.db.clone();
-//        let tx = self.tx.clone();
-//
-//        let join = task::spawn_blocking(move || {
-//            let consumer: rdkafka::consumer::BaseConsumer<CustomContext> = ClientConfig::new()
-//                .set("group.id", &consumer_group)
-//                .set("bootstrap.servers", &broker_address)
-//                .set("enable.partition.eof", "false")
-//                .set("session.timeout.ms", "6000")
-//                .set("enable.auto.commit", "true")
-//                //.set("statistics.interval.ms", "30000")
-//                //.set("auto.offset.reset", "smallest")
-//                .set_log_level(RDKafkaLogLevel::Warning)
-//                .create_with_context(context)
-//                .expect("Consumer creation failed");
-//
-//            let topics: Vec<&str> = consumer_topics.iter().map(|x| &**x).collect();
-//            consumer.subscribe(&topics).expect("Can't subscribe to topics");
-//
-//            for message in consumer.iter() {
-//                let a = future::ready(match message {
-//                    Err(e) => warn!("Kafka error: {}", e),
-//                    Ok(m) => {
-//                        let payload = match m.payload_view::<str>() {
-//                            None => "",
-//                            Some(Ok(s)) => s,
-//                            Some(Err(e)) => {
-//                                warn!("Error while deserializing message payload: {:?}", e);
-//                                ""
-//                            }
-//                        };
-//                        //                        info!(
-//                        //                            "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
-//                        //                            m.key(),
-//                        //                            payload,
-//                        //                            m.topic(),
-//                        //                            m.partition(),
-//                        //                            m.offset(),
-//                        //                            m.timestamp()
-//                        //                        );
-//                        //                        if let Some(headers) = m.headers() {
-//                        //                            for i in 0..headers.count() {
-//                        //                                let header = headers.get(i).unwrap();
-//                        //                                info!("  Header {:#?}: {:?}", header.0, header.1);
-//                        //                            }
-//                        //                        }
-//                        let t = Vec::from(m.topic());
-//                        let vec = Vec::from(payload);
-//
-//                        //                    consumer.commit_message(&m, CommitMode::Async).unwrap();
-//
-//                        send_request(&db, &tx, vec, t);
-//                    }
-//                });
-//                tokio::spawn(a);
-//            }
-//        });
-//        let _res = join.await;
-//    }
+    //    async fn kafka_incoming_event_handler(&self) {
+    //        let context = CustomContext;
+    //
+    //        let mut consumer_topics = vec![];
+    //        let mut consumer_groups = vec![];
+    //        for ct in self.kafka.consumer_topics.iter() {
+    //            consumer_topics.push(ct.consumer_topic.clone());
+    //            consumer_groups.push(ct.consumer_group.clone());
+    //        }
+    //
+    //        let consumer_group = consumer_groups.get(0).unwrap().clone();
+    //        let broker_address = self.kafka.brokers.get(0).unwrap().clone();
+    //
+    //        //        let consumer: LoggingConsumer = ClientConfig::new()
+    //
+    //        let db = self.db.clone();
+    //        let tx = self.tx.clone();
+    //
+    //        let join = task::spawn_blocking(move || {
+    //            let consumer: rdkafka::consumer::BaseConsumer<CustomContext> = ClientConfig::new()
+    //                .set("group.id", &consumer_group)
+    //                .set("bootstrap.servers", &broker_address)
+    //                .set("enable.partition.eof", "false")
+    //                .set("session.timeout.ms", "6000")
+    //                .set("enable.auto.commit", "true")
+    //                //.set("statistics.interval.ms", "30000")
+    //                //.set("auto.offset.reset", "smallest")
+    //                .set_log_level(RDKafkaLogLevel::Warning)
+    //                .create_with_context(context)
+    //                .expect("Consumer creation failed");
+    //
+    //            let topics: Vec<&str> = consumer_topics.iter().map(|x| &**x).collect();
+    //            consumer.subscribe(&topics).expect("Can't subscribe to topics");
+    //
+    //            for message in consumer.iter() {
+    //                let a = future::ready(match message {
+    //                    Err(e) => warn!("Kafka error: {}", e),
+    //                    Ok(m) => {
+    //                        let payload = match m.payload_view::<str>() {
+    //                            None => "",
+    //                            Some(Ok(s)) => s,
+    //                            Some(Err(e)) => {
+    //                                warn!("Error while deserializing message payload: {:?}", e);
+    //                                ""
+    //                            }
+    //                        };
+    //                        //                        info!(
+    //                        //                            "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+    //                        //                            m.key(),
+    //                        //                            payload,
+    //                        //                            m.topic(),
+    //                        //                            m.partition(),
+    //                        //                            m.offset(),
+    //                        //                            m.timestamp()
+    //                        //                        );
+    //                        //                        if let Some(headers) = m.headers() {
+    //                        //                            for i in 0..headers.count() {
+    //                        //                                let header = headers.get(i).unwrap();
+    //                        //                                info!("  Header {:#?}: {:?}", header.0, header.1);
+    //                        //                            }
+    //                        //                        }
+    //                        let t = Vec::from(m.topic());
+    //                        let vec = Vec::from(payload);
+    //
+    //                        //                    consumer.commit_message(&m, CommitMode::Async).unwrap();
+    //
+    //                        send_request(&db, &tx, vec, t);
+    //                    }
+    //                });
+    //                tokio::spawn(a);
+    //            }
+    //        });
+    //        let _res = join.await;
+    //    }
 }
 
 #[async_trait]
