@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use config::{Config, File};
 use futures::lock::Mutex;
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext};
@@ -153,9 +152,9 @@ impl Swir {
 //
 
 pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
-    let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(10000);
+    let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
-    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(10000);
+    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
     let to_client_sender_for_rest = Box::new(to_client_sender_for_rest);
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));
@@ -167,7 +166,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let mut from_client_to_backend_channel_sender = HashMap::new();
 
     for kafka_channels in config.channels.kafka.iter() {
-        let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(10000);
+        let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
             to_client_sender_for_rest: to_client_sender_for_rest.clone(),
@@ -188,7 +187,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     #[cfg(feature = "with_nats")]
     {
         for nats_channels in config.channels.nats.iter() {
-            let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(1000);
+            let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
 
             let from_client_sender = Box::new(from_client_sender);
 

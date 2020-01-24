@@ -34,7 +34,7 @@ services:
       - swir-net
     image: swir-grpc-sink:v2
     ports:
-      - "50050:50052"
+      - "50052:50052"
     environment:
       - grpc_port=50052
     depends_on:

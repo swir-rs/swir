@@ -42,7 +42,7 @@ public class IncomingMessagesController {
             p = om.readValue(body, Payload.class);
             if(testStarted.get()) {
                 processedCounter.incrementAndGet();
-                logger.info(String.format("#### -> Incoming message  -> %s", p));
+                logger.debug(String.format("#### -> Incoming message  -> %s", p));
             }else{
                 logger.warn(String.format("#### -> Incoming message  -> %s", p));
             }

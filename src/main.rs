@@ -141,10 +141,7 @@ async fn main() {
 
     let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
 
-    let swir = grpc_handler::SwirAPI {
-        from_client_to_backend_channel_sender,
-        to_client_receiver: to_client_receiver_for_grpc,
-    };
+    let swir = grpc_handler::SwirAPI::new(from_client_to_backend_channel_sender, to_client_receiver_for_grpc);
 
     let svc = grpc_handler::client_api::client_api_server::ClientApiServer::new(swir);
     let grpc = tonic::transport::Server::builder().add_service(svc).serve(client_grpc_addr);
