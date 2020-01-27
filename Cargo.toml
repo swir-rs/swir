@@ -53,13 +53,14 @@ nats = {version="*",optional=true}
 async-trait="*"
 prost = "0.6"
 prost-derive = "0.6"
-tonic = {version="0.1.0-alpha.6", path ="../tonic/tonic", optional=false}
-
-config = { version="*", path = "../config-rs", features = ["with_env_vars"]}
-
+#tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
+tonic = {version="0.1.1", optional=false}
+#config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
+config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
 
 [build-dependencies]
-tonic-build = { version="0.1.0-alpha.6", path ="../tonic/tonic-build" }
+#tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }
+tonic-build = { version="0.1.1" }
 
 [features]
 with_nats = ["nats"]
