@@ -155,7 +155,7 @@ public class TestController {
             oldCount = count;
             Thread.sleep(100);
         }
-        long ts = totalSendTime.get();
+        long ts = totalSendTime.get()/threads;
         long totalEnd = System.nanoTime();
         long tt = totalEnd-totalStart;
         testStarted.set(false);
