@@ -1,67 +1,67 @@
 [package]
-name = "rustycar"
-version = "0.1.0"
-authors = ["dawid.nowak <nowakd@gmail.com>"]
+name = "swir"
+version = "0.2.0"
+authors = ["Dawid Nowak <nowakd@gmail.com>"]
+repository = "https://github.com/swir-rs/swir"
+readme = "README.md"
+license = "Apache-2.0"
+description = "Sidecar Written in Rust"
+keywords = ["sidecar", "rest", "messaging","cloudcomputing","kafka","nats","grpc"]
+categories = ["sidecar","messaging","kafka","nats","grpc","cloudcomputing"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+publish = false
 
 [dependencies]
-futures = "0.1"
-http = "0.1"
-io = "*"
-hyper = "0.12"
-rustls = "0.13"
-tokio-io = "0.1.1"
-tokio-rustls = "0.7"
-tokio-tcp = "0.1"
-webpki = "0.18.1"
-webpki-roots = "0.15"
-tokio = "0.1"
-kafka = "*"
-log = "0.4"
-env_logger = "*"
-clap = {version = ">=2.33.0", features = ["yaml"]}
-serde = {version = "*", features = ["derive"] }
-serde_json = {version = "= 1.0.41"}
-crossbeam-channel = "*"
-sled = "*"
-sha2 = "*"
-bincode ="*"
-hex-literal="*"
-rdkafka  = { version = "~0.20"}
-rdkafka-sys = { version ="^0.11.6-1"}
-natsclient = "*"
+bytes = "0.4"
+futures = "=0.3"
+futures-core= "=0.3"
+futures-util = "=0.3"
+futures-executor = "=0.3"
 
+http = "0.2"
+http-body = "=0.3"
+httparse = "1.0"
+h2 = "=0.2"
+iovec = "0.1"
+itoa = "0.4.1"
+log = "0.4"
+pin-project = "0.4"
+time = "0.1"
+tower-service = "=0.3"
+tower-make = { version = "=0.3"}
+want = "0.3"
+color-backtrace="*"
+
+# Optional
+net2 = { version = "0.2", optional = true }
+
+tokio = { version = "=0.2", features = ["full","sync"]}
+tokio-rustls = "0.12.0-alpha.8"
+rustls = "0.16"
+async-stream = "0.2"
+hyper = "0.13"
+#hyper = { path = "../hyper" , features = ["runtime","stream"]}
+env_logger = "*"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+
+#rdkafka = { version="0.23.1", path = "../rust-rdkafka" }
+rdkafka = { version="0.23" }
+#rdkafka-sys = { version = "1.3.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
+rdkafka-sys = { version = "1.3", default-features = false}
+sled = "*"
+nats = {version="*",optional=true}
+async-trait="*"
+prost = "0.6"
+prost-derive = "0.6"
+#tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
+tonic = {version="0.1", optional=false}
+#config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
+config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
+
+[build-dependencies]
+#tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }
+tonic-build = { version="0.1" }
 
 [features]
-with_nats = []
-
-
-
-#
-#hyper = "=0.12.35"
-#
-#bytes = "0.4.6"
-#futures = "0.1.21"
-#futures-cpupool = { version = "0.1.6", optional = true }
-#http = "0.1.15"
-#http-body = "0.1"
-#httparse = "1.0"
-#h2 = "0.1.13"
-#iovec = "0.1"
-#itoa = "0.4.1"
-#
-#
-#net2 = { version = "0.2.32", optional = true }
-#time = "0.1"
-#tokio = { version = "0.1.14", optional = true, default-features = false, features = ["rt-full"] }
-#tokio-buf = "0.1"
-#tokio-executor = { version = "0.1.0", optional = true }
-#tokio-rs = "0.1"
-#tokio-reactor = { version = "0.1", optional = true }
-#tokio-tcp = { version = "0.1", optional = true }
-#tokio-threadpool = { version = "0.1.16", optional = true }
-#tokio-timer = { version = "0.2", optional = true }
-#want = "0.2"
+with_nats = ["nats"]

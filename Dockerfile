@@ -1,14 +1,16 @@
 FROM ubuntu:19.10
 COPY demoCA /demoCA
-COPY rustycar.CA.pem /rustycar.CA.pem
+COPY swir.CA.pem /swir.CA.pem
 RUN apt-get update && apt-get install -y openjdk-14-jdk
 ARG executable
 ARG client
-COPY ${executable} /rustycar
+ARG swir_config
+COPY ${executable} /swir
 COPY $client /client.jar
-RUN chmod +x /rustycar
+COPY $swir_config /swir.yaml
+RUN chmod +x /swir
 ENV RUST_BACKTRACE=full
-ENV RUST_LOG=info
+ENV RUST_LOG=info,hyper=info,tonic=warn
 
-EXPOSE 8080 8443 8090
-ENTRYPOINT ["./rustycar","-a","0.0.0.0","-b","kafka:9094","-s","Request","-r","Response","-g","rustycar","-e","client.jar"]
+EXPOSE 8080 8443 8090 50051
+ENTRYPOINT ["./swir"]

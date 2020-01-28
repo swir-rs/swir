@@ -1,190 +1,317 @@
-use std::borrow::Borrow;
-use std::thread;
-use std::thread::JoinHandle;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crossbeam_channel::{bounded, Receiver, Sender};
 use futures::future;
-use hyper::rt::{Future, Stream};
+use futures::future::FutureExt;
+use futures::lock::Mutex;
+use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
-use rdkafka::consumer::{Consumer, ConsumerContext, Rebalance, StreamConsumer};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance};
+use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::error::KafkaResult;
-use rdkafka::message::{Message, ToBytes};
+use rdkafka::message::Message;
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::TopicPartitionList;
 use sled::{Db, IVec};
+use tokio::sync::mpsc;
+use tokio::task;
 
-use crate::utils;
+use async_trait::async_trait;
+
+use crate::messaging_handlers::Broker;
+use crate::utils::config::Kafka;
+
 use super::super::utils::structs;
 use super::super::utils::structs::*;
-use kafka::producer::AsBytes;
-
-pub type Result<T> = std::result::Result<T, String>;
 
 impl ClientContext for CustomContext {}
+
+#[derive(Debug)]
+pub struct KafkaBroker {
+    pub kafka: Kafka,
+    pub db: Db,
+    pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
+    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
+}
 
 impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
         info!("Pre rebalance {:?}", rebalance);
     }
+
     fn post_rebalance(&self, rebalance: &Rebalance) {
         info!("Post rebalance {:?}", rebalance);
     }
-    fn commit_callback(
-        &self,
-        result: KafkaResult<()>,
-        _offsets: *mut rdkafka_sys::RDKafkaTopicPartitionList,
-    ) {
-        debug!("Committing offsets: {:?}", result);
+
+    fn commit_callback(&self, result: KafkaResult<()>, _offsets: &TopicPartitionList) {
+        info!("Committing offsets: {:?}", result);
     }
 }
 
+type LoggingConsumer = StreamConsumer<CustomContext>;
 
-pub fn configure_broker(broker_address: String, sending_topic: String, receiving_topic: String, receiving_group: String, db: Db, rx: Receiver<RestToMessagingContext>, tx: Sender<utils::structs::MessagingToRestContext>) -> Result<Vec<JoinHandle<()>>> {
-    let context = CustomContext;
+async fn send_request(db: &Db, tx: &Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>, p: Vec<u8>, topic: Vec<u8>) {
+    debug!("Processing message  {:?}", p);
+    if let Ok(maybe_url) = db.get(topic) {
+        if let Some(url) = maybe_url {
+            let vec = url.to_vec();
+            let subscribe_request: SubscribeRequest = serde_json::from_slice(&vec).unwrap();
+            let (s, _r) = futures::channel::oneshot::channel();
 
-    let plain_producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &broker_address)
-        .set("message.timeout.ms", "5000")
-        .create().expect("Can't start broker");
+            let p = MessagingToRestContext {
+                sender: s,
+                payload: p.to_vec(),
+                uri: subscribe_request.endpoint.url.clone(),
+            };
 
-    let consumer: StreamConsumer<CustomContext> = ClientConfig::new()
-        .set("group.id", &receiving_group)
-        .set("bootstrap.servers", &broker_address)
-        .set("enable.partition.eof", "false")
-        .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "true")
-        //.set("statistics.interval.ms", "30000")
-        //.set("auto.offset.reset", "smallest")
-        .set_log_level(RDKafkaLogLevel::Debug)
-        .create_with_context(context).expect("Can't start broker");
+            let mut tx = tx.get(&subscribe_request.client_interface_type).unwrap().clone();
+            if let Err(e) = tx.try_send(p) {
+                warn!("Error from the client {}", e)
+            }
 
-    let mut topics: Vec<&str> = vec!();
-    topics.push(&receiving_topic);
-    let tt = topics.borrow();
-    consumer.subscribe(tt).expect("Can't subscribe to topics");
-
-    let mut threads: Vec<JoinHandle<()>> = vec!();
-    threads.push(create_sending_thread(receiving_topic, sending_topic, db.clone(), rx, plain_producer));
-    threads.push(create_receiving_thread(consumer, tx, db));
-    Ok(threads)
-}
-
-
-fn create_sending_thread(receiving_topic: String, sending_topic: String, db: Db, rx: Receiver<RestToMessagingContext>, producer: FutureProducer) -> JoinHandle<()> {
-    let res = thread::spawn(move || {
-        loop {
-            kafka_event_handler(&rx, &producer, &sending_topic, &receiving_topic, &db);
+            //    match r.recv() {
+            //        Ok(r) => debug!("Response from the client {:?}", r),
+            //        Err(e) => warn!("Internal communication error  {}", e)
+            //    }
         }
-    });
-    res
+    }
 }
 
+impl KafkaBroker {
+    async fn kafka_event_handler(&self) {
+        let kafka_producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", self.kafka.brokers.get(0).unwrap())
+            .set("message.timeout.ms", "5000")
+            .create()
+            .expect("Can't start broker");
 
-fn create_receiving_thread(consumer: StreamConsumer<CustomContext>, tx: Sender<utils::structs::MessagingToRestContext>, db: Db) -> JoinHandle<()> {
-    let res = thread::spawn(move || { hyper::rt::run(future::lazy(move || { kafka_incoming_event_handler(&consumer, tx, &db) })) });
-    res
-}
+        info!("Kafka running");
 
+        let mut rx = self.rx.lock().await;
 
-pub fn kafka_event_handler(rx: &Receiver<RestToMessagingContext>, kafka_producer: &FutureProducer, publish_topic: &str, subscribe_topic: &str, db: &Db) {
-    let job = rx.recv().unwrap();
+        while let Some(job) = rx.next().await {
+            let sender = job.sender;
+            match job.job {
+                Job::Subscribe(value) => {
+                    let req = value;
+                    info!("New registration  {:?}", req);
 
-    let sender = job.sender;
-    match job.job {
-        Job::Subscribe(value) => {
-            let req = value;
-            info!("New registration  {:?}", req);
-            if let Err(e) = db.insert(subscribe_topic, IVec::from(req.endpoint.url.as_bytes())) {
-                warn!("Can't store registration {:?}", e);
-                if let Err(e) = sender.send(structs::MessagingResult { status: 1, result: e.to_string() }) {
-                    warn!("Can't send response back {:?}", e);
+                    let maybe_topic = self.kafka.get_consumer_topic_for_client_topic(&req.client_topic);
+
+                    if let Some(topic) = maybe_topic {
+                        let s = serde_json::to_string(&req).unwrap();
+                        if let Err(e) = self.db.insert(topic, IVec::from(s.as_bytes())) {
+                            warn!("Can't store registration {:?}", e);
+                            if let Err(e) = sender.send(structs::MessagingResult {
+                                status: BackendStatusCodes::Error(e.to_string()),
+                            }) {
+                                warn!("Can't send response back {:?}", e);
+                            }
+                        } else {
+                            if let Err(e) = sender.send(structs::MessagingResult {
+                                status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
+                            }) {
+                                warn!("Can't send response back {:?}", e);
+                            }
+                        };
+                    } else {
+                        warn!("Can't find topic {:?}", req);
+                        if let Err(e) = sender.send(structs::MessagingResult {
+                            status: BackendStatusCodes::NoTopic("Can't find produce topic".to_string()),
+                        }) {
+                            warn!("Can't send response back {:?}", e);
+                        }
+                    }
                 }
-            } else {
-                if let Err(e) = sender.send(structs::MessagingResult { status: 1, result: "All is good".to_string() }) {
-                    warn!("Can't send response back {:?}", e);
+
+                Job::Publish(value) => {
+                    let req = value;
+                    debug!("Kafka plain sending {:?}", req);
+                    let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
+                    let kafka_producer = kafka_producer.clone();
+                    if let Some(topic) = maybe_topic {
+                        tokio::spawn(async move {
+                            let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
+                            let foo = kafka_producer.send(r, 0).map(move |status| match status {
+                                Ok(_) => sender.send(structs::MessagingResult {
+                                    status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
+                                }),
+                                Err(e) => sender.send(structs::MessagingResult {
+                                    status: BackendStatusCodes::Error(e.to_string()),
+                                }),
+                            });
+
+                            foo.await.expect("Should not panic!");
+                        });
+                        //                            if let Err(e) = foo.await {
+                        //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);
+                        //                            }
+                    } else {
+                        warn!("Can't find topic {:?}", req);
+                        if let Err(e) = sender.send(structs::MessagingResult {
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+                        }) {
+                            warn!("Can't send response back {:?}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn kafka_incoming_event_handler(&self) {
+        let context = CustomContext;
+
+        let mut consumer_topics = vec![];
+        let mut consumer_groups = vec![];
+        for ct in self.kafka.consumer_topics.iter() {
+            consumer_topics.push(ct.consumer_topic.clone());
+            consumer_groups.push(ct.consumer_group.clone());
+        }
+
+        let consumer_group = consumer_groups.get(0).unwrap();
+        let broker_address = self.kafka.brokers.get(0).unwrap();
+
+        let consumer: LoggingConsumer = ClientConfig::new()
+            .set("group.id", consumer_group)
+            .set("bootstrap.servers", broker_address)
+            .set("enable.partition.eof", "false")
+            .set("session.timeout.ms", "6000")
+            .set("enable.auto.commit", "true")
+            //.set("statistics.interval.ms", "30000")
+            //.set("auto.offset.reset", "smallest")
+            .set_log_level(RDKafkaLogLevel::Warning)
+            .create_with_context(context)
+            .expect("Consumer creation failed");
+
+        let topics: Vec<&str> = consumer_topics.iter().map(|x| &**x).collect();
+        consumer.subscribe(&topics).expect("Can't subscribe to topics");
+
+        let mut message_stream = consumer.start();
+
+        while let Some(message) = message_stream.next().await {
+            match message {
+                Err(e) => warn!("Kafka error: {}", e),
+                Ok(m) => {
+                    let payload = match m.payload_view::<str>() {
+                        None => "",
+                        Some(Ok(s)) => s,
+                        Some(Err(e)) => {
+                            warn!("Error while deserializing message payload: {:?}", e);
+                            ""
+                        }
+                    };
+                    debug!(
+                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+                        m.key(),
+                        payload,
+                        m.topic(),
+                        m.partition(),
+                        m.offset(),
+                        m.timestamp()
+                    );
+                    //                    if let Some(headers) = m.headers() {
+                    //                        for i in 0..headers.count() {
+                    //                            let header = headers.get(i).unwrap();
+                    //                            info!("  Header {:#?}: {:?}", header.0, header.1);
+                    //                        }
+                    //                    }
+                    let t = Vec::from(m.topic());
+                    let vec = Vec::from(payload);
+                    let db = self.db.clone();
+                    let tx = self.tx.clone();
+                    //                    consumer.commit_message(&m, CommitMode::Async).unwrap();
+                    tokio::spawn(async move {
+                        send_request(&db, &tx, vec, t).await;
+                    });
                 }
             };
         }
-
-        Job::Publish(value) => {
-            let req = value;
-            debug!("Kafka plain sending {:?}", req);
-            let r = FutureRecord::to(publish_topic).payload(ToBytes::to_bytes(&req.payload))
-                .key("some key".to_bytes());
-            let foo = kafka_producer.send(r, 0).map(move |status| {
-                match status {
-                    Ok(_) => {
-                        sender.send(structs::MessagingResult { status: 1, result: "KAFKA is good".to_string() })
-                    }
-                    Err(e) => {
-                        sender.send(structs::MessagingResult { status: 1, result: e.0.to_string() })
-                    }
-                }
-            });
-            if let Err(_) = foo.wait() {
-                warn!("hmmm something is very wrong here. it seems that the channel has been closed");
-            }
-        }
     }
+
+    //    async fn kafka_incoming_event_handler(&self) {
+    //        let context = CustomContext;
+    //
+    //        let mut consumer_topics = vec![];
+    //        let mut consumer_groups = vec![];
+    //        for ct in self.kafka.consumer_topics.iter() {
+    //            consumer_topics.push(ct.consumer_topic.clone());
+    //            consumer_groups.push(ct.consumer_group.clone());
+    //        }
+    //
+    //        let consumer_group = consumer_groups.get(0).unwrap().clone();
+    //        let broker_address = self.kafka.brokers.get(0).unwrap().clone();
+    //
+    //        //        let consumer: LoggingConsumer = ClientConfig::new()
+    //
+    //        let db = self.db.clone();
+    //        let tx = self.tx.clone();
+    //
+    //        let join = task::spawn_blocking(move || {
+    //            let consumer: rdkafka::consumer::BaseConsumer<CustomContext> = ClientConfig::new()
+    //                .set("group.id", &consumer_group)
+    //                .set("bootstrap.servers", &broker_address)
+    //                .set("enable.partition.eof", "false")
+    //                .set("session.timeout.ms", "6000")
+    //                .set("enable.auto.commit", "true")
+    //                //.set("statistics.interval.ms", "30000")
+    //                //.set("auto.offset.reset", "smallest")
+    //                .set_log_level(RDKafkaLogLevel::Warning)
+    //                .create_with_context(context)
+    //                .expect("Consumer creation failed");
+    //
+    //            let topics: Vec<&str> = consumer_topics.iter().map(|x| &**x).collect();
+    //            consumer.subscribe(&topics).expect("Can't subscribe to topics");
+    //
+    //            for message in consumer.iter() {
+    //                let a = future::ready(match message {
+    //                    Err(e) => warn!("Kafka error: {}", e),
+    //                    Ok(m) => {
+    //                        let payload = match m.payload_view::<str>() {
+    //                            None => "",
+    //                            Some(Ok(s)) => s,
+    //                            Some(Err(e)) => {
+    //                                warn!("Error while deserializing message payload: {:?}", e);
+    //                                ""
+    //                            }
+    //                        };
+    //                        //                        info!(
+    //                        //                            "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+    //                        //                            m.key(),
+    //                        //                            payload,
+    //                        //                            m.topic(),
+    //                        //                            m.partition(),
+    //                        //                            m.offset(),
+    //                        //                            m.timestamp()
+    //                        //                        );
+    //                        //                        if let Some(headers) = m.headers() {
+    //                        //                            for i in 0..headers.count() {
+    //                        //                                let header = headers.get(i).unwrap();
+    //                        //                                info!("  Header {:#?}: {:?}", header.0, header.1);
+    //                        //                            }
+    //                        //                        }
+    //                        let t = Vec::from(m.topic());
+    //                        let vec = Vec::from(payload);
+    //
+    //                        //                    consumer.commit_message(&m, CommitMode::Async).unwrap();
+    //
+    //                        send_request(&db, &tx, vec, t);
+    //                    }
+    //                });
+    //                tokio::spawn(a);
+    //            }
+    //        });
+    //        let _res = join.await;
+    //    }
 }
 
-fn send_request(m: impl Message, tx: &Sender<utils::structs::MessagingToRestContext>, db: &Db) {
-    let payload = match m.payload() {
-        None => "".as_bytes(),
-        Some(s) => s
-    };
-    if payload.is_empty() {
-        return
+#[async_trait]
+impl Broker for KafkaBroker {
+    async fn configure_broker(&self) {
+        info!("Configuring KAFKA broker {:?} ", self);
+        let f1 = async { self.kafka_incoming_event_handler().await };
+        let f2 = async { self.kafka_event_handler().await };
+        let (_r1, _r2) = futures::join!(f1, f2);
     }
-
-    let mut uri: String = String::from("");
-
-    let p = String::from_utf8_lossy(payload.as_bytes());
-    info!("Processing message  {}",p);
-    if let Ok(maybe_url) = db.get(m.topic()) {
-        if let Some(url) = maybe_url {
-            let vec = url.to_vec();
-            uri = String::from_utf8_lossy(vec.borrow()).to_string();
-        }
-    }
-
-
-    let (s, _r) = bounded(1);
-    let p = MessagingToRestContext {
-        sender: s,
-        payload: payload.as_bytes().to_vec(),
-        uri,
-    };
-
-    if let Err(e) = tx.send(p) {
-        warn!("Error from the client {}", e)
-    }
-//    match r.recv() {
-//        Ok(r) => debug!("Response from the client {:?}", r),
-//        Err(e) => warn!("Internal communication error  {}", e)
-//    }
 }
-
-pub fn kafka_incoming_event_handler(consumer: &StreamConsumer<structs::CustomContext>, tx: Sender<utils::structs::MessagingToRestContext>, db: &Db) -> impl Future<Item=(), Error=()> {
-    let stream = consumer.start();
-    for message in stream.wait() {
-        let f = {
-            match message {
-                Err(e) => {
-                    warn!("Error while reading from stream. {:?}", e);
-                }
-                Ok(Err(e)) => {
-                    warn!("Error while reading from stream. {:?} ", e);
-                }
-                Ok(Ok(m)) => {
-                    send_request(m, &tx, &db);
-                }
-            }
-            future::ok(())
-        };
-        hyper::rt::spawn(f);
-    };
-    futures::future::ok(())
-}
-
-

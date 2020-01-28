@@ -3,29 +3,75 @@ services:
   swir:
     networks:
       - swir-net
-    image: swir:with_kafka
+    image: swir:v2
     ports:
       - "8080:8080"
       - "8443:8443"
+      - "50051:50051"
+    environment:
+      - kafka_brokers=[kafka:9094]
+      - nats_brokers=nats://nats:4222
+      - consumer_topic_1=Response
+      - consumer_group_1=swir
+      - client_consumer_topic_1=SubscribeToAppA
+      - producer_topic_1=Request
+      - client_producer_topic_1=ProduceToAppA
+
   swir-kafka-sink:
     networks:
       - swir-net
-    image: swir-kafka-sink
+    image: swir-kafka-sink:v2
+    environment:
+      - bootstrap_servers=kafka:9094
+      - sink_consumer_topic=Request
+      - sink_consumer_group=swir
+      - sink_producer_topic=Response
+    depends_on:
+      - "swir"
+
+  swir-grpc-sink:
+    networks:
+      - swir-net
+    image: swir-grpc-sink:v2
+    ports:
+      - "50052:50052"
+    environment:
+      - grpc_port=50052
+    depends_on:
+      - "swir"
+
+  swir-kafka-sink-nosidecar:
+    networks:
+      - swir-net
+    image: swir-kafka-sink:v2
+    environment:
+      - bootstrap_servers=kafka:9094
+      - sink_consumer_topic=RequestNoSidecar
+      - sink_consumer_group=swir
+      - sink_producer_topic=ResponseNoSidecar
+    depends_on:
+      - "swir"
+
+  swir-nats-sink:
+    networks:
+      - swir-net
+    image: swir-nats-sink:v2
+    environment:
+      - bootstrap_servers=nats://nats:4222
     depends_on:
       - "swir"
   swir-java-client:
     networks:
       - swir-net
-    image: swir-java-client
+    image: swir-java-client:v2
+    environment:
+      - sidecar_url=h2://swir:8080/publish
+      - bootstrap_servers=kafka:9094
+      - consumer_topic=ResponseNoSidecar
+      - consumer_group=swir
+      - producer_topic=RequestNoSidecar
     depends_on:
       - "swir"
-# Optional. Enable only to do some benchmarks without SWIR
-#  kafka-java-client:
-#    networks:
-#      - swir-net
-#    image: kafka-java-client
-#    depends_on:
-#      - "swir"
 networks:
   swir-net:
     external:

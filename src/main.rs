@@ -1,126 +1,150 @@
 //#![deny(warnings)]
-#[macro_use]
-extern crate clap;
+
 #[macro_use]
 extern crate log;
 
+use std::{
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+use std::io::{Error as StdError, ErrorKind};
 
-use std::{io, sync};
-use std::thread;
-
-use clap::App;
-use crossbeam_channel::{Receiver, Sender, unbounded};
-use futures::future;
-use hyper::rt::{Future, Stream};
-use hyper::Server;
-use hyper::service::service_fn;
+use futures_core::Stream;
+use futures_util::{ready, TryStreamExt};
+use hyper::{
+    Body,
+    Request, server::{accept::Accept, conn}, Server,
+};
+use hyper::service::{make_service_fn, service_fn};
 use sled::Config;
-use tokio_rustls::ServerConfigExt;
+use tokio_rustls::TlsAcceptor;
 
+use boxio::BoxedIo;
 use http_handler::client_handler;
 use http_handler::handler;
 use utils::pki_utils::{load_certs, load_private_key};
 
-mod messaging_handlers;
+use crate::utils::config::MemoryChannel;
+
+mod boxio;
+mod grpc_handler;
 mod http_handler;
+mod messaging_handlers;
 mod utils;
 
+#[derive(Debug)]
+struct TcpIncoming {
+    inner: conn::AddrIncoming,
+}
 
-fn main() {
-    env_logger::init();
-    let yaml = load_yaml!("cli.yml");
-    let matches = App::from_yaml(yaml).get_matches();
-    info!("Application arguments {:?}", matches);
+impl TcpIncoming {
+    fn bind(addr: SocketAddr) -> Result<Self, StdError> {
+        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
+        inner.set_nodelay(true);
+        Ok(Self { inner })
+    }
+}
 
+impl Stream for TcpIncoming {
+    type Item = Result<conn::AddrStream, StdError>;
 
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match ready!(Accept::poll_accept(Pin::new(&mut self.inner), cx)) {
+            Some(Ok(s)) => Poll::Ready(Some(Ok(s))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e.into()))),
+            None => Poll::Ready(None),
+        }
+    }
+}
 
-    let external_address = matches.value_of("address").unwrap();
-    let tls_port: u16 = matches.value_of("tlsport").unwrap_or_default().parse().expect("Unable to parse socket port");
-    let plain_port: u16 = matches.value_of("plainport").unwrap_or_default().parse().expect("Unable to parse socket port");
-    let sending_topic = matches.value_of("sending_topic").unwrap();
-    let broker_address = matches.value_of("broker").unwrap();
-    let command = matches.value_of("execute_command").unwrap();
-    let receiving_topic = matches.value_of("receiving_topic").unwrap();
+#[tokio::main]
+async fn main() {
+    color_backtrace::install();
+    env_logger::builder().format_timestamp_nanos().init();
+    let swir_config = utils::config::Swir::new();
 
+    let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
 
-    let receiving_group = matches.value_of("receiving_group").unwrap_or_default();
-    let http_tls_certificate = matches.value_of("http_tls_certificate").unwrap_or_default();
-    let http_tls_key = matches.value_of("http_tls_key").unwrap();
+    let client_ip = swir_config.client_ip.clone();
+    let client_https_port: u16 = swir_config.client_https_port.clone();
+    let client_http_port: u16 = swir_config.client_http_port.clone();
+    let client_grpc_port: u16 = swir_config.client_grpc_port.clone();
+    let client_executable = swir_config.client_executable.clone();
 
-    let tls_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), tls_port);
-    let plain_socket_addr = std::net::SocketAddr::new(external_address.parse().unwrap(), plain_port);
+    let http_tls_certificate = swir_config.client_tls_certificate.clone();
+    let http_tls_key = swir_config.client_tls_private_key.clone();
 
-    info!("Using kafka broker on {}", broker_address);
-    info!("Tls port Listening on {}", tls_socket_addr);
-    info!("Plain port Listening on {}", plain_socket_addr);
+    let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
+    let client_http_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
+    let client_grpc_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
 
     let config = Config::new().temporary(true);
     let db = config.open().unwrap();
 
-    let tls_cfg = {
-        // Load public certificate.
-        let certs = load_certs(&http_tls_certificate).unwrap();
-        // Load private key.
-        let key = load_private_key(&http_tls_key).unwrap();
-        // Do not use client certificate authentication.
-        let mut cfg = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-        // Select a certificate to use.
-        cfg.set_single_cert(certs, key)
-            .map_err(|e| warn!("Problem with a cert {:?}", e)).unwrap();
-        sync::Arc::new(cfg)
+    let certs = load_certs(http_tls_certificate).unwrap();
+    // Load private key.
+    let key = load_private_key(http_tls_key).unwrap();
+
+    let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+    config.set_single_cert(certs, key).expect("invalid key or certificate");
+    let tls = TlsAcceptor::from(Arc::new(config));
+
+    let incoming = hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
+        let mut tcp = TcpIncoming::bind(client_https_addr)?;
+         while let Some(stream) = tcp.try_next().await? {
+            {
+                    let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
+                        Ok(io) => io,
+                        Err(error) => {
+                            error!("Unable to accept incoming connection. {:?}", error);
+                            continue
+                        },
+                    };
+                    yield BoxedIo::new(io);
+                    continue;
+            }
+            yield boxio::BoxedIo::new(stream)
+        }
+    });
+
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let http_service = make_service_fn(move |_| {
+        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        async move {
+            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
+        }
+    });
+
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let https_service = make_service_fn(move |_| {
+        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        async move {
+            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
+        }
+    });
+
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
+    let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
+
+    let broker = async {
+        messaging_handlers::configure_broker(swir_config.channels, db.clone(), mc).await;
     };
 
-    // Create a TCP listener via tokio.
-    let tcp = tokio_tcp::TcpListener::bind(&tls_socket_addr).unwrap();
+    let server = Server::bind(&client_http_addr).serve(http_service);
+    let tls_server = Server::builder(incoming).serve(https_service);
+    let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
+    let swir = grpc_handler::SwirAPI::new(from_client_to_backend_channel_sender, to_client_receiver_for_grpc);
+    let svc = grpc_handler::client_api::client_api_server::ClientApiServer::new(swir);
+    let grpc = tonic::transport::Server::builder().add_service(svc).serve(client_grpc_addr);
 
-    // Prepare a long-running future stream to accept and serve cients.
-    let tls = tcp.incoming().and_then(move |s| tls_cfg.accept_async(s))
-        .then(|r| match r {
-            Ok(x) => Ok::<_, io::Error>(Some(x)),
-            Err(_e) => {
-                println!("[!] Voluntary server halt due to client-connection error...");
-                // Errors could be handled here, instead of server aborting.
-                // Ok(None)
-                Err(_e)
-            }
-        }).filter_map(|x| x);
-
-    let (rest_to_msg_tx, rest_to_msg_rx): (Sender<utils::structs::RestToMessagingContext>, Receiver<utils::structs::RestToMessagingContext>) = unbounded();
-    let (msg_to_rest_tx, msg_to_rest_rx): (Sender<utils::structs::MessagingToRestContext>, Receiver<utils::structs::MessagingToRestContext>) = unbounded();
-
-    let threads = messaging_handlers::configure_broker(broker_address.to_string(), sending_topic.to_string(), receiving_topic.to_string(), receiving_group.to_string(), db.clone(), rest_to_msg_rx.clone(), msg_to_rest_tx.clone()).unwrap();
-
-    let tx = rest_to_msg_tx.clone();
-
-    let server = Server::bind(&plain_socket_addr)
-        .serve(move || {
-            let tx = tx.clone();
-            service_fn(move |req| handler(req, tx.clone()))
-        }
-        ).map_err(|e| warn!("server error: {}", e));
-
-
-    let tx = rest_to_msg_tx.clone();
-    let tls_server = Server::builder(tls)
-        .serve(move || {
-            let tx = tx.clone();
-            service_fn(move |req| handler(req, tx.clone()))
-        }
-        ).map_err(|e| warn!("server error: {}", e));
-
-
-    let https_server_runtime = thread::spawn(move || { hyper::rt::run(tls_server) });
-    let http_plain_server_runtime = thread::spawn(move || { hyper::rt::run(server); });
-    let http_client_runtime = thread::spawn(move || { hyper::rt::run(future::lazy(move || { client_handler(msg_to_rest_rx) })) });
-
-    utils::command_utils::run_java_command(command.to_string());
-
-    for t in threads {
-        t.join().unwrap()
+    if let Some(command) = client_executable {
+        utils::command_utils::run_java_command(command);
     }
 
-    https_server_runtime.join().unwrap_err();
-    http_plain_server_runtime.join().unwrap_err();
-    http_client_runtime.join().unwrap_err();
+    let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server, server, client, broker, grpc);
 }
-

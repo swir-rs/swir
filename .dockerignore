@@ -1,8 +1,6 @@
 */*
 !demoCA/*
 !rustycar*
-!target/with_kafka/debug/rustycar
-!target/with_nats/debug/rustycar
-!target/with_kafka/release/rustycar
-!target/with_nats/release/rustycar
+!target/debug/rustycar
+!target/release/rustycar
 !clients/swir-java-client/build/libs/*.jar

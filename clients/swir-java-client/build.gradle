@@ -6,23 +6,30 @@ plugins {
 
 group = 'rs.swir'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '1.8'
+sourceCompatibility = '1.10'
+
 
 repositories {
 	mavenCentral()
 }
 
+//configurations {
+//	// exclude Reactor Netty
+//	compile.exclude module: 'spring-boot-starter-reactor-netty'
+//}
+//
 
 dependencies {
 	compile 'org.springframework.boot:spring-boot-starter-actuator'
 	compile 'org.springframework.boot:spring-boot-starter-webflux'
 	compile 'org.springframework.boot:spring-boot-starter-jetty'
+	compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.10.1'
+	compile 'org.springframework.kafka:spring-kafka'
 	testImplementation('org.springframework.boot:spring-boot-starter-test') {
 		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
 	}
 	testImplementation 'io.projectreactor:reactor-test'
 }
-
 test {
 	useJUnitPlatform()
 }

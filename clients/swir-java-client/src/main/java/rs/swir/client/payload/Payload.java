@@ -1,4 +1,5 @@
-package io.swir.client.payload;
+package rs.swir.client.payload;
+
 
 public class Payload {
     private String name;
@@ -8,6 +9,15 @@ public class Payload {
 
     public String getName() {
         return name;
+    }
+
+    @Override
+    public String toString() {
+        return "Payload{" +
+                "name='" + name + '\'' +
+                ", surname='" + surname + '\'' +
+                ", counter=" + counter +
+                '}';
     }
 
     public Payload setCounter(int counter) {
