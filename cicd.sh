@@ -1,7 +1,5 @@
 #necessary certs for HTTPs but only on the first run
-#./generate-cert.sh
-
-
+./generate-cert.sh
 
 #java based components
 cd clients/swir-java-client
@@ -27,7 +25,7 @@ cd ../../
 
 cargo build --release --features="with_nats"
 #cargo build --release
-docker build . --build-arg executable=target/release/rustycar --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
+docker build . --build-arg executable=target/release/swir --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
 
 ## Remove if exists
 docker-compose -f docker/docker-compose-swir.yml down --remove-orphans
@@ -47,13 +45,20 @@ docker-compose  -f docker/docker-compose-swir.yml up -d
 #use these to produce and receive messasges
 
 #Kafka test over REST
+
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppA","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+
+
 #Nats test
+
+
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppB","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
 
 #Kafka test over gRPC
+
+
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v2
 #Nats test over gRPC
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppB -e client_response_topic=SubscribeToAppB  swir-grpc-client:v2
@@ -66,6 +71,10 @@ docker-compose  -f docker/docker-compose-swir.yml up -d
 #Kafka to Kafka
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":1000000, "threads":200, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppA","testType":"kafka","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
 
-#docker cp docker_swir_1:/pcap.logs ~/Workspace/rustycar/
+#Clean up
 #docker-compose -f docker/docker-compose-swir.yml down --remove-orphans
+
+#Copy logs to file
 #docker logs docker_swir_1 > logs 2>&1
+
+#docker cp docker_swir_1:/pcap.logs ~/Workspace/rustycar/

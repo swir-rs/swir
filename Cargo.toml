@@ -1,13 +1,13 @@
 [package]
-name = "rustycar"
-version = "0.1.0"
+name = "swir"
+version = "0.2.0"
 authors = ["Dawid Nowak <nowakd@gmail.com>"]
 repository = "https://github.com/swir-rs/swir"
 readme = "README.md"
 license = "Apache-2.0"
 description = "Sidecar Written in Rust"
-keywords = ["sidecar", "rest", "messaging","cloudcomputing"]
-categories = ["sidecar"]
+keywords = ["sidecar", "rest", "messaging","cloudcomputing","kafka","nats","grpc"]
+categories = ["sidecar","messaging","kafka","nats","grpc","cloudcomputing"]
 edition = "2018"
 publish = false
 
@@ -42,8 +42,9 @@ async-stream = "0.2"
 hyper = "0.13"
 #hyper = { path = "../hyper" , features = ["runtime","stream"]}
 env_logger = "*"
-serde = {version = "*", features = ["derive"] }
-serde_json = {version = "= 1.0"}
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+
 #rdkafka = { version="0.23.1", path = "../rust-rdkafka" }
 rdkafka = { version="0.23" }
 #rdkafka-sys = { version = "1.3.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
@@ -54,13 +55,13 @@ async-trait="*"
 prost = "0.6"
 prost-derive = "0.6"
 #tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
-tonic = {version="0.1.1", optional=false}
+tonic = {version="0.1", optional=false}
 #config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
 config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
 
 [build-dependencies]
 #tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }
-tonic-build = { version="0.1.1" }
+tonic-build = { version="0.1" }
 
 [features]
 with_nats = ["nats"]
