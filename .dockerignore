@@ -1,6 +1,6 @@
 */*
 !demoCA/*
 !rustycar*
-!target/debug/rustycar
-!target/release/rustycar
+!target/debug/swir
+!target/release/swir
 !clients/swir-java-client/build/libs/*.jar
