@@ -28,6 +28,7 @@ public class GrpcClient {
 
     private final ManagedChannel channel;
     private final ClientApiGrpc.ClientApiBlockingStub blockingStub;
+    private final ClientApiGrpc.ClientApiStub apiStub;
 
     /**
      * Construct client connecting to HelloWorld server at {@code host:port}.
@@ -46,6 +47,7 @@ public class GrpcClient {
     GrpcClient(ManagedChannel channel) {
         this.channel = channel;
         blockingStub = ClientApiGrpc.newBlockingStub(channel);
+        apiStub = ClientApiGrpc.newStub(channel);
     }
 
     public void shutdown() throws InterruptedException {
@@ -103,6 +105,16 @@ public class GrpcClient {
         var threads = Integer.parseInt(System.getenv("threads"));
         var clientRequestTopic = System.getenv("client_request_topic");
         var clientResponseTopic = System.getenv("client_response_topic");
+
+        String publishType;
+        var pt = System.getenv("publish_type");
+        if(pt==null){
+            publishType="unary";
+        }else{
+            publishType=pt;
+
+        }
+
         var missedPacketsThreshold = 50;
 
         var processedCounter = new AtomicInteger(0);
@@ -135,21 +147,22 @@ public class GrpcClient {
             final int k = i;
             ex.submit(new Runnable() {
                 public void run() {
-                    logger.debug(String.format("Executing run %d ", k));
-                    long start = System.nanoTime();
-                    try {
-                        for (int j = 0; j < offset; j++) {
-                            final int c = k * offset + j;
-                            sendMessageToSidecar(blockingStub, c, om, clientRequestTopic, sentCount);
-                        }
-                    } catch (Exception e) {
-                        logger.warn(e.getMessage(), e);
-                    } finally {
-                        long stop = System.nanoTime();
-                        totalSendTime.addAndGet((stop - start));
-                        logger.debug(String.format("Run %d completed in %d", k, (stop - start)));
-                        semaphore.release();
+
+                    logger.info(String.format("Publish type %s", publishType));
+                    switch (publishType) {
+                        case "unary":
+                            unaryMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore);
+                            break;
+//                        case "uni":
+//                            streamMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore);
+//                            break;
+                        case "bidi":
+                            biStreamMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore);
+                            break;
+                        default:
+                            logger.error(String.format("Don't know what to do with %s", publishType));
                     }
+
 
                 }
             });
@@ -167,7 +180,7 @@ public class GrpcClient {
 
         while (processedCounter.get() != (messages) && !missedPackets) {
             int count = processedCounter.get();
-            logger.info(String.format("completed count %d %d", count, oldCount));
+            logger.debug(String.format("completed count %d %d", count, oldCount));
             if (oldCount == count) {
                 missingPacketCounter++;
                 logger.warn(String.format("Count has not changed %d", missingPacketCounter));
@@ -179,14 +192,14 @@ public class GrpcClient {
             oldCount = count;
             Thread.sleep(100);
         }
-        long ts = totalSendTime.get();
+        long ts = totalSendTime.get()/threads;
         long totalEnd = System.nanoTime();
         long tt = totalEnd - totalStart;
         testStarted.set(false);
         ObjectNode response = om.createObjectNode();
-        response.put("totalSendTimeNs", ts);
-        response.put("totalSendTimeMs", TimeUnit.MILLISECONDS.convert(ts, TimeUnit.NANOSECONDS));
-        response.put("totalSendTimeS", TimeUnit.SECONDS.convert(ts, TimeUnit.NANOSECONDS));
+        response.put("averageSendTimeNs", ts);
+        response.put("averageSendTimeMs", TimeUnit.MILLISECONDS.convert(ts, TimeUnit.NANOSECONDS));
+        response.put("averageSendTimeS", TimeUnit.SECONDS.convert(ts, TimeUnit.NANOSECONDS));
         response.put("totalTimeNs", tt);
         response.put("totalTimeMs", TimeUnit.MILLISECONDS.convert(tt, TimeUnit.NANOSECONDS));
         response.put("totalTimeS", TimeUnit.SECONDS.convert(tt, TimeUnit.NANOSECONDS));
@@ -199,6 +212,127 @@ public class GrpcClient {
         return;
     }
 
+
+    void biStreamMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String clientTopic, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+
+
+        try {
+            var responseObserver = new io.grpc.stub.StreamObserver<rs.swir.api.client.PublishResponse>() {
+                @Override
+                public void onNext(PublishResponse value) {
+                    logger.debug(String.format("Response status: %s", value.getStatus()));
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    logger.warn(String.format("Server thrown an error %s",t.getMessage()), t);
+                }
+
+                @Override
+                public void onCompleted() {
+                    logger.info(String.format("Server sent completed "));
+                }
+            };
+            var response = apiStub.publishBiStream(responseObserver);
+            logger.debug(String.format("Executing run %d ", k));
+            long start = System.nanoTime();
+            try {
+                for (int j = 0; j < offset; j++) {
+                    final int c = k * offset + j;
+                    var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+                    logger.debug(String.format("sending request %s", p));
+                    PublishRequest request = PublishRequest.newBuilder().setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+                    response.onNext(request);
+                    sentCount.incrementAndGet();
+                }
+            } catch (Exception e) {
+                logger.warn(e.getMessage(), e);
+            } finally {
+                response.onCompleted();
+                long stop = System.nanoTime();
+                totalSendTime.addAndGet((stop - start));
+                logger.debug(String.format("Run %d completed in %d", k, (stop - start)));
+                semaphore.release();
+            }
+
+        } catch (StatusRuntimeException e) {
+            logger.warn(String.format("RPC failed: %s ", e.getMessage()), e);
+            return;
+        } catch (Exception ex) {
+            logger.warn(String.format("RPC failed: %s ", ex.getMessage()), ex);
+            return;
+        }
+
+    }
+
+
+//    void streamMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String clientTopic, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+//        try {
+//            var responseObserver = new io.grpc.stub.StreamObserver<rs.swir.api.client.PublishResponse>() {
+//                @Override
+//                public void onNext(PublishResponse value) {
+//                    logger.debug(String.format("Response status: %s", value.getStatus()));
+//                }
+//
+//                @Override
+//                public void onError(Throwable t) {
+//                    logger.warn(String.format("Server thrown an error %s",t.getMessage()), t);
+//                }
+//
+//                @Override
+//                public void onCompleted() {
+//                    logger.info(String.format("Server sent completed "));
+//                }
+//            };
+//            var response = apiStub.publishStream(responseObserver);
+//            logger.debug(String.format("Executing run %d ", k));
+//            long start = System.nanoTime();
+//            try {
+//                for (int j = 0; j < offset; j++) {
+//                    final int c = k * offset + j;
+//                    var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+//                    logger.debug(String.format("sending request %s", p));
+//                    PublishRequest request = PublishRequest.newBuilder().setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+//                    response.onNext(request);
+//                    sentCount.incrementAndGet();
+//                }
+//            } catch (Exception e) {
+//                logger.warn(e.getMessage(), e);
+//            } finally {
+////                response.onCompleted();
+//                long stop = System.nanoTime();
+//                totalSendTime.addAndGet((stop - start));
+//                logger.debug(String.format("Run %d completed in %d", k, (stop - start)));
+//                semaphore.release();
+//            }
+//
+//        } catch (StatusRuntimeException e) {
+//            logger.warn(String.format("RPC failed: %s ", e.getMessage()), e);
+//            return;
+//        } catch (Exception ex) {
+//            logger.warn(String.format("RPC failed: %s ", ex.getMessage()), ex);
+//            return;
+//        }
+//    }
+
+    void unaryMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String clientTopic, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+        logger.debug(String.format("Executing run %d ", k));
+        long start = System.nanoTime();
+        try {
+            for (int j = 0; j < offset; j++) {
+                final int c = k * offset + j;
+                sendMessageToSidecar(blockingStub, c, om, clientTopic, sentCount);
+            }
+        } catch (Exception e) {
+            logger.warn(e.getMessage(), e);
+        } finally {
+            long stop = System.nanoTime();
+            totalSendTime.addAndGet((stop - start));
+            logger.debug(String.format("Run %d completed in %d", k, (stop - start)));
+            semaphore.release();
+        }
+
+    }
 
     void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
         var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
@@ -216,3 +350,4 @@ public class GrpcClient {
 
     }
 }
+

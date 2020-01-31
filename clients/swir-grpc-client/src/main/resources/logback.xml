@@ -8,8 +8,13 @@
         </encoder>
     </appender>
 
+
+    <logger name="rs.swir.api" level="INFO" />
+
+
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
+
     </root>
 
 </configuration>

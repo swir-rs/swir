@@ -1,23 +1,23 @@
-//#![deny(warnings)]
+//#![Deny(warnings)]
 
 #[macro_use]
 extern crate log;
 
+use std::io::{Error as StdError, ErrorKind};
 use std::{
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use std::io::{Error as StdError, ErrorKind};
 
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
-use hyper::{
-    Body,
-    Request, server::{accept::Accept, conn}, Server,
-};
 use hyper::service::{make_service_fn, service_fn};
+use hyper::{
+    server::{accept::Accept, conn},
+    Body, Request, Server,
+};
 use sled::Config;
 use tokio_rustls::TlsAcceptor;
 
@@ -59,7 +59,7 @@ impl Stream for TcpIncoming {
     }
 }
 
-#[tokio::main]
+#[tokio::main(core_threads = 8)]
 async fn main() {
     color_backtrace::install();
     env_logger::builder().format_timestamp_nanos().init();

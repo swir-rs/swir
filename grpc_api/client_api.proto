@@ -25,6 +25,11 @@ service ClientApi {
     // Publish message to a topic/queue
     rpc Publish (PublishRequest) returns (PublishResponse) {
     }
+    // Publish stream of messages to a topic/queue
+
+    rpc PublishBiStream (stream PublishRequest) returns (stream PublishResponse) {
+    }
+  
     rpc Subscribe (SubscribeRequest) returns (stream SubscribeResponse) {
     }
 }

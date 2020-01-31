@@ -10,7 +10,6 @@ use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
-use crate::utils::structs::BackendStatusCodes::NoTopic;
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 

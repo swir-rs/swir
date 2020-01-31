@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::future;
 use futures::future::FutureExt;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
-use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance};
+use rdkafka::consumer::{Consumer, ConsumerContext, Rebalance};
 use rdkafka::consumer::stream_consumer::StreamConsumer;
 use rdkafka::error::KafkaResult;
 use rdkafka::message::Message;
@@ -15,8 +14,6 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::TopicPartitionList;
 use sled::{Db, IVec};
 use tokio::sync::mpsc;
-use tokio::task;
-
 use async_trait::async_trait;
 
 use crate::messaging_handlers::Broker;
