@@ -29,25 +29,21 @@ pub struct Kafka {
 
 impl Kafka {
     pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
-        let mut i: usize = 0;
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
                 maybe_topic = Some(t.producer_topic.clone());
             }
-            i = i + 1;
         }
         maybe_topic
     }
 
     pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
-        let mut i: usize = 0;
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
                 maybe_topic = Some(t.consumer_topic.clone());
             }
-            i = i + 1;
         }
         maybe_topic
     }
@@ -62,25 +58,21 @@ pub struct Nats {
 
 impl Nats {
     pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
-        let mut i: usize = 0;
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
                 maybe_topic = Some(t.producer_topic.clone());
             }
-            i = i + 1;
         }
         maybe_topic
     }
 
     pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
-        let mut i: usize = 0;
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
                 maybe_topic = Some(t.consumer_topic.clone());
             }
-            i = i + 1;
         }
         maybe_topic
     }
@@ -103,6 +95,7 @@ pub struct MemoryChannelEndpoint {
 pub struct MemoryChannel {
     pub kafka_memory_channels: Vec<MemoryChannelEndpoint>,
     pub nats_memory_channels: Vec<MemoryChannelEndpoint>,
+    pub to_client_sender_for_rest: Box<HashMap<String,Box<mpsc::Sender<MessagingToRestContext>>>>,
     pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
@@ -154,9 +147,12 @@ impl Swir {
 pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
+
+    let mut to_client_sender_for_rest_map = HashMap::new();
+
     let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
-    let to_client_sender_for_rest = Box::new(to_client_sender_for_rest);
+    let box_to_client_sender_for_rest = Box::new(to_client_sender_for_rest);
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));
 
     let to_client_sender_for_grpc = Box::new(to_client_sender_for_grpc);
@@ -169,7 +165,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-            to_client_sender_for_rest: to_client_sender_for_rest.clone(),
+            to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
             to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
         };
         let from_client_sender = Box::new(from_client_sender);
@@ -181,6 +177,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 
         for consumer_topic in kafka_channels.consumer_topics.iter() {
             from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+	    to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
         }
     }
     let mut nats_memory_channels = vec![];
@@ -193,7 +190,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 
             let mme = MemoryChannelEndpoint {
                 from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-                to_client_sender_for_rest: to_client_sender_for_rest.clone(),
+                to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
                 to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
             };
             nats_memory_channels.push(mme);
@@ -210,6 +207,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let mc = MemoryChannel {
         kafka_memory_channels,
         nats_memory_channels,
+	to_client_sender_for_rest:Box::new(to_client_sender_for_rest_map),
         to_client_receiver_for_rest,
         to_client_receiver_for_grpc,
         from_client_to_backend_channel_sender: Box::new(from_client_to_backend_channel_sender),

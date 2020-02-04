@@ -1,11 +1,14 @@
 use std::fmt;
-
+use std::cmp::Ordering;
 use futures::channel::oneshot::Sender;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize,Ord,PartialOrd)]
+
 pub enum CustomerInterfaceType {
     REST,
     GRPC,
@@ -21,13 +24,14 @@ impl CustomerInterfaceType {
     //    }
 }
 
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishRequest {
     pub(crate) payload: Vec<u8>,
     pub(crate) client_topic: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone,Eq,PartialEq,Ord,PartialOrd)]
 pub struct EndpointDesc {
     pub(crate) url: String,
 }
@@ -38,12 +42,57 @@ pub struct ClientSubscribeRequest {
     pub(crate) client_topic: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug,Clone)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
     pub(crate) client_topic: String,
     pub(crate) client_interface_type: CustomerInterfaceType,
+    pub(crate) tx: Box<mpsc::Sender<MessagingToRestContext>>
 }
+
+impl Eq for SubscribeRequest {
+}
+
+impl PartialEq for SubscribeRequest {
+    fn eq(&self, other: &Self) -> bool {
+        if self.client_topic != other.client_topic{
+	    false
+	}else if self.endpoint != other.endpoint{
+	    false
+	}else if self.client_interface_type != other.client_interface_type{
+	    false
+	}else{
+	    true
+	}	    		    	    
+    }
+}
+
+impl Ord for SubscribeRequest {
+    fn cmp(&self, other: &Self) -> Ordering {
+	let cmp = self.client_topic.cmp(&other.client_topic);
+	if cmp==Ordering::Equal{
+	    let cmp = self.endpoint.cmp(&other.endpoint);
+	    if cmp==Ordering::Equal{
+		self.client_interface_type.cmp(&other.client_interface_type)
+	    }else{
+		cmp
+	    }
+	    
+	}else{
+	    cmp
+	}	
+    }
+}
+
+impl PartialOrd for SubscribeRequest {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+	Some(self.cmp(&other))
+    }
+}
+      
+
+
+
 
 #[derive(Debug)]
 pub enum BackendStatusCodes {

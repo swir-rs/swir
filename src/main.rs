@@ -14,20 +14,17 @@ use std::{
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
 use hyper::service::{make_service_fn, service_fn};
+use http_handler::client_handler;
+use http_handler::handler;
+use utils::pki_utils::{load_certs, load_private_key};
 use hyper::{
     server::{accept::Accept, conn},
     Body, Request, Server,
 };
 use sled::Config;
 use tokio_rustls::TlsAcceptor;
-
-use boxio::BoxedIo;
-use http_handler::client_handler;
-use http_handler::handler;
-use utils::pki_utils::{load_certs, load_private_key};
-
 use crate::utils::config::MemoryChannel;
-
+use boxio::BoxedIo;
 mod boxio;
 mod grpc_handler;
 mod http_handler;
@@ -93,44 +90,55 @@ async fn main() {
 
     let incoming = hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
         let mut tcp = TcpIncoming::bind(client_https_addr)?;
-         while let Some(stream) = tcp.try_next().await? {
+        while let Some(stream) = tcp.try_next().await? {
             {
-                    let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
-                        Ok(io) => io,
-                        Err(error) => {
-                            error!("Unable to accept incoming connection. {:?}", error);
-                            continue
-                        },
-                    };
-                    yield BoxedIo::new(io);
-                    continue;
+                let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
+                    Ok(io) => io,
+                    Err(error) => {
+                        error!("Unable to accept incoming connection. {:?}", error);
+                        continue
+                    },
+                };
+                yield BoxedIo::new(io);
+                continue;
             }
             yield boxio::BoxedIo::new(stream)
         }
     });
 
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+
+    
     let http_service = make_service_fn(move |_| {
         let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         async move {
             let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
+	    let to_client_sender_for_rest = to_client_sender_for_rest;
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone(),to_client_sender_for_rest.clone())))
         }
     });
 
+
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
+    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    
     let https_service = make_service_fn(move |_| {
         let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         async move {
             let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone())))
+	    let to_client_sender_for_rest = to_client_sender_for_rest;
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone(),to_client_sender_for_rest.clone())))
         }
     });
 
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
     let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
-
     let broker = async {
         messaging_handlers::configure_broker(swir_config.channels, db.clone(), mc).await;
     };

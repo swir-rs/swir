@@ -215,10 +215,14 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         let topic = request.into_inner().topic;
         info!("Topic = {:?}", topic);
 
+
+	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(1000);
+	
         let sr = crate::utils::structs::SubscribeRequest {
             endpoint: EndpointDesc { url: "".to_string() },
             client_topic: topic.clone(),
             client_interface_type: GRPC,
+	    tx: Box::new(to_client_tx)
         };
 
         let (local_tx, _local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
@@ -239,7 +243,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 
         let (mut tx, rx) = mpsc::channel(10);
         let missed_messages = self.missed_messages.clone();
-        let loc_rx = self.to_client_receiver.clone();
+//        let loc_rx = self.to_client_receiver.clone();
 
         tokio::spawn(async move {
             let mut missed_messages = missed_messages.lock().await;
@@ -253,23 +257,35 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
                 }
             }
 
-            let loc_rx = loc_rx.try_lock();
-            if loc_rx.is_some() {
-                if let Some(mut lrx) = loc_rx {
-                    info!("Lock acquired {:?}", lrx);
-                    while let Some(messaging_context) = lrx.next().await {
-                        let s = client_api::SubscribeResponse { payload: messaging_context.payload };
-                        let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-                        if let Err(_) = r {
-                            info!("Message pushed back  {:?}", s);
-                            missed_messages.push_back(s);
-                            return;
-                        }
-                    }
+	    while let Some(messaging_context) = to_client_rx.next().await {
+                let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+                let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
+                if let Err(_) = r {
+                    info!("Message pushed back  {:?}", s);
+                    missed_messages.push_back(s);
+                    return;
                 }
-            } else {
-                warn!("Unable to lock the rx");
             }
+	    
+   
+
+            // let loc_rx = loc_rx.try_lock();
+            // if loc_rx.is_some() {
+            //     if let Some(mut lrx) = loc_rx {
+            //         info!("Lock acquired {:?}", lrx);
+            //         while let Some(messaging_context) = lrx.next().await {
+            //             let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+            //             let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
+            //             if let Err(_) = r {
+            //                 info!("Message pushed back  {:?}", s);
+            //                 missed_messages.push_back(s);
+            //                 return;
+            //             }
+            //         }
+            //     }
+            // } else {
+            //     warn!("Unable to lock the rx");
+            // };
         });
 
         Ok(Response::new(rx))

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use futures::future::join_all;
 use sled::Db;
-
+use std::sync::Arc;
 use async_trait::async_trait;
-
+use futures::lock::Mutex;
 use crate::utils::config::{Channels, MemoryChannel};
 use crate::utils::structs::CustomerInterfaceType;
 
@@ -41,6 +41,7 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
             db: db.clone(),
             rx,
             tx: Box::new(tx_map),
+	    subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
         };
         brokers.push(Box::new(kafka_broker));
     }
