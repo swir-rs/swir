@@ -19,11 +19,11 @@ use super::super::utils::structs::*;
 pub struct NatsBroker {
     pub nats: Nats,
     pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
+//    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
     pub subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
 }
 
-fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>, topic: String) {
+fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
     debug!("Processing message  {:?}", p);
     
     for subscription in subscriptions.iter_mut(){	
@@ -52,18 +52,24 @@ impl NatsBroker {
 		    let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
 
                     if let Some(topic) = maybe_topic {			
-			let mut subscriptions = self.subscriptions.lock().await;		
+			let mut subscriptions = self.subscriptions.lock().await;
 			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
-			    if let Ok(index) = subscriptions_for_topic.binary_search(&req){
-				let old_subscription = subscriptions_for_topic.remove(index);
-				debug!("Old subscription {:?}",old_subscription);
-			    }
-			    subscriptions_for_topic.push(req.clone());				
-			    if let Err(e) = sender.send(structs::MessagingResult {
-				status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
-                            }) {
-				warn!("Can't send response back {:?}", e);
-                            }
+			    if let Err(_) = subscriptions_for_topic.binary_search(&req){
+				debug!("Adding subscription {:?}",req);
+				subscriptions_for_topic.push(req.clone());
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
+			    }else{
+				debug!("Subscription exists for {:?}",req);
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::NoTopic(format!("Duplicate subscription for topic {}",topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
+			    }			
 			}else{
 			    warn!("Can't find subscriptions {:?} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
@@ -83,6 +89,52 @@ impl NatsBroker {
                     }
 
                 }
+
+		Job::Unsubscribe(value)=>{
+		    let req = value;
+                    info!("Subscription removal  {:?}", req);
+
+                    let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
+
+                    if let Some(topic) = maybe_topic {
+			let mut remove_topic = false;
+			let mut subscriptions = self.subscriptions.lock().await;		
+			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
+			    if let Ok(index) = subscriptions_for_topic.binary_search(&req){
+				debug!("Subscription exists for {:?}",req);
+				subscriptions_for_topic.remove(index);
+				if subscriptions_for_topic.len()==0{
+				    remove_topic=true;
+				    debug!("All subscriptions removed for {}",topic);				    
+				}
+				
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
+			    }else{
+				debug!("No subscriptions  {:?}",req);
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
+			    }
+			}
+			if remove_topic{
+			    subscriptions.remove(&topic);
+			}
+                    } else {
+                        warn!("Can't find topic {:?}", req);
+                        if let Err(e) = sender.send(structs::MessagingResult {
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+                        }) {
+                            warn!("Can't send response back {:?}", e);
+                        }
+                    }
+		}
+		
 
                 Job::Publish(value) => {
                     let req = value;
@@ -117,10 +169,7 @@ impl NatsBroker {
 
 
     
-    async fn nats_incoming_event_handler(&self, client: Option<Client>) {
-        
-        let tx = self.tx.clone();
-
+    async fn nats_incoming_event_handler(&self, client: Option<Client>) {        
 	if client.is_none(){
 	    return
 	}
@@ -133,16 +182,16 @@ impl NatsBroker {
 		let topic = event.subject;
 		let mut subs = Box::new(Vec::new());
 		
-		let mut hasLock = false;
-		while !hasLock{
+		let mut has_lock = false;
+		while !has_lock{
 		    if let Some(mut subscriptions) = subscriptions.try_lock(){
 			if let Some(subscriptions) = subscriptions.get_mut(&topic){			
 			    subs = subscriptions.clone();
 			}
-			hasLock = true;
+			has_lock = true;
 		    }			
 		}		
-		send_request(subs, event.msg,topic);		
+		send_request(subs, event.msg);		
             }
         });
         let _res = join.await;

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -9,12 +10,21 @@ use futures::lock::Mutex;
 use hyper::StatusCode;
 use tokio::sync::mpsc;
 use tonic::{Response, Status};
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use base64;
 
 use crate::utils::structs::CustomerInterfaceType::GRPC;
 use crate::utils::structs::{EndpointDesc, Job, MessagingResult, MessagingToRestContext, RestToMessagingContext};
 
 pub mod client_api {
     tonic::include_proto!("swir");
+}
+
+impl fmt::Display for client_api::SubscribeResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Payload = {}", String::from_utf8_lossy(&self.payload))
+    }
 }
 
 #[derive(Debug)]
@@ -99,7 +109,6 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 	tokio::spawn(
 	    async move{
 		futures::pin_mut!(stream);
-		info!("Pinned");
 		let mut cond = false;
 		let error = error2.clone();
 		while !cond{
@@ -213,80 +222,78 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 
     async fn subscribe(&self, request: tonic::Request<client_api::SubscribeRequest>) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
         let topic = request.into_inner().topic;
-        info!("Topic = {:?}", topic);
+        info!("Subscribe topic = {:?}", topic);
 
 
-	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(1000);
-	
+	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(100);
+	let mut small_rng = SmallRng::from_entropy();
+	let mut array: [u8; 32]=[0;32];
+	small_rng.fill(&mut array);
+	let client_id = base64::encode(&array);	
         let sr = crate::utils::structs::SubscribeRequest {
-            endpoint: EndpointDesc { url: "".to_string() },
+            endpoint: EndpointDesc { url: "".to_string(), client_id:client_id },
             client_topic: topic.clone(),
             client_interface_type: GRPC,
 	    tx: Box::new(to_client_tx)
         };
 
+	
         let (local_tx, _local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-        let job = RestToMessagingContext {
-            job: Job::Subscribe(sr),
+        let subscribe_job = RestToMessagingContext {
+            job: Job::Subscribe(sr.clone()),
             sender: local_tx,
         };
+
+	
+	let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();	
+	let unsubscribe_job = RestToMessagingContext {
+            job: Job::Unsubscribe(sr),
+            sender: unsub_tx,
+        };
+	
         info!("About to send to messaging processor");
 
+	let mut txx;
         if let Some(tx) = self.find_channel(&topic) {
-            let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(job) {
+            txx = tx.clone();
+            if let Err(e) = txx.try_send(subscribe_job) {
                 warn!("Channel is dead {:?}", e);
+		return Err(tonic::Status::internal("Internal error"));
             }
         } else {
             return Err(tonic::Status::invalid_argument("Invalid topic"));
         }
 
-        let (mut tx, rx) = mpsc::channel(10);
+        let (mut tx, rx) = mpsc::channel(100);
         let missed_messages = self.missed_messages.clone();
-//        let loc_rx = self.to_client_receiver.clone();
 
         tokio::spawn(async move {
-            let mut missed_messages = missed_messages.lock().await;
-            while let Some(s) = missed_messages.pop_front() {
-                let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-                info!("Message sent from the queue {:?} {:?}", r, s);
-                if let Err(_) = r {
-                    info!("Message pushed front  {:?}", s);
-                    missed_messages.push_front(s);
-                    return;
-                }
-            }
+            // let mut missed_messages = missed_messages.lock().await;
+            // while let Some(s) = missed_messages.pop_front() {
+	    // 	debug!("Sending message from emergency queue {}",s);
+            //     let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
+            //     info!("Message sent from the queue {:?} {}", r, s);
+            //     if let Err(_) = r {
+            //         info!("Message pushed front  {}", s);
+            //         missed_messages.push_front(s);		    
+            //         return;
+            //     }
+            // }
 
 	    while let Some(messaging_context) = to_client_rx.next().await {
                 let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+		debug!("Sending message {}",s);
                 let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
                 if let Err(_) = r {
-                    info!("Message pushed back  {:?}", s);
-                    missed_messages.push_back(s);
+                    info!("Message pushed back {}", s);
+//                    missed_messages.push_back(s);
+		    if let Err(e) = txx.try_send(unsubscribe_job) {
+			warn!("Channel is dead {:?}", e);
+		    }
                     return;
                 }
-            }
-	    
-   
-
-            // let loc_rx = loc_rx.try_lock();
-            // if loc_rx.is_some() {
-            //     if let Some(mut lrx) = loc_rx {
-            //         info!("Lock acquired {:?}", lrx);
-            //         while let Some(messaging_context) = lrx.next().await {
-            //             let s = client_api::SubscribeResponse { payload: messaging_context.payload };
-            //             let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-            //             if let Err(_) = r {
-            //                 info!("Message pushed back  {:?}", s);
-            //                 missed_messages.push_back(s);
-            //                 return;
-            //             }
-            //         }
-            //     }
-            // } else {
-            //     warn!("Unable to lock the rx");
-            // };
-        });
+            }	    
+	});
 
         Ok(Response::new(rx))
     }

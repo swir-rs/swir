@@ -30,16 +30,10 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
         }
         let mce = mce.unwrap();
         let rx = mce.from_client_receiver.to_owned();
-        let tx_rest = mce.to_client_sender_for_rest.to_owned();
-        let tx_grpc = mce.to_client_sender_for_grpc.to_owned();
-        let mut tx_map = HashMap::new();
-        tx_map.insert(CustomerInterfaceType::REST, tx_rest);
-        tx_map.insert(CustomerInterfaceType::GRPC, tx_grpc);
-
+        
         let kafka_broker = kafka_handler::KafkaBroker {
             kafka,
             rx,
-            tx: Box::new(tx_map),
 	    subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
         };
         brokers.push(Box::new(kafka_broker));
@@ -48,25 +42,18 @@ pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
     #[cfg(feature = "with_nats")]
     {
         i = 0;
+	
         for nats in messaging.nats {
-            let mce = mc.nats_memory_channels.get(i);
+	    let mce = mc.kafka_memory_channels.get(i);
             i = i + 1;
             if let None = mce {
-                warn!("No memory channel for {:?}", nats);
-                continue;
+		continue;
             }
             let mce = mce.unwrap();
-            let rx = mce.from_client_receiver.to_owned();
-            let tx_rest = mce.to_client_sender_for_rest.to_owned();
-            let tx_grpc = mce.to_client_sender_for_grpc.to_owned();
-            let mut tx_map = HashMap::new();
-            tx_map.insert(CustomerInterfaceType::REST, tx_rest);
-            tx_map.insert(CustomerInterfaceType::GRPC, tx_grpc);
-
+            let rx = mce.from_client_receiver.to_owned();           
             let nats_broker = nats_handler::NatsBroker {
                 nats,             
-                rx,
-                tx: Box::new(tx_map),
+                rx,                
 		subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
             };
             brokers.push(Box::new(nats_broker));

@@ -9,6 +9,9 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use base64;
 
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
@@ -144,10 +147,17 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 		    let client_topic =  json.client_topic.clone();
 
 		    if let Some(to_client_sender) = find_to_client_sender(&client_topic,&to_client_sender_for_rest){
+
+			let mut small_rng = SmallRng::from_entropy();
+			let mut array: [u8; 32]=[0;32];
+			small_rng.fill(&mut array);
+			let client_id = base64::encode(&array);	
+			let mut endpoint = json.endpoint.clone();
+			endpoint.client_id = client_id;
 			let sb = SubscribeRequest {
                             client_interface_type: CustomerInterfaceType::REST,
                             client_topic: json.client_topic.clone(),
-                            endpoint: json.endpoint.clone(),
+                            endpoint: endpoint,
 			    tx:to_client_sender.clone()
 			};
 

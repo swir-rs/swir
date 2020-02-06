@@ -34,6 +34,7 @@ pub struct PublishRequest {
 #[derive(Serialize, Deserialize, Debug, Clone,Eq,PartialEq,Ord,PartialOrd)]
 pub struct EndpointDesc {
     pub(crate) url: String,
+    pub(crate) client_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -119,8 +120,10 @@ pub struct MessagingResult {
 #[derive(Debug)]
 pub enum Job {
     Subscribe(SubscribeRequest),
+    Unsubscribe(SubscribeRequest),
     Publish(PublishRequest),
 }
+
 
 #[derive(Debug)]
 pub struct CustomContext;

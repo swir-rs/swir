@@ -31,6 +31,8 @@ tower-service = "=0.3"
 tower-make = { version = "=0.3"}
 want = "0.3"
 color-backtrace="*"
+rand = "*"
+base64 = "*"
 
 # Optional
 net2 = { version = "0.2", optional = true }

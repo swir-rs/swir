@@ -15,11 +15,13 @@ use rdkafka::TopicPartitionList;
 use tokio::sync::mpsc;
 use async_trait::async_trait;
 
+
 use crate::messaging_handlers::Broker;
 use crate::utils::config::Kafka;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
+
 
 impl ClientContext for CustomContext {}
 
@@ -27,7 +29,6 @@ impl ClientContext for CustomContext {}
 pub struct KafkaBroker {
     pub kafka: Kafka,
     pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
     pub subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
 }
 
@@ -47,19 +48,31 @@ impl ConsumerContext for CustomContext {
 
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
-async fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>, topic: String) {
-    debug!("Processing message  {:?}", p);
+async fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
+    debug!("Processing message  {:?}", String::from_utf8_lossy(&p));
     
     for subscription in subscriptions.iter_mut(){	
 	let (s, _r) = futures::channel::oneshot::channel();
-	debug!("Processing subscription  {:?}", subscription);
+	debug!("Processing subscription {:?}", subscription);
 	let p = MessagingToRestContext {
 	    sender: s,
             payload: p.to_vec(),
 	    uri: subscription.endpoint.url.clone(),
         };
-	if let Err(e) = subscription.tx.try_send(p){
-	    warn!("Unable to send. Channel could be closed {}", e)
+	match subscription.tx.send(p).await{
+	    Ok(()) => {
+		
+	    },
+	    Err(mpsc::error::SendError(_)) => {
+		warn!("Unable to send {:?}. Channel is closed", subscription);
+	    },
+	    // 	Err(mpsc::error::TrySendError::Closed(_)) => {
+	    // 	    warn!("Unable to send {:?}. Channel is closed", subscription);
+	    // 	},
+	    // 	Err(mpsc::error::TrySendError::Full(_))=> {
+	    // 	    warn!("Unable to send {:?}. Channel is full", subscription);
+	    // 	},
+	    _=> {error!("Should not be here");}
 	}
     }
 }
@@ -81,25 +94,31 @@ impl KafkaBroker {
             match job.job {
                 Job::Subscribe(value) => {
                     let req = value;
-                    info!("New registration  {:?}", req);
+                    info!("Subscribe  {:?}", req);
 
                     let maybe_topic = self.kafka.get_consumer_topic_for_client_topic(&req.client_topic);
 
                     if let Some(topic) = maybe_topic {			
 			let mut subscriptions = self.subscriptions.lock().await;		
 			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
-			    if let Ok(index) = subscriptions_for_topic.binary_search(&req){
-				let old_subscription = subscriptions_for_topic.remove(index);
-				debug!("Old subscription {:?}",old_subscription);
+			    if let Err(_) = subscriptions_for_topic.binary_search(&req){
+				debug!("Adding subscription {:?}",req);
+				subscriptions_for_topic.push(req.clone());
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::Ok(format!("KAFKA has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
+			    }else{
+				debug!("Subscription exists for {:?}",req);
+				if let Err(e) = sender.send(structs::MessagingResult {
+				    status: BackendStatusCodes::NoTopic(format!("Duplicate subscription for topic {}",topic.clone()).to_string()),
+				}) {
+				    warn!("Can't send response back {:?}", e);
+				}
 			    }
-			    subscriptions_for_topic.push(req.clone());				
-			    if let Err(e) = sender.send(structs::MessagingResult {
-				status: BackendStatusCodes::Ok(format!("KAFKA has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
-                            }) {
-				warn!("Can't send response back {:?}", e);
-                            }
 			}else{
-			    warn!("Can't find subscriptions {:?} adding new one", req);
+			    debug!("Can't find subscriptions {:?} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                             if let Err(e) = sender.send(structs::MessagingResult {
 				status: BackendStatusCodes::Ok(format!("KAFKA has one susbscription for topic {}",topic.clone()).to_string()),
@@ -116,6 +135,63 @@ impl KafkaBroker {
                         }
                     }
                 }
+
+		Job::Unsubscribe(value)=>{
+		    let req = value;
+                    info!("Unsubscribe {:?}", req);
+
+                    let maybe_topic = self.kafka.get_consumer_topic_for_client_topic(&req.client_topic);
+
+                    if let Some(topic) = maybe_topic {
+			let mut remove_topic = false;
+			let mut subscriptions = self.subscriptions.lock().await;		
+			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
+			    subscriptions_for_topic.sort();
+			    match subscriptions_for_topic.binary_search(&req){
+				Ok(index)=>{
+				    debug!("Subscription exists for {:?}",req);
+				    subscriptions_for_topic.remove(index);		
+				    if subscriptions_for_topic.len()==0{
+					remove_topic=true;
+					debug!("All subscriptions removed for {}",topic);				    
+				    }
+				    
+				    if let Err(e) = sender.send(structs::MessagingResult {
+					status: BackendStatusCodes::Ok(format!("KAFKA has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
+				    }) {
+					warn!("Can't send response back {:?}", e);
+				    }
+				},
+				Err(index)=>{
+				    debug!("No subscriptions {:?}",req);
+				    if let Err(e) = sender.send(structs::MessagingResult {
+					status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
+				    }) {
+					warn!("Can't send response back {:?}", e);
+				    }
+				}
+			    }
+			    for i in subscriptions_for_topic.iter(){
+				debug!("Subscription {:?}",i);
+				if i == &req {
+				    debug!("This two are equal"); 
+				}
+			    }
+			    
+			}
+			if remove_topic{
+			    subscriptions.remove(&topic);
+			}
+                    } else {
+                        warn!("Can't find topic {:?}", req);
+                        if let Err(e) = sender.send(structs::MessagingResult {
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+                        }) {
+                            warn!("Can't send response back {:?}", e);
+                        }
+                    }
+		}
+		
 
                 Job::Publish(value) => {
                     let req = value;
@@ -176,8 +252,8 @@ impl KafkaBroker {
             .set("enable.partition.eof", "false")
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
-            //.set("statistics.interval.ms", "30000")
-            //.set("auto.offset.reset", "smallest")
+        //.set("statistics.interval.ms", "30000")
+        //.set("auto.offset.reset", "smallest")
             .set_log_level(RDKafkaLogLevel::Warning)
             .create_with_context(context)
             .expect("Consumer creation failed");
@@ -222,18 +298,18 @@ impl KafkaBroker {
                     //                    }
                     let t = String::from(m.topic());
                     let vec = Vec::from(payload);
-                    let tx = self.tx.clone();
 
-		    let mut subs = Box::new(Vec::new());
-		    {
-			let mut subscriptions = self.subscriptions.lock().await;		    
-			if let Some(subscriptions) = subscriptions.get_mut(&t){			
-			    subs = subscriptions.clone();
-			}
+
+
+		    
+		    let mut subscriptions = self.subscriptions.lock().await;		    
+		    if let Some(subscriptions) = subscriptions.get_mut(&t){
+			let subs = subscriptions.clone();
+			tokio::spawn(async move {
+			    send_request(subs, vec).await;
+			});
 		    }
-		    tokio::spawn(async move {
-                        send_request(subs, vec, t).await;
-		    });
+
                 }
             };
         }
