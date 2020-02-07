@@ -55,7 +55,7 @@ impl NatsBroker {
 			let mut subscriptions = self.subscriptions.lock().await;
 			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
 			    if let Err(_) = subscriptions_for_topic.binary_search(&req){
-				debug!("Adding subscription {:?}",req);
+				debug!("Adding subscription {}",req);
 				subscriptions_for_topic.push(req.clone());
 				if let Err(e) = sender.send(structs::MessagingResult {
 				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
@@ -71,7 +71,7 @@ impl NatsBroker {
 				}
 			    }			
 			}else{
-			    warn!("Can't find subscriptions {:?} adding new one", req);
+			    warn!("Can't find subscriptions {} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                             if let Err(e) = sender.send(structs::MessagingResult {
 				status: BackendStatusCodes::Ok(format!("NATS has one susbscription for topic {}",topic.clone()).to_string()),
@@ -101,7 +101,7 @@ impl NatsBroker {
 			let mut subscriptions = self.subscriptions.lock().await;		
 			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
 			    if let Ok(index) = subscriptions_for_topic.binary_search(&req){
-				debug!("Subscription exists for {:?}",req);
+				debug!("Subscription exists for {}",req);
 				subscriptions_for_topic.remove(index);
 				if subscriptions_for_topic.len()==0{
 				    remove_topic=true;
@@ -114,7 +114,7 @@ impl NatsBroker {
 				    warn!("Can't send response back {:?}", e);
 				}
 			    }else{
-				debug!("No subscriptions  {:?}",req);
+				debug!("No subscriptions  {}",req);
 				if let Err(e) = sender.send(structs::MessagingResult {
 				    status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
 				}) {
@@ -126,7 +126,7 @@ impl NatsBroker {
 			    subscriptions.remove(&topic);
 			}
                     } else {
-                        warn!("Can't find topic {:?}", req);
+                        warn!("Can't find topic {}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {

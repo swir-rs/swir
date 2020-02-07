@@ -147,7 +147,9 @@ public class TestController {
             if(oldCount==count){
                 missingPacketCounter++;
                 logger.warn("Count has not changed {}",missingPacketCounter );
-            }
+            }else{
+		missingPacketCounter=0;
+	    }
             if(missingPacketCounter> missedPacketsThreshold){
                 missedPackets =true;
                 logger.error("Count has not changed {}",missingPacketCounter );

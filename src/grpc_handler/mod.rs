@@ -27,6 +27,18 @@ impl fmt::Display for client_api::SubscribeResponse{
     }
 }
 
+impl fmt::Display for client_api::PublishRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Topis {} Payload = {}", &self.topic, String::from_utf8_lossy(&self.payload))
+    }
+}
+
+impl fmt::Display for client_api::PublishResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Status = {}", &self.status)
+    }
+}
+
 #[derive(Debug)]
 pub struct SwirAPI {
     missed_messages: Arc<Mutex<Box<VecDeque<client_api::SubscribeResponse>>>>,
@@ -62,11 +74,11 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
     
     
     async fn publish_bi_stream(&self, request: tonic::Request<tonic::Streaming<client_api::PublishRequest>>) -> Result<tonic::Response<Self::PublishBiStreamStream>, tonic::Status> {
-	info!("Publish bi stream called");
+	info!("Publish bidi stream");
         let stream = request.into_inner();
 
         let (mut tx, rx) = mpsc::channel(10);
-	let (mut internal_tx, mut internal_rx): (mpsc::Sender<client_api::PublishResponse>, mpsc::Receiver<client_api::PublishResponse>) = mpsc::channel(10);
+	let (mut internal_tx, mut internal_rx): (mpsc::Sender<client_api::PublishResponse>, mpsc::Receiver<client_api::PublishResponse>) = mpsc::channel(1);
 
 
 
@@ -85,24 +97,23 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 			    debug!("Got message {:?}",response);
 			    let pr :client_api::PublishResponse = response.clone();
                             let r = tx.send(Ok(pr.clone())).await; //.expect("I should not panic as I should not be here!");
-
 			    if let Err(e) = r {			
-				info!("Message not sent {:?}", e);
-				info!("Message pushed back {:?}", pr);
 				error.swap(true,Ordering::Relaxed);
-				warn!("Bailing out in channel loop. Can't send out");
+				info!("gRPC connection closed for message {:?}",pr);
 				break;
+			    }else{
+				debug!("Message sent {:?}",pr);
 			    }
 			},
 			None=>{
-			    warn!("Bailing out in channel loop. Received nothing on internal");
+			    info!("Internal channel closed");
 			    error.swap(true,Ordering::Relaxed);
 			    break;
 			}
 		    }
 		    cond= error.load(Ordering::Relaxed);
 		}
-		debug!("publish_bi_strean sender 1 terminated");
+		info!("publish_bi_strean sender 1 terminated");
             }            
         );
 
@@ -117,7 +128,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		    match request{
 			Some(request)=> {
 			    if let Ok(request) = request{
-				debug!("  ==> publish request  {:?}", request);
+				debug!("Publish request  {}", request);
 				let mut msg = String::new();
 				
 				if let Some(tx) = channels.get(&request.topic) {
@@ -125,7 +136,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 					payload: request.payload,
 					client_topic: request.topic.clone(),
 				    };
-				debug!("{:?}", p);
+				    
 				    let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
 				    let job = RestToMessagingContext {
 					job: Job::Publish(p),
@@ -137,9 +148,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 					warn!("Channel is dead {:?}", e);
 				    }
 				    
-				    debug!("Waiting for broker");
 				    let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
-				    debug!("Got result {:?}", response_from_broker);
 				    if let Ok(res) = response_from_broker {		    
 					msg.push_str(&res.status.to_string());
 				    } else {
@@ -150,14 +159,13 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 				}
 				let reply = client_api::PublishResponse {
 				    status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
-			    };
-			    debug!("Sending internally  {:?}",reply);
-				let r = internal_tx.send(reply).await;
+				};
+				debug!("Sending internally  {:?}",reply);
+				let r = internal_tx.send(reply.clone()).await;
 				
 				if let Err(e) =r{
-				    info!("Message not sent {:?}", e);
+				    info!("Internal channel closed for message {:?}", reply);
 				    error.swap(true,Ordering::Relaxed);
-				    warn!("Bailing out in channel loop. Can't send out");
 				    break;
 				}
 			    }
@@ -169,7 +177,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		    }
 		    cond= error.load(Ordering::Relaxed);		    
 		}
-		debug!("publish_bi_strean sender 2 terminated");
+		info!("publish_bi_stream sender 2 terminated");
 	    }
 	);
 	Ok(tonic::Response::new(rx))	    
@@ -179,8 +187,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         &self,
         request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
     ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> {
-        // Return an instance of type HelloReply
-        debug!("Got a request: {:?}", request);
+        debug!("Publish {:?}", request);
         let request = request.into_inner();
 
         if let Some(tx) = self.find_channel(&request.topic) {
@@ -199,10 +206,8 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
             if let Err(e) = tx.try_send(job) {
                 warn!("Channel is dead {:?}", e);
             }
-
-            debug!("Waiting for broker");
-            let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
-            debug!("Got result {:?}", response_from_broker);
+	   
+            let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;	   
             let mut msg = String::new();
             if let Ok(res) = response_from_broker {
                 msg.push_str(&res.status.to_string());
@@ -223,8 +228,6 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
     async fn subscribe(&self, request: tonic::Request<client_api::SubscribeRequest>) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
         let topic = request.into_inner().topic;
         info!("Subscribe topic = {:?}", topic);
-
-
 	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(100);
 	let mut small_rng = SmallRng::from_entropy();
 	let mut array: [u8; 32]=[0;32];
@@ -245,11 +248,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         };
 
 	
-	let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();	
-	let unsubscribe_job = RestToMessagingContext {
-            job: Job::Unsubscribe(sr),
-            sender: unsub_tx,
-        };
+
 	
         info!("About to send to messaging processor");
 
@@ -279,20 +278,28 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
             //         return;
             //     }
             // }
-
-	    while let Some(messaging_context) = to_client_rx.next().await {
-                let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+	    let mut msgs:i32  = 0;
+	    while let Some(messaging_context) = to_client_rx.recv().await{
+		let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+		msgs+=1;
 		debug!("Sending message {}",s);
-                let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-                if let Err(_) = r {
-                    info!("Message pushed back {}", s);
-//                    missed_messages.push_back(s);
+		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
+
+		if let Err(_) = r {
+		    info!("Message pushed back {}", s);
+		    let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();	
+		    let unsubscribe_job = RestToMessagingContext {
+			job: Job::Unsubscribe(sr.clone()),
+			sender: unsub_tx,
+		    };
+		    
+		    //                    missed_messages.push_back(s);
 		    if let Err(e) = txx.try_send(unsubscribe_job) {
 			warn!("Channel is dead {:?}", e);
 		    }
-                    return;
-                }
-            }	    
+		    debug!("Messages processed in this session {}",msgs);
+		}
+	    }
 	});
 
         Ok(Response::new(rx))

@@ -48,31 +48,26 @@ impl ConsumerContext for CustomContext {
 
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
-async fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
-    debug!("Processing message  {:?}", String::from_utf8_lossy(&p));
+async fn send_request(subscriptions:  &mut Box<Vec<SubscribeRequest>>, p: Vec<u8> ) {
+    let msg = String::from_utf8_lossy(&p);
+    debug!("Processing message {} {:?}", subscriptions.len(),msg);
     
-    for subscription in subscriptions.iter_mut(){	
+    for subscription in subscriptions.iter_mut(){
 	let (s, _r) = futures::channel::oneshot::channel();
-	debug!("Processing subscription {:?}", subscription);
-	let p = MessagingToRestContext {
+	debug!("Processing subscription {}", subscription);
+	let mrc = MessagingToRestContext {
 	    sender: s,
-            payload: p.to_vec(),
+	    payload: p.to_vec(),
 	    uri: subscription.endpoint.url.clone(),
         };
-	match subscription.tx.send(p).await{
-	    Ok(()) => {
-		
+	match subscription.tx.send(mrc).await{
+	    Ok(_) => {
+		debug!("Message sent {:?}",msg);
 	    },
+	    
 	    Err(mpsc::error::SendError(_)) => {
-		warn!("Unable to send {:?}. Channel is closed", subscription);
+		warn!("Unable to send {}. Channel is closed", subscription);
 	    },
-	    // 	Err(mpsc::error::TrySendError::Closed(_)) => {
-	    // 	    warn!("Unable to send {:?}. Channel is closed", subscription);
-	    // 	},
-	    // 	Err(mpsc::error::TrySendError::Full(_))=> {
-	    // 	    warn!("Unable to send {:?}. Channel is full", subscription);
-	    // 	},
-	    _=> {error!("Should not be here");}
 	}
     }
 }
@@ -94,7 +89,7 @@ impl KafkaBroker {
             match job.job {
                 Job::Subscribe(value) => {
                     let req = value;
-                    info!("Subscribe  {:?}", req);
+                    info!("Subscribe {}", req);
 
                     let maybe_topic = self.kafka.get_consumer_topic_for_client_topic(&req.client_topic);
 
@@ -118,7 +113,7 @@ impl KafkaBroker {
 				}
 			    }
 			}else{
-			    debug!("Can't find subscriptions {:?} adding new one", req);
+			    debug!("Can't find subscriptions {} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                             if let Err(e) = sender.send(structs::MessagingResult {
 				status: BackendStatusCodes::Ok(format!("KAFKA has one susbscription for topic {}",topic.clone()).to_string()),
@@ -127,7 +122,7 @@ impl KafkaBroker {
                             }
 			}						
                     } else {
-                        warn!("Can't find topic {:?}", req);
+                        warn!("Can't find topic {}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
@@ -138,7 +133,7 @@ impl KafkaBroker {
 
 		Job::Unsubscribe(value)=>{
 		    let req = value;
-                    info!("Unsubscribe {:?}", req);
+                    info!("Unsubscribe {}", req);
 
                     let maybe_topic = self.kafka.get_consumer_topic_for_client_topic(&req.client_topic);
 
@@ -149,7 +144,7 @@ impl KafkaBroker {
 			    subscriptions_for_topic.sort();
 			    match subscriptions_for_topic.binary_search(&req){
 				Ok(index)=>{
-				    debug!("Subscription exists for {:?}",req);
+				    debug!("Subscription exists for {}",req);
 				    subscriptions_for_topic.remove(index);		
 				    if subscriptions_for_topic.len()==0{
 					remove_topic=true;
@@ -162,22 +157,15 @@ impl KafkaBroker {
 					warn!("Can't send response back {:?}", e);
 				    }
 				},
-				Err(index)=>{
-				    debug!("No subscriptions {:?}",req);
+				Err(_)=>{
+				    debug!("No subscriptions {}",req);
 				    if let Err(e) = sender.send(structs::MessagingResult {
 					status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
 				    }) {
 					warn!("Can't send response back {:?}", e);
 				    }
 				}
-			    }
-			    for i in subscriptions_for_topic.iter(){
-				debug!("Subscription {:?}",i);
-				if i == &req {
-				    debug!("This two are equal"); 
-				}
-			    }
-			    
+			    }			    
 			}
 			if remove_topic{
 			    subscriptions.remove(&topic);
@@ -195,7 +183,7 @@ impl KafkaBroker {
 
                 Job::Publish(value) => {
                     let req = value;
-                    debug!("Kafka plain sending {:?}", req);
+                    debug!("Kafka plain sending {}", req);
                     let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
                     let kafka_producer = kafka_producer.clone();
                     if let Some(topic) = maybe_topic {
@@ -268,7 +256,6 @@ impl KafkaBroker {
 	}
 	
         let mut message_stream = consumer.start();
-
         while let Some(message) = message_stream.next().await {
             match message {
                 Err(e) => warn!("Kafka error: {}", e),
@@ -282,7 +269,7 @@ impl KafkaBroker {
                         }
                     };
                     debug!(
-                        "key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
+                        "Message from kafka key: '{:?}', payload: '{}', topic: {}, partition: {}, offset: {}, timestamp: {:?}",
                         m.key(),
                         payload,
                         m.topic(),
@@ -297,17 +284,14 @@ impl KafkaBroker {
                     //                        }
                     //                    }
                     let t = String::from(m.topic());
-                    let vec = Vec::from(payload);
-
-
-
-		    
+                    let vec = Vec::from(payload);		    		    
 		    let mut subscriptions = self.subscriptions.lock().await;		    
-		    if let Some(subscriptions) = subscriptions.get_mut(&t){
-			let subs = subscriptions.clone();
-			tokio::spawn(async move {
-			    send_request(subs, vec).await;
-			});
+		    if let Some(mut subs) = subscriptions.get_mut(&t){
+			if subs.len()!=0{
+			    send_request(&mut subs, vec).await;
+			}else{
+			    warn!("No subscriptions for {} {}",t,String::from_utf8_lossy(&vec));
+			}
 		    }
 
                 }

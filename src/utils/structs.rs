@@ -31,6 +31,12 @@ pub struct PublishRequest {
     pub(crate) client_topic: String,
 }
 
+impl fmt::Display for PublishRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PublishRequest {{ client_topic: {}, payload:{} }}", &self.client_topic, String::from_utf8_lossy(&self.payload))
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone,Eq,PartialEq,Ord,PartialOrd)]
 pub struct EndpointDesc {
     pub(crate) url: String,
@@ -43,7 +49,7 @@ pub struct ClientSubscribeRequest {
     pub(crate) client_topic: String,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Clone,Debug)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
     pub(crate) client_topic: String,
@@ -53,6 +59,14 @@ pub struct SubscribeRequest {
 
 impl Eq for SubscribeRequest {
 }
+
+
+impl fmt::Display for SubscribeRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubscribeRequest {{ endpoint: {:?}, client_topic:{}, client_interface_type:{:?} }}", &self.endpoint, &self.client_topic, &self.client_interface_type)
+    }
+}
+
 
 impl PartialEq for SubscribeRequest {
     fn eq(&self, other: &Self) -> bool {

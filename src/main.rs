@@ -21,7 +21,7 @@ use hyper::{
     server::{accept::Accept, conn},
     Body, Request, Server,
 };
-use sled::Config;
+
 use tokio_rustls::TlsAcceptor;
 use crate::utils::config::MemoryChannel;
 use boxio::BoxedIo;
@@ -76,10 +76,6 @@ async fn main() {
     let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
     let client_http_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
     let client_grpc_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
-
-    let config = Config::new().temporary(true);
-    let db = config.open().unwrap();
-
     let certs = load_certs(http_tls_certificate).unwrap();
     // Load private key.
     let key = load_private_key(http_tls_key).unwrap();
@@ -140,7 +136,7 @@ async fn main() {
     let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
     let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
     let broker = async {
-        messaging_handlers::configure_broker(swir_config.channels, db.clone(), mc).await;
+        messaging_handlers::configure_broker(swir_config.channels,  mc).await;
     };
 
     let server = Server::bind(&client_http_addr).serve(http_service);

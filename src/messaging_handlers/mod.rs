@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
 use futures::future::join_all;
-use sled::Db;
 use std::sync::Arc;
 use async_trait::async_trait;
 use futures::lock::Mutex;
 use crate::utils::config::{Channels, MemoryChannel};
-use crate::utils::structs::CustomerInterfaceType;
 
 mod kafka_handler;
 #[cfg(feature = "with_nats")]
@@ -17,7 +15,7 @@ trait Broker {
     async fn configure_broker(&self);
 }
 
-pub async fn configure_broker(messaging: Channels, db: Db, mc: MemoryChannel) {
+pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
     let mut brokers: Vec<Box<dyn Broker>> = vec![];
     let mut futures = vec![];
 
