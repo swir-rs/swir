@@ -102,7 +102,6 @@ async fn main() {
         }
     });
 
-    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
 
@@ -117,8 +116,6 @@ async fn main() {
         }
     });
 
-
-    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
     

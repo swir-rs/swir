@@ -58,6 +58,7 @@ impl NatsBroker {
 				debug!("Adding subscription {}",req);
 				subscriptions_for_topic.push(req.clone());
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -65,6 +66,7 @@ impl NatsBroker {
 			    }else{
 				debug!("Subscription exists for {:?}",req);
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::NoTopic(format!("Duplicate subscription for topic {}",topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -74,6 +76,7 @@ impl NatsBroker {
 			    warn!("Can't find subscriptions {} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                             if let Err(e) = sender.send(structs::MessagingResult {
+				correlation_id: req.correlation_id,
 				status: BackendStatusCodes::Ok(format!("NATS has one susbscription for topic {}",topic.clone()).to_string()),
                             }) {
 				warn!("Can't send response back {:?}", e);
@@ -82,6 +85,7 @@ impl NatsBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
@@ -109,6 +113,7 @@ impl NatsBroker {
 				}
 				
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -116,6 +121,7 @@ impl NatsBroker {
 			    }else{
 				debug!("No subscriptions  {}",req);
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -128,6 +134,7 @@ impl NatsBroker {
                     } else {
                         warn!("Can't find topic {}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
@@ -143,12 +150,14 @@ impl NatsBroker {
                         let foo = nats.publish(&topic, &req.payload);
                         match foo {
                             Ok(_) => {
-                                sender.send(structs::MessagingResult {
+                                let _res = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Ok("NATS is good".to_string()),
                                 });
                             }
                             Err(e) => {
-                                sender.send(structs::MessagingResult {
+                                let _res = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Error(e.to_string()),
                                 });
                             }
@@ -156,6 +165,7 @@ impl NatsBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);

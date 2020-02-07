@@ -15,6 +15,7 @@ import rs.swir.api.client.payload.Payload;
 import java.util.ArrayList;
 import java.util.Iterator;
 
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -60,7 +61,7 @@ public class GrpcClient {
     public void subscribeForMessagesFromSidecar(final String topic, final AtomicInteger processedCounter) {
         ex.submit(() -> {
             logger.info(String.format("Subscribing to topic %s", topic));
-            SubscribeRequest request = SubscribeRequest.newBuilder().setTopic(topic).build();
+            SubscribeRequest request = SubscribeRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(topic).build();
 
 
             apiStub.subscribe(request, new io.grpc.stub.StreamObserver<>() {
@@ -269,7 +270,7 @@ public class GrpcClient {
                     final int c = k * offset + j;
                     var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
                     logger.debug(String.format("sending request %s", p));
-                    PublishRequest request = PublishRequest.newBuilder().setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+                    PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
                     response.onNext(request);
                     sentCount.incrementAndGet();
                 }
@@ -365,7 +366,7 @@ public class GrpcClient {
     void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
         var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
         logger.debug(String.format("sending request %s", p));
-        PublishRequest request = PublishRequest.newBuilder().setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+        PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
         PublishResponse response;
         try {
             response = blockingStub.publish(request);

@@ -16,15 +16,26 @@ use base64;
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 
+static X_CORRRELATION_ID_HEADER_NAME:&'static str = "X-Correlation-ID";
+
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
-    let topic_header = header::HeaderName::from_lowercase(b"topic").unwrap();
-    let maybe_topic_header = headers.get(topic_header);
-    if let Some(topic) = maybe_topic_header {
-        String::from_utf8_lossy(topic.as_bytes()).to_string()
-    } else {
-        "".to_string()
-    }
+    extract_value_from_headers(String::from("topic"),headers)
 }
+
+fn extract_value_from_headers(header_name:String, headers: &HeaderMap<HeaderValue>) -> String {
+	let header = header::HeaderName::from_lowercase(header_name.as_bytes()).unwrap();
+	let maybe_header = headers.get(header);
+	if let Some(value) = maybe_header {
+            String::from_utf8_lossy(value.as_bytes()).to_string()
+	} else {
+            "".to_string()
+	}
+}
+    
+fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
+    extract_value_from_headers(String::from(X_CORRRELATION_ID_HEADER_NAME),headers)
+}
+
 
 fn find_channel_by_topic<'a>(
     client_topic: &'a String,
@@ -87,6 +98,8 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
     debug!("Headers {:?}", headers);
     debug!("Body {:?}", req.body());
 
+    let correlation_id = extract_correlation_id_from_headers(&headers);
+    
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
             let whole_body = get_whole_body(req).await;
@@ -103,6 +116,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             };
 
             let p = PublishRequest {
+		correlation_id,
                 payload: whole_body,
                 client_topic: client_topic,
             };
@@ -155,6 +169,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 			let mut endpoint = json.endpoint.clone();
 			endpoint.client_id = client_id;
 			let sb = SubscribeRequest {
+			    correlation_id,
                             client_interface_type: CustomerInterfaceType::REST,
                             client_topic: json.client_topic.clone(),
                             endpoint: endpoint,
@@ -221,6 +236,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
         .method("POST")
         .uri(uri)
         .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
+	.header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
         .body(Body::from(payload.payload))
         .expect("request builder");
 

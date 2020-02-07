@@ -100,6 +100,7 @@ impl KafkaBroker {
 				debug!("Adding subscription {:?}",req);
 				subscriptions_for_topic.push(req.clone());
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::Ok(format!("KAFKA has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -107,6 +108,7 @@ impl KafkaBroker {
 			    }else{
 				debug!("Subscription exists for {:?}",req);
 				if let Err(e) = sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
 				    status: BackendStatusCodes::NoTopic(format!("Duplicate subscription for topic {}",topic.clone()).to_string()),
 				}) {
 				    warn!("Can't send response back {:?}", e);
@@ -116,6 +118,7 @@ impl KafkaBroker {
 			    debug!("Can't find subscriptions {} adding new one", req);
 			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                             if let Err(e) = sender.send(structs::MessagingResult {
+				correlation_id: req.correlation_id,
 				status: BackendStatusCodes::Ok(format!("KAFKA has one susbscription for topic {}",topic.clone()).to_string()),
                             }) {
 				warn!("Can't send response back {:?}", e);
@@ -123,7 +126,9 @@ impl KafkaBroker {
 			}						
                     } else {
                         warn!("Can't find topic {}", req);
+			
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
@@ -152,6 +157,7 @@ impl KafkaBroker {
 				    }
 				    
 				    if let Err(e) = sender.send(structs::MessagingResult {
+					correlation_id: req.correlation_id,
 					status: BackendStatusCodes::Ok(format!("KAFKA has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
 				    }) {
 					warn!("Can't send response back {:?}", e);
@@ -160,6 +166,7 @@ impl KafkaBroker {
 				Err(_)=>{
 				    debug!("No subscriptions {}",req);
 				    if let Err(e) = sender.send(structs::MessagingResult {
+					correlation_id: req.correlation_id,
 					status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
 				    }) {
 					warn!("Can't send response back {:?}", e);
@@ -173,6 +180,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);
@@ -183,7 +191,7 @@ impl KafkaBroker {
 
                 Job::Publish(value) => {
                     let req = value;
-                    debug!("Kafka plain sending {}", req);
+                    debug!("Publish {}", req);
                     let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
                     let kafka_producer = kafka_producer.clone();
                     if let Some(topic) = maybe_topic {
@@ -191,9 +199,11 @@ impl KafkaBroker {
                             let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
                             let foo = kafka_producer.send(r, 0).map(move |status| match status {
                                 Ok(_) => sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
                                 }),
                                 Err(e) => sender.send(structs::MessagingResult {
+				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Error(e.to_string()),
                                 }),
                             });
@@ -206,6 +216,7 @@ impl KafkaBroker {
                     } else {
                         warn!("Can't find topic {:?}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
+			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {
                             warn!("Can't send response back {:?}", e);

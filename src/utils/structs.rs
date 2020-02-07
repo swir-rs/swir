@@ -27,13 +27,14 @@ impl CustomerInterfaceType {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishRequest {
+    pub(crate) correlation_id: String,
     pub(crate) payload: Vec<u8>,
     pub(crate) client_topic: String,
 }
 
 impl fmt::Display for PublishRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PublishRequest {{ client_topic: {}, payload:{} }}", &self.client_topic, String::from_utf8_lossy(&self.payload))
+        write!(f, "PublishRequest {{ correlation_id: {}, client_topic: {}, payload:{} }}", &self.correlation_id, &self.client_topic, String::from_utf8_lossy(&self.payload))
     }
 }
 
@@ -52,6 +53,7 @@ pub struct ClientSubscribeRequest {
 #[derive(Clone,Debug)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
+    pub(crate) correlation_id: String,
     pub(crate) client_topic: String,
     pub(crate) client_interface_type: CustomerInterfaceType,
     pub(crate) tx: Box<mpsc::Sender<MessagingToRestContext>>
@@ -63,14 +65,16 @@ impl Eq for SubscribeRequest {
 
 impl fmt::Display for SubscribeRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SubscribeRequest {{ endpoint: {:?}, client_topic:{}, client_interface_type:{:?} }}", &self.endpoint, &self.client_topic, &self.client_interface_type)
+        write!(f, "SubscribeRequest {{ correlation_id: {}, endpoint: {:?}, client_topic:{}, client_interface_type:{:?} }}", &self.correlation_id, &self.endpoint, &self.client_topic, &self.client_interface_type)
     }
 }
 
 
 impl PartialEq for SubscribeRequest {
     fn eq(&self, other: &Self) -> bool {
-        if self.client_topic != other.client_topic{
+	if self.correlation_id != other.correlation_id{
+	    false
+        }else if self.client_topic != other.client_topic{
 	    false
 	}else if self.endpoint != other.endpoint{
 	    false
@@ -84,18 +88,23 @@ impl PartialEq for SubscribeRequest {
 
 impl Ord for SubscribeRequest {
     fn cmp(&self, other: &Self) -> Ordering {
-	let cmp = self.client_topic.cmp(&other.client_topic);
+	let cmp = self.correlation_id.cmp(&other.correlation_id);
 	if cmp==Ordering::Equal{
-	    let cmp = self.endpoint.cmp(&other.endpoint);
+	    let cmp = self.client_topic.cmp(&other.client_topic);
 	    if cmp==Ordering::Equal{
-		self.client_interface_type.cmp(&other.client_interface_type)
+		let cmp = self.endpoint.cmp(&other.endpoint);
+		if cmp==Ordering::Equal{
+		    self.client_interface_type.cmp(&other.client_interface_type)
+		}else{
+		    cmp
+		}
+		
 	    }else{
 		cmp
 	    }
-	    
 	}else{
 	    cmp
-	}	
+	}
     }
 }
 
@@ -128,6 +137,7 @@ impl fmt::Display for BackendStatusCodes {
 
 #[derive(Debug)]
 pub struct MessagingResult {
+    pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
 }
 

@@ -21,21 +21,27 @@ pub mod client_api {
     tonic::include_proto!("swir");
 }
 
+impl fmt::Display for client_api::SubscribeRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubscribeRequest {{ correlation_id:{}, topic:{}}}", &self.correlation_id,&self.topic)
+    }
+}
+
 impl fmt::Display for client_api::SubscribeResponse{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Payload = {}", String::from_utf8_lossy(&self.payload))
+        write!(f, "SubscribeResponse {{ correlation_id:{}, payload:{}}}", &self.correlation_id,String::from_utf8_lossy(&self.payload))
     }
 }
 
 impl fmt::Display for client_api::PublishRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Topis {} Payload = {}", &self.topic, String::from_utf8_lossy(&self.payload))
+        write!(f, "PublishRequest {{ correlation_id:{}, topic: {}, payload:{} }}", &self.correlation_id, &self.topic, String::from_utf8_lossy(&self.payload))
     }
 }
 
 impl fmt::Display for client_api::PublishResponse{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Status = {}", &self.status)
+        write!(f, "PublishResponse {{ correlation_id:{}, status: {} }}",&self.correlation_id,  &self.status)
     }
 }
 
@@ -50,8 +56,6 @@ impl SwirAPI {
     fn find_channel(&self, topic_name: &String) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
-
-
 
     pub fn new(
         from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
@@ -76,15 +80,12 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
     async fn publish_bi_stream(&self, request: tonic::Request<tonic::Streaming<client_api::PublishRequest>>) -> Result<tonic::Response<Self::PublishBiStreamStream>, tonic::Status> {
 	info!("Publish bidi stream");
         let stream = request.into_inner();
-
         let (mut tx, rx) = mpsc::channel(10);
 	let (mut internal_tx, mut internal_rx): (mpsc::Sender<client_api::PublishResponse>, mpsc::Receiver<client_api::PublishResponse>) = mpsc::channel(1);
 
-
-
 	let error1 = Arc::new(AtomicBool::new(false));
 	let error2 = error1.clone();
-	
+
 	let channels = self.from_client_to_backend_channel_sender.clone();
         tokio::spawn(
 	    async move {
@@ -97,7 +98,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 			    debug!("Got message {:?}",response);
 			    let pr :client_api::PublishResponse = response.clone();
                             let r = tx.send(Ok(pr.clone())).await; //.expect("I should not panic as I should not be here!");
-			    if let Err(e) = r {			
+			    if let Err(_) = r {			
 				error.swap(true,Ordering::Relaxed);
 				info!("gRPC connection closed for message {:?}",pr);
 				break;
@@ -128,11 +129,12 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		    match request{
 			Some(request)=> {
 			    if let Ok(request) = request{
-				debug!("Publish request  {}", request);
+				info!("Publish request {}", request);
 				let mut msg = String::new();
 				
 				if let Some(tx) = channels.get(&request.topic) {
 				    let p = crate::utils::structs::PublishRequest {				    
+					correlation_id: request.correlation_id.clone(),
 					payload: request.payload,
 					client_topic: request.topic.clone(),
 				    };
@@ -158,12 +160,13 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 				    msg.push_str("Invalid token");
 				}
 				let reply = client_api::PublishResponse {
+				    correlation_id: request.correlation_id,
 				    status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
 				};
 				debug!("Sending internally  {:?}",reply);
 				let r = internal_tx.send(reply.clone()).await;
 				
-				if let Err(e) =r{
+				if let Err(_) =r{
 				    info!("Internal channel closed for message {:?}", reply);
 				    error.swap(true,Ordering::Relaxed);
 				    break;
@@ -187,11 +190,11 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         &self,
         request: tonic::Request<client_api::PublishRequest>, // Accept request of type HelloRequest
     ) -> Result<tonic::Response<client_api::PublishResponse>, tonic::Status> {
-        debug!("Publish {:?}", request);
         let request = request.into_inner();
-
+        info!("Publish {}", request);
         if let Some(tx) = self.find_channel(&request.topic) {
             let p = crate::utils::structs::PublishRequest {
+		correlation_id: request.correlation_id.clone(),
                 payload: request.payload,
                 client_topic: request.topic.clone(),
             };
@@ -209,12 +212,14 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 	   
             let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;	   
             let mut msg = String::new();
+	    
             if let Ok(res) = response_from_broker {
                 msg.push_str(&res.status.to_string());
             } else {
                 msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
             }
             let reply = client_api::PublishResponse {
+		correlation_id: request.correlation_id,
                 status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
             };
             Ok(tonic::Response::new(reply)) // Send back our formatted greeting
@@ -226,31 +231,28 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
     type SubscribeStream = mpsc::Receiver<Result<client_api::SubscribeResponse, Status>>;
 
     async fn subscribe(&self, request: tonic::Request<client_api::SubscribeRequest>) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
-        let topic = request.into_inner().topic;
-        info!("Subscribe topic = {:?}", topic);
+	let request = request.into_inner();
+	info!("Subscribe {}", request);
+        let topic = request.topic;
+	let correlation_id = request.correlation_id;	
 	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(100);
 	let mut small_rng = SmallRng::from_entropy();
 	let mut array: [u8; 32]=[0;32];
 	small_rng.fill(&mut array);
 	let client_id = base64::encode(&array);	
         let sr = crate::utils::structs::SubscribeRequest {
+	    correlation_id:correlation_id.clone(),
             endpoint: EndpointDesc { url: "".to_string(), client_id:client_id },
             client_topic: topic.clone(),
             client_interface_type: GRPC,
 	    tx: Box::new(to_client_tx)
         };
-
 	
         let (local_tx, _local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
         let subscribe_job = RestToMessagingContext {
             job: Job::Subscribe(sr.clone()),
             sender: local_tx,
         };
-
-	
-
-	
-        info!("About to send to messaging processor");
 
 	let mut txx;
         if let Some(tx) = self.find_channel(&topic) {
@@ -264,23 +266,10 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
         }
 
         let (mut tx, rx) = mpsc::channel(100);
-        let missed_messages = self.missed_messages.clone();
-
         tokio::spawn(async move {
-            // let mut missed_messages = missed_messages.lock().await;
-            // while let Some(s) = missed_messages.pop_front() {
-	    // 	debug!("Sending message from emergency queue {}",s);
-            //     let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-            //     info!("Message sent from the queue {:?} {}", r, s);
-            //     if let Err(_) = r {
-            //         info!("Message pushed front  {}", s);
-            //         missed_messages.push_front(s);		    
-            //         return;
-            //     }
-            // }
 	    let mut msgs:i32  = 0;
 	    while let Some(messaging_context) = to_client_rx.recv().await{
-		let s = client_api::SubscribeResponse { payload: messaging_context.payload };
+		let s = client_api::SubscribeResponse { correlation_id:correlation_id.clone(), payload: messaging_context.payload };
 		msgs+=1;
 		debug!("Sending message {}",s);
 		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");

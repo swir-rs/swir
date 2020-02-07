@@ -18,14 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-
-
 import rs.swir.client.payload.Payload;
+
+
 
 import javax.validation.constraints.NotNull;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -97,7 +98,7 @@ public class TestController {
         final AtomicLong totalSendTime  = new AtomicLong(0);
         Semaphore semaphore  =new Semaphore(threads);
 
-        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
+        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
 
         final AtomicInteger sentCount = new AtomicInteger();
         semaphore.acquire(threads);
@@ -177,7 +178,7 @@ public class TestController {
     void sendMessageViaSidecarFlux(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
         var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
         logger.info("sending request {}",p);
-        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic);
+        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
         final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl)
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));

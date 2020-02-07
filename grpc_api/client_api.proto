@@ -36,24 +36,29 @@ service ClientApi {
 
 // Publish message structure.
 message PublishRequest {
-    //queue name, will be mapped to a physical queue name
-    string topic = 1;
+  string correlation_id=1;
+  //queue name, will be mapped to a physical queue name
+    string topic = 2;
     //Payload is copied directly into appropriate format
-    bytes payload = 2;
+  bytes payload = 3;
 }
 
 // Response message structure
 message PublishResponse {
-    string status = 1;
+  string correlation_id=1;
+  string status = 2;
 }
 
 message SubscribeRequest {
-    //queue name, will be mapped to a physical queue name
-    string topic = 1;
+  //correlation id for the whole stream
+    string correlation_id=1;
+  //queue name, will be mapped to a physical queue name
+    string topic = 2;
 }
 
 // Response message structure
 message SubscribeResponse {
-    //Payload is copied directly into appropriate format
-    bytes payload = 1;
+    string correlation_id=1;
+  //Payload is copied directly into appropriate format
+    bytes payload = 2;
 }
