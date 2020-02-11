@@ -16,8 +16,13 @@ services:
       - client_consumer_topic_1=SubscribeToAppA
       - producer_topic_1=Request
       - client_producer_topic_1=ProduceToAppA
+      - consumer_topic_2=Response2
+      - consumer_group_2=swir
+      - client_consumer_topic_2=SubscribeToAppC
+      - producer_topic_2=Request2
+      - client_producer_topic_2=ProduceToAppC
 
-  swir-kafka-sink:
+  swir-kafka-sink1:
     networks:
       - swir-net
     image: swir-kafka-sink:v2
@@ -28,6 +33,18 @@ services:
       - sink_producer_topic=Response
     depends_on:
       - "swir"
+      
+  swir-kafka-sink2:
+    networks:
+      - swir-net
+    image: swir-kafka-sink:v2
+    environment:
+      - bootstrap_servers=kafka:9094
+      - sink_consumer_topic=Request2
+      - sink_consumer_group=swir
+      - sink_producer_topic=Response2
+    depends_on:
+      - "swir"      
 
   swir-grpc-sink:
     networks:

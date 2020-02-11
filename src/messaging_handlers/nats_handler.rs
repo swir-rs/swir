@@ -19,12 +19,12 @@ use super::super::utils::structs::*;
 pub struct NatsBroker {
     pub nats: Nats,
     pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-//    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
     pub subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
 }
 
 fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
-    debug!("Processing message  {:?}", p);
+    let msg = String::from_utf8_lossy(&p);
+    debug!("Processing message {} {:?}", subscriptions.len(), msg);
     
     for subscription in subscriptions.iter_mut(){	
 	let (s, _r) = futures::channel::oneshot::channel();
@@ -48,7 +48,7 @@ impl NatsBroker {
             match job.job {
                 Job::Subscribe(value) => {
                     let req = value;
-                    info!("New registration  {:?}", req);
+                    info!("Subscribe {}", req);
 		    let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
 
                     if let Some(topic) = maybe_topic {			
@@ -96,7 +96,7 @@ impl NatsBroker {
 
 		Job::Unsubscribe(value)=>{
 		    let req = value;
-                    info!("Subscription removal  {:?}", req);
+                    info!("Unsubscribe {}", req);
 
                     let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
 
@@ -144,7 +144,8 @@ impl NatsBroker {
 		
 
                 Job::Publish(value) => {
-                    let req = value;
+		    let req = value;
+                    debug!("Publish {}", req);
                     let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
                     if let Some(topic) = maybe_topic {
                         let foo = nats.publish(&topic, &req.payload);
@@ -208,9 +209,6 @@ impl NatsBroker {
     }
 }
 
-
-
-
 #[async_trait]
 impl Broker for NatsBroker {
     async fn configure_broker(&self) {
@@ -222,15 +220,16 @@ impl Broker for NatsBroker {
 	if !self.nats.consumer_topics.is_empty(){
 	    let mut consumer_topics = vec![];
             let mut consumer_groups = vec![];
+	    let mut client = nats::Client::new(cluster).unwrap();
+	    client.set_name("swir");
             for ct in self.nats.consumer_topics.iter() {
+		
 		consumer_topics.push(ct.consumer_topic.clone());
 		consumer_groups.push(ct.consumer_group.clone());
+		debug!("Subscribing to topic {} {}",ct.consumer_topic,ct.consumer_group);
+		client.subscribe(ct.consumer_topic.as_str(), Some(&ct.consumer_group)).unwrap();
             }
-	    let consumer_group = consumer_groups.get(0).unwrap();
-            let consumer_topic = consumer_topics.get(0).unwrap();
-	    let mut client = nats::Client::new(cluster).unwrap();
-	    client.set_name(&consumer_group);
-            client.subscribe(consumer_topic.as_str(), Some(&consumer_group)).unwrap();
+	 
 	    incoming_client = Some(client);
 	}else{
 	    info!("No consumers configured");

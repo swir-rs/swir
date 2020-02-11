@@ -12,9 +12,15 @@ channels:
         - consumer_topic: ${consumer_topic_1}
           consumer_group: ${consumer_group_1}
           client_topic: ${client_consumer_topic_1}
+        - consumer_topic: ${consumer_topic_2}
+          consumer_group: ${consumer_group_2}
+          client_topic: ${client_consumer_topic_2}          
       producer_topics:
         - producer_topic: ${producer_topic_1}
           client_topic: ${client_producer_topic_1}
+        - producer_topic: ${producer_topic_2}
+          client_topic: ${client_producer_topic_2}          
+      
 
   nats:
     - brokers:
@@ -23,7 +29,12 @@ channels:
         - consumer_topic: "Response"
           consumer_group: "swir"
           client_topic: "SubscribeToAppB"
+        - consumer_topic: "Response2"
+          consumer_group: "swir"
+          client_topic: "SubscribeToAppD"
       producer_topics:
         - producer_topic: "Request"
           client_topic: "ProduceToAppB"
+        - producer_topic: "Request2"
+          client_topic: "ProduceToAppD"
 

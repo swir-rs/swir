@@ -26,8 +26,6 @@ cd ../../
 #cargo build --features="with_nats"
 #docker build . --build-arg executable=target/debug/swir --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
 
-
-
 cargo build --release --features="with_nats"
 docker build . --build-arg executable=target/release/swir --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
 
@@ -40,6 +38,8 @@ docker-compose -f docker/docker-compose-infr.yml up -d
 
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response --partitions 2 --replication-factor 1
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request2 --partitions 2 --replication-factor 1
+docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response2 --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic RequestNoSidecar --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic ResponseNoSidecar --partitions 2 --replication-factor 1
 
@@ -49,25 +49,16 @@ docker-compose  -f docker/docker-compose-swir.yml up -d
 #use these to produce and receive messasges
 
 #Kafka test over REST
+#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","producerTopics":["ProduceToAppA","ProduceToAppC"],"subscriberTopics":["SubscribeToAppA","SubscribeToAppC"],"missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
 
-#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppA","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
-
-
-#Nats test
-
-
-#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppB","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+#Nats test over REST
+#docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","producerTopics":["ProduceToAppB","ProduceToAppD"],"subscriberTopics":["SubscribeToAppB","SubscribeToAppD"],"missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
 
 #Kafka test over gRPC
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA -e publish_type=[unary|bidi] swir-grpc-client:v2
 
-
 #Nats test over gRPC
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppB -e client_response_topic=SubscribeToAppB  swir-grpc-client:v2
-
-
 
 #gRPC to gRPC
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir-grpc-sink -e sidecar_port=50052 -e messages=1000000 -e threads=200 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v2

@@ -273,7 +273,6 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		msgs+=1;
 		debug!("Sending message {}",s);
 		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-
 		if let Err(_) = r {
 		    info!("Message pushed back {}", s);
 		    let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();	
@@ -282,7 +281,6 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 			sender: unsub_tx,
 		    };
 		    
-		    //                    missed_messages.push_back(s);
 		    if let Err(e) = txx.try_send(unsubscribe_job) {
 			warn!("Channel is dead {:?}", e);
 		    }

@@ -4,11 +4,17 @@ spring:
   cloud:
     stream:
       bindings:
-        input:
+        input1:
           destination: Request
           binder: nats
-        output:
+        output1:
           destination: Response
+          binder: nats
+        input2:
+          destination: Request2
+          binder: nats
+        output2:
+          destination: Response2
           binder: nats
 nats:
   spring:

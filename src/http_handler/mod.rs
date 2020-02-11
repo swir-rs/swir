@@ -9,30 +9,28 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
-use rand::{Rng, SeedableRng};
-use rand::rngs::SmallRng;
-use base64;
+
 
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 
-static X_CORRRELATION_ID_HEADER_NAME:&'static str = "X-Correlation-ID";
+static X_CORRRELATION_ID_HEADER_NAME:&'static str = "x-correlation-id";
 
-fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
+fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
     extract_value_from_headers(String::from("topic"),headers)
 }
 
-fn extract_value_from_headers(header_name:String, headers: &HeaderMap<HeaderValue>) -> String {
-	let header = header::HeaderName::from_lowercase(header_name.as_bytes()).unwrap();
-	let maybe_header = headers.get(header);
-	if let Some(value) = maybe_header {
-            String::from_utf8_lossy(value.as_bytes()).to_string()
-	} else {
-            "".to_string()
-	}
+fn extract_value_from_headers(header_name:String, headers: &HeaderMap<HeaderValue>) -> Option<String> {
+    let header = header::HeaderName::from_lowercase(header_name.as_bytes()).unwrap();
+    let maybe_header = headers.get(header);
+    if let Some(value) = maybe_header {
+        Some(String::from_utf8_lossy(value.as_bytes()).to_string())
+    } else {
+        None
+    }
 }
-    
-fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> String {
+
+fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
     extract_value_from_headers(String::from(X_CORRRELATION_ID_HEADER_NAME),headers)
 }
 
@@ -44,16 +42,16 @@ fn find_channel_by_topic<'a>(
     from_client_to_backend_channel_sender.get(client_topic)
 }
 
-fn find_to_client_sender<'a>(client_topic: &'a String,to_client_sender: &'a Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>)->Option<&'a Box<mpsc::Sender<MessagingToRestContext>>>
-{
+fn find_to_client_sender<'a>(client_topic: &'a String,to_client_sender: &'a Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>)->Option<&'a Box<mpsc::Sender<MessagingToRestContext>>>{
     to_client_sender.get(client_topic)
-    
+	
 }
 
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     match headers.get(http::header::CONTENT_TYPE) {
         Some(header) => {
             if header == HeaderValue::from_static("application/json") {
+		debug!{"Found header {:?}",header}
                 return Some(true);
             } else {
                 return None;
@@ -62,6 +60,7 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
         None => return None,
     }
 }
+    
 
 fn set_http_response(backend_status: BackendStatusCodes, response: &mut Response<Body>) {
     match backend_status {
@@ -98,7 +97,15 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
     debug!("Headers {:?}", headers);
     debug!("Body {:?}", req.body());
 
-    let correlation_id = extract_correlation_id_from_headers(&headers);
+    let correlation_id = if let Some(correlation_id) = extract_correlation_id_from_headers(&headers){
+	correlation_id
+    }else{
+	*response.status_mut() = StatusCode::BAD_REQUEST;
+        *response.body_mut() = Body::empty();
+        return Ok(response);
+    };
+	
+    debug!("Correlation id {:?}", correlation_id);
     
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/publish") => {
@@ -106,7 +113,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             let wb = whole_body.clone();
             let wb = String::from_utf8_lossy(&wb);
             info!("Publish start {}", wb);
-            let client_topic = extract_topic_from_headers(&headers);
+            let client_topic = extract_topic_from_headers(&headers).unwrap();
             let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
             let mut sender = if let Some(channel) = maybe_channel {
                 channel.clone()
@@ -146,28 +153,23 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             return Ok(response);
         }
 
-        (&Method::POST, "/subscribe") => {
-            if validate_content_type(&headers).is_none() {
+        (&Method::POST, "/subscribe") => {	   
+            let whole_body = get_whole_body(req).await;            
+            let wb = String::from_utf8_lossy(&whole_body);
+	    info!("Subscribe {} ",wb);
+	    let maybe_json = serde_json::from_slice(&whole_body);
+	    if validate_content_type(&headers).is_none() {
                 return Ok(response);
             }
-
-            let whole_body = get_whole_body(req).await;
-            let maybe_json = serde_json::from_slice(&whole_body);
             match maybe_json {
                 Ok(json) => {
+		    info!("Body {:?}",json);
                     let json: ClientSubscribeRequest = json;
-                    info!("{:?}", json);
                     let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
 		    let client_topic =  json.client_topic.clone();
-
+		  
 		    if let Some(to_client_sender) = find_to_client_sender(&client_topic,&to_client_sender_for_rest){
-
-			let mut small_rng = SmallRng::from_entropy();
-			let mut array: [u8; 32]=[0;32];
-			small_rng.fill(&mut array);
-			let client_id = base64::encode(&array);	
-			let mut endpoint = json.endpoint.clone();
-			endpoint.client_id = client_id;
+			let endpoint = json.endpoint.clone();			
 			let sb = SubscribeRequest {
 			    correlation_id,
                             client_interface_type: CustomerInterfaceType::REST,
@@ -189,7 +191,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                             job: Job::Subscribe(sb),
                             sender: local_tx,
 			};
-
+			debug!("Waiting for broker");
 			if let Err(e) = sender.try_send(job) {
                             warn!("Channel is dead {:?}", e);
                             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
@@ -207,28 +209,96 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 		    }else{
 			set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);			
 		    }
-		    
+		},
+		Err(e) => {
+                    warn!("Unable to parse body {:?}", e);
+                    *response.status_mut() = StatusCode::BAD_REQUEST;
+                    *response.body_mut() = Body::from(e.to_string());
                 }
-                Err(e) => {
+	    }
+	    Ok(response)
+	},
+	
+	(&Method::POST, "/unsubscribe") => {
+	    info!("Unsubscribe");
+	    if validate_content_type(&headers).is_none() {
+		return Ok(response);
+	    }
+
+	    let whole_body = get_whole_body(req).await;
+	    let maybe_json = serde_json::from_slice(&whole_body);
+	    match maybe_json {
+		Ok(json) => {
+		    let json: ClientSubscribeRequest = json;
+		    info!("{:?}", json);
+		    let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+		    let client_topic =  json.client_topic.clone();
+
+		    if let Some(to_client_sender) = find_to_client_sender(&client_topic,&to_client_sender_for_rest){
+			let endpoint = json.endpoint.clone();
+			let sb = SubscribeRequest {
+			    correlation_id,
+			    client_interface_type: CustomerInterfaceType::REST,
+			    client_topic: json.client_topic.clone(),
+			    endpoint: endpoint,
+			    tx:to_client_sender.clone()
+			};
+
+			let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
+
+			let mut sender = if let Some(channel) = maybe_channel {
+			    channel.clone()
+			} else {
+			    set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
+			    return Ok(response);
+			};
+
+			let job = RestToMessagingContext {
+			    job: Job::Unsubscribe(sb),
+			    sender: local_tx,
+			};
+
+			if let Err(e) = sender.try_send(job) {
+			    warn!("Channel is dead {:?}", e);
+			    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+			    *response.body_mut() = Body::empty();
+			}
+
+			let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+			debug!("Got result {:?}", response_from_broker);
+			if let Ok(res) = response_from_broker {
+			    set_http_response(res.status, &mut response);
+			} else {
+			    *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+			    *response.body_mut() = Body::empty();
+			}
+		    }else{
+			set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);			
+		    }
+		    
+		},
+
+	    	Err(e) => {
                     warn!("{:?}", e);
                     *response.status_mut() = StatusCode::BAD_REQUEST;
                     *response.body_mut() = Body::from(e.to_string());
                 }
-            }
-            Ok(response)
-        }
-
-        // The 404 Not Found route...
-        _ => {
-            let not_found = Response::default();
-            *response.status_mut() = StatusCode::NOT_FOUND;
-            Ok(not_found)
-        }
+	    }
+	    Ok(response)
+	}
+// The 404 Not Found route...
+	_ => {
+	    warn!("Don't know what to do {} {}",&req.method(), &req.uri());
+	    let mut not_found = Response::default();
+	    *not_found.status_mut() = StatusCode::NOT_FOUND;
+	    Ok(not_found)
+	}
     }
 }
 
 async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingToRestContext) {
     let uri = payload.uri;
+    //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
 
     let p = payload.payload.clone();

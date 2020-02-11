@@ -7,17 +7,21 @@ import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.cloud.stream.annotation.EnableBinding;
 import org.springframework.cloud.stream.annotation.StreamListener;
 import org.springframework.cloud.stream.messaging.Processor;
-import org.springframework.messaging.handler.annotation.SendTo;
 
 @EnableBinding(Processor.class)
 public class NatsConsumer {
     private final Logger logger = LoggerFactory.getLogger(rs.swir.performance.natssink.NatsConsumer.class);
 
+    @StreamListener(SinkAutoConfiguration.Topics1.INPUT)
+    @SendTo(SinkAutoConfiguration.Topics1.OUTPUT)
+    public Object consumeT1(Object message) {
+        logger.info(String.format("#### -> Consumed message -> %s", message));
+        return message;
+    }
 
-
-    @StreamListener(Processor.INPUT)
-    @SendTo(Processor.OUTPUT)
-    public Object consume(Object message) {
+    @StreamListener(SinkAutoConfiguration.Topics2.INPUT)
+    @SendTo(SinkAutoConfiguration.Topics2.OUTPUT)
+    public Object consumeT2(Object message) {
         logger.info(String.format("#### -> Consumed message -> %s", message));
         return message;
     }

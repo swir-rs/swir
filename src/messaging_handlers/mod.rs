@@ -39,10 +39,9 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
 
     #[cfg(feature = "with_nats")]
     {
-        i = 0;
-	
+        i = 0;	
         for nats in messaging.nats {
-	    let mce = mc.kafka_memory_channels.get(i);
+	    let mce = mc.nats_memory_channels.get(i);
             i = i + 1;
             if let None = mce {
 		continue;

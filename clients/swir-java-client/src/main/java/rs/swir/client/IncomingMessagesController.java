@@ -35,7 +35,7 @@ public class IncomingMessagesController {
     @Autowired
     AtomicInteger processedCounter;
 
-    @PostMapping("/response")
+    @PostMapping("/response*")
     public Mono<byte[]> handleSwirIncomingStream(@RequestBody() byte[]  body) {
         Payload p = null;
         try {

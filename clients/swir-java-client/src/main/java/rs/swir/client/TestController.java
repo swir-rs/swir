@@ -3,6 +3,7 @@ package rs.swir.client;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
 import org.slf4j.Logger;
@@ -20,13 +21,10 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import rs.swir.client.payload.Payload;
 
-
-
-import javax.validation.constraints.NotNull;
-
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,9 +35,12 @@ public class TestController {
     private static Logger logger = LoggerFactory.getLogger(TestController.class);
     private final CBORFactory f;
 
-    @NotNull
-    @Value("${sidecarUrl}")
-    private String sidecarUrl;
+    private static final Random random = new Random();
+    private static final String SIDECAR_TEST_TYPE= "sidecar";
+
+//    @NotNull
+//    @Value("${sidecarUrl}")
+//    private String sidecarUrl;
 
     @Autowired
     RestTemplate restTemplate;
@@ -66,16 +67,21 @@ public class TestController {
     }
 
     @PostMapping("/test")
-    public JsonNode handleSwirIncomingStream(@RequestBody() JsonNode body) throws InterruptedException {
+    public JsonNode handleSwirIncomingStream(@RequestBody() JsonNode body) throws InterruptedException, UnknownHostException, JsonProcessingException {
         logger.info("Test {}", body);
         var messages = body.get("messages").intValue();
         var threads = body.get("threads").intValue();
-        var clientTopic = body.get("clientTopic").textValue();
-        String url = body.get("sidecarUrl").textValue();
+        var producerTopics = (ArrayNode)body.get("producerTopics");
+        var subscriberTopics = (ArrayNode)body.get("subscriberTopics");
+        String sidecarUrl = body.get("sidecarUrl").textValue();
+
         var missedPacketsThreshold = 1;
         if(body.hasNonNull("missedPackets")) {
             missedPacketsThreshold = body.get("missedPackets").intValue();
         }
+
+        var clientUrl = "http://"+InetAddress.getLocalHost().getHostAddress()+":8090/response";
+        var clientId = UUID.randomUUID().toString();
         String testType;
         if(body.hasNonNull("testType")) {
             testType = body.get("testType").textValue();
@@ -84,7 +90,6 @@ public class TestController {
         }
         processedCounter.set(0);
         ObjectMapper om = new ObjectMapper();
-        ObjectMapper omCbor = new ObjectMapper(f);
         if(messages % threads !=0){
             ObjectNode response = om.createObjectNode();
             response.put("error", " messages doesn't divide by threads ");
@@ -92,18 +97,30 @@ public class TestController {
         }
         int offset = messages/threads;
 
-        logger.info("url {}",url);
+        logger.info("url {}",sidecarUrl);
         logger.info("offset {}",offset);
+        var correlationIds=  new ArrayList<String>();
+
+
+        if(testType==SIDECAR_TEST_TYPE) {
+            var iter = subscriberTopics.elements();
+            while (iter.hasNext()){
+                String correlationId = UUID.randomUUID().toString();
+                correlationIds.add(correlationId);
+                var subscriberTopic = iter.next().asText();
+                subscribeForMessagesFromSidecar(sidecarUrl,om,subscriberTopic, clientUrl+"-"+subscriberTopic, clientId,correlationId);
+            }
+
+        }
+
+        Thread.sleep(5000);
+
         testStarted.set(true);
         final AtomicLong totalSendTime  = new AtomicLong(0);
         Semaphore semaphore  =new Semaphore(threads);
-
-        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
-
         final AtomicInteger sentCount = new AtomicInteger();
         semaphore.acquire(threads);
         long totalStart = System.nanoTime();
-
         for(int i = 0; i <threads; i++) {
             final int k = i;
             ex.submit(new Runnable() {
@@ -113,11 +130,18 @@ public class TestController {
                     try {
                         for (int j = 0; j < offset; j++) {
                             final int c = k * offset + j;
-                            switch(testType){
-                                case "sidecar":
-                                    sendMessageViaSidecarFlux(c, om, clientTopic, sentCount);break;
-                                case "kafka":
-                                    sendMessageToKafkaDirectly(c,om,kafkaProducerTopic,sentCount);break;
+                            int t =0;
+                            var iter =producerTopics.elements();
+                            while(iter.hasNext()) {
+                                var producerTopic = iter.next().asText();
+                                switch (testType) {
+                                    case SIDECAR_TEST_TYPE:
+                                        sendMessageViaSidecarFlux(sidecarUrl, c, om, producerTopic, sentCount,producerTopic,subscriberTopics.get(t++).asText());
+                                        break;
+                                    case "kafka":
+                                        sendMessageToKafkaDirectly(c, om, kafkaProducerTopic, sentCount,producerTopic,subscriberTopics.get(t++).asText());
+                                        break;
+                                }
                             }
                         }
                     }catch(Exception e){
@@ -128,7 +152,6 @@ public class TestController {
                         logger.info("Run {} completed in {}",k,(stop-start));
                         semaphore.release();
                     }
-
                 }
             });
         };
@@ -136,21 +159,21 @@ public class TestController {
         int oldCount =0;
         int missingPacketCounter = 0;
         boolean missedPackets = false;
-
-        while(sentCount.get()!=messages){
+        var totalMessages = messages*producerTopics.size();
+        while(sentCount.get()!=totalMessages){
             Thread.sleep(100);
         }
-        logger.info("sent count {} {}",sentCount.get(),messages);
+        logger.info("sent count {} {}",sentCount.get(),totalMessages);
 
-        while(processedCounter.get()!=(messages) && !missedPackets){
+        while(processedCounter.get()!=(totalMessages) && !missedPackets){
             int count = processedCounter.get();
             logger.info("completed count {} {}",count,oldCount);
             if(oldCount==count){
                 missingPacketCounter++;
                 logger.warn("Count has not changed {}",missingPacketCounter );
             }else{
-		missingPacketCounter=0;
-	    }
+		        missingPacketCounter=0;
+	        }
             if(missingPacketCounter> missedPacketsThreshold){
                 missedPackets =true;
                 logger.error("Count has not changed {}",missingPacketCounter );
@@ -162,24 +185,37 @@ public class TestController {
         long totalEnd = System.nanoTime();
         long tt = totalEnd-totalStart;
         testStarted.set(false);
+        int i= 0;
+        if(testType==SIDECAR_TEST_TYPE) {
+            var iter =subscriberTopics.elements();
+            while (iter.hasNext()){
+                var correlationId = correlationIds.get(i++);
+                var subscriberTopic = iter.next().asText();
+                unsubscribeForMessagesFromSidecar(sidecarUrl, om, subscriberTopic, clientUrl+"-"+subscriberTopic, clientId,correlationId);
+            }
+        }
+
         ObjectNode response = om.createObjectNode();
+
         response.put("totalSendTimeNs",ts);
         response.put("totalSendTimeMs",TimeUnit.MILLISECONDS.convert(ts,TimeUnit.NANOSECONDS));
         response.put("totalSendTimeS",TimeUnit.SECONDS.convert(ts,TimeUnit.NANOSECONDS));
         response.put("totalTimeNs",tt);
         response.put("totalTimeMs",TimeUnit.MILLISECONDS.convert(tt,TimeUnit.NANOSECONDS));
         response.put("totalTimeS",TimeUnit.SECONDS.convert(tt,TimeUnit.NANOSECONDS));
-        response.put("throughput msg/sec",((double)messages/tt)*TimeUnit.NANOSECONDS.convert(1, TimeUnit.SECONDS));
-        response.put("packets missed ",messages- processedCounter.get());
+        response.put("throughput msg/sec",((double)totalMessages/tt)*TimeUnit.NANOSECONDS.convert(1, TimeUnit.SECONDS));
+        response.put("packets missed ",totalMessages- processedCounter.get());
         logger.info("{}",response);
         return response;
     }
 
-    void sendMessageViaSidecarFlux(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
-        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+    void sendMessageViaSidecarFlux(String sidecarUrl, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount, String clientName, String consumerName) throws JsonProcessingException {
+        byte[] bytes = new byte[64];
+        random.nextBytes(bytes);;
+        var p = new Payload().setProducer(clientName).setConsumer(consumerName).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
         logger.info("sending request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl)
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/publish")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 
@@ -187,25 +223,56 @@ public class TestController {
         sentCount.incrementAndGet();
     }
 
-    void sendMessageViaSidecarClassic(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException {
-        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+    void sendMessageViaSidecarClassic(String sidecarUrl, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount,String client,String consumer  ) throws JsonProcessingException {
+        byte[] bytes = new byte[64];
+        random.nextBytes(bytes);;
+        var p = new Payload().setProducer(client).setConsumer(consumer).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
         logger.info("sending request {}",p);
         HttpHeaders headers = new HttpHeaders();
-        headers.add("content-type", "application/octet-stream");
+        final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
         headers.add("topic", clientTopic);
         var request = new HttpEntity<>(om.writeValueAsString(p), headers);
-        restTemplate.postForEntity(sidecarUrl,request,String.class);
+        restTemplate.postForEntity(sidecarUrl+"/publish",request,String.class);
         sentCount.incrementAndGet();
 
     }
 
 
-    void sendMessageToKafkaDirectly(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount  ) throws JsonProcessingException, ExecutionException, InterruptedException {
-        Payload p = new Payload().setName("kafka-native").setSurname("fooo").setCounter(c);
+    void sendMessageToKafkaDirectly(int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount, String client,String consumer  ) throws JsonProcessingException, ExecutionException, InterruptedException {
+        byte[] bytes = new byte[64];
+        random.nextBytes(bytes);;
+        var p = new Payload().setProducer(client).setConsumer(consumer).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
         logger.info("sending request {}",p);
         var f = kafkaTemplate.send(clientTopic, om.writeValueAsString(p));
         f.get();
         sentCount.incrementAndGet();
+
+    }
+
+    public void subscribeForMessagesFromSidecar(String sidecarUrl, ObjectMapper om,String topic, String clientUrl,String clientId,String correlationId) throws JsonProcessingException {
+        var p = new ClientSubscribeRequest().setClientTopic(topic).setEndpoint(new EndpointDescription().setUrl(clientUrl).setClientId(clientId));
+        logger.info("subscribe request {}",p);
+        final Map<String, String> headersMap = Map.of("content-type","application/json","topic",topic,"X-Correlation-ID", correlationId);
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/subscribe")
+                .headers(httpHeaders -> httpHeaders.setAll(headersMap))
+                .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
+
+        var resp = request.exchange().block();
+        var body = resp.bodyToMono(String.class).block();
+        logger.info(String.format("Subscription status = %s , %s", resp.statusCode(),body));
+    }
+
+    public void unsubscribeForMessagesFromSidecar(String sidecarUrl,ObjectMapper om,String topic, String clientUrl,String clientId,String correlationId) throws JsonProcessingException {
+        var p = new ClientSubscribeRequest().setClientTopic(topic).setEndpoint(new EndpointDescription().setUrl(clientUrl).setClientId(clientId));
+        logger.info("unsubscribe request {}",p);
+        final Map<String, String> headersMap = Map.of("content-type","application/json","topic",topic,"X-Correlation-ID", correlationId);
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/unsubscribe")
+                .headers(httpHeaders -> httpHeaders.setAll(headersMap))
+                .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
+
+        var resp = request.exchange().block();
+        var body = resp.bodyToMono(String.class).block();
+        logger.info(String.format("Subscription status = %s , %s", resp.statusCode(),body));
 
     }
 }
