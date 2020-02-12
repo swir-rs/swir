@@ -7,28 +7,33 @@ use tokio::sync::mpsc;
 
 use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct ProducerTopic {
     pub producer_topic: String,
     pub client_topic: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct ConsumerTopic {
     pub consumer_topic: String,
     pub consumer_group: String,
     pub client_topic: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct Kafka {
     pub brokers: Vec<String>,
     pub producer_topics: Vec<ProducerTopic>,
     pub consumer_topics: Vec<ConsumerTopic>,
 }
 
-impl Kafka {
-    pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+pub trait ClientTopicsConfiguration {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String>;
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String>;
+}
+
+impl ClientTopicsConfiguration for Kafka {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -38,7 +43,7 @@ impl Kafka {
         maybe_topic
     }
 
-    pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -49,15 +54,15 @@ impl Kafka {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct Nats {
     pub brokers: Vec<String>,
     pub producer_topics: Vec<ProducerTopic>,
     pub consumer_topics: Vec<ConsumerTopic>,
 }
 
-impl Nats {
-    pub fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+impl ClientTopicsConfiguration for Nats {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -67,7 +72,7 @@ impl Nats {
         maybe_topic
     }
 
-    pub fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {

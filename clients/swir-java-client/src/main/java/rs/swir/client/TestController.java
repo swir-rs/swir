@@ -35,6 +35,7 @@ public class TestController {
     private static Logger logger = LoggerFactory.getLogger(TestController.class);
     private final CBORFactory f;
 
+
     private static final Random random = new Random();
     private static final String SIDECAR_TEST_TYPE= "sidecar";
 
@@ -71,8 +72,10 @@ public class TestController {
         logger.info("Test {}", body);
         var messages = body.get("messages").intValue();
         var threads = body.get("threads").intValue();
+
         var producerTopics = (ArrayNode)body.get("producerTopics");
         var subscriberTopics = (ArrayNode)body.get("subscriberTopics");
+
         String sidecarUrl = body.get("sidecarUrl").textValue();
 
         var missedPacketsThreshold = 1;
@@ -99,6 +102,7 @@ public class TestController {
 
         logger.info("url {}",sidecarUrl);
         logger.info("offset {}",offset);
+
         var correlationIds=  new ArrayList<String>();
 
 
@@ -110,7 +114,6 @@ public class TestController {
                 var subscriberTopic = iter.next().asText();
                 subscribeForMessagesFromSidecar(sidecarUrl,om,subscriberTopic, clientUrl+"-"+subscriberTopic, clientId,correlationId);
             }
-
         }
 
         Thread.sleep(5000);
@@ -118,6 +121,7 @@ public class TestController {
         testStarted.set(true);
         final AtomicLong totalSendTime  = new AtomicLong(0);
         Semaphore semaphore  =new Semaphore(threads);
+
         final AtomicInteger sentCount = new AtomicInteger();
         semaphore.acquire(threads);
         long totalStart = System.nanoTime();
@@ -130,6 +134,7 @@ public class TestController {
                     try {
                         for (int j = 0; j < offset; j++) {
                             final int c = k * offset + j;
+
                             int t =0;
                             var iter =producerTopics.elements();
                             while(iter.hasNext()) {
@@ -185,6 +190,7 @@ public class TestController {
         long totalEnd = System.nanoTime();
         long tt = totalEnd-totalStart;
         testStarted.set(false);
+
         int i= 0;
         if(testType==SIDECAR_TEST_TYPE) {
             var iter =subscriberTopics.elements();
@@ -209,10 +215,12 @@ public class TestController {
         return response;
     }
 
+
     void sendMessageViaSidecarFlux(String sidecarUrl, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount, String clientName, String consumerName) throws JsonProcessingException {
         byte[] bytes = new byte[64];
         random.nextBytes(bytes);;
         var p = new Payload().setProducer(clientName).setConsumer(consumerName).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
+
         logger.info("sending request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
         final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/publish")
@@ -223,10 +231,12 @@ public class TestController {
         sentCount.incrementAndGet();
     }
 
+
     void sendMessageViaSidecarClassic(String sidecarUrl, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount,String client,String consumer  ) throws JsonProcessingException {
         byte[] bytes = new byte[64];
         random.nextBytes(bytes);;
         var p = new Payload().setProducer(client).setConsumer(consumer).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
+
         logger.info("sending request {}",p);
         HttpHeaders headers = new HttpHeaders();
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());

@@ -6,20 +6,23 @@ use futures::stream::StreamExt;
 use nats::*;
 use tokio::sync::mpsc;
 use tokio::task;
-
+    
 use async_trait::async_trait;
-
 use crate::messaging_handlers::Broker;
+use crate::messaging_handlers::client_handler::ClientHandler;
 use crate::utils::config::Nats;
+
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
+use super::super::utils::config::ClientTopicsConfiguration;
+
 
 #[derive(Debug)]
-pub struct NatsBroker {
-    pub nats: Nats,
-    pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    pub subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
+pub struct NatsBroker{
+    nats: Nats,
+    rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
+    subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
 }
 
 fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
@@ -29,118 +32,62 @@ fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
     for subscription in subscriptions.iter_mut(){	
 	let (s, _r) = futures::channel::oneshot::channel();
 	debug!("Processing subscription  {:?}", subscription);
-	let p = MessagingToRestContext {
+	let mrc = MessagingToRestContext {
 	    sender: s,
 	    payload: p.to_vec(),
 	    uri: subscription.endpoint.url.clone(),
         };
-	if let Err(e) = subscription.tx.try_send(p){
-	    warn!("Unable to send. Channel could be closed {}", e)
-	}
+	match subscription.tx.try_send(mrc){
+	    Ok(_) => {
+		debug!("Message sent {:?}",msg);
+	    },
+	    
+	    Err(mpsc::error::TrySendError::Closed(_)) => {
+		warn!("Unable to send {}. Channel is closed", subscription);
+	    },
+	    Err(mpsc::error::TrySendError::Full(_)) => {
+		warn!("Unable to send {}. Channel is full", subscription);
+	    },
+	}	
     }
 }
 
-impl NatsBroker {    
+
+#[async_trait]
+impl ClientHandler for NatsBroker {
+    fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>{
+	Box::new(self.nats.clone())
+    }
+    fn get_subscriptions(&self)->Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>{
+	self.subscriptions.clone()
+    }
+    fn get_type(&self)->String{
+	"Nats".to_string()
+    }
+}
+
+impl NatsBroker {
+
+    pub fn new(config:Nats,rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>)->Self{
+	NatsBroker{
+	    nats:config,
+	    rx,
+	    subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new())))
+	}	
+    }
+      
     async fn nats_event_handler(&self, mut nats: Client) {
         let mut rx = self.rx.lock().await;
         while let Some(job) = rx.next().await {
             let sender = job.sender;
             match job.job {
-                Job::Subscribe(value) => {
-                    let req = value;
-                    info!("Subscribe {}", req);
-		    let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
-
-                    if let Some(topic) = maybe_topic {			
-			let mut subscriptions = self.subscriptions.lock().await;
-			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
-			    if let Err(_) = subscriptions_for_topic.binary_search(&req){
-				debug!("Adding subscription {}",req);
-				subscriptions_for_topic.push(req.clone());
-				if let Err(e) = sender.send(structs::MessagingResult {
-				    correlation_id: req.correlation_id,
-				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
-				}) {
-				    warn!("Can't send response back {:?}", e);
-				}
-			    }else{
-				debug!("Subscription exists for {:?}",req);
-				if let Err(e) = sender.send(structs::MessagingResult {
-				    correlation_id: req.correlation_id,
-				    status: BackendStatusCodes::NoTopic(format!("Duplicate subscription for topic {}",topic.clone()).to_string()),
-				}) {
-				    warn!("Can't send response back {:?}", e);
-				}
-			    }			
-			}else{
-			    warn!("Can't find subscriptions {} adding new one", req);
-			    subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
-                            if let Err(e) = sender.send(structs::MessagingResult {
-				correlation_id: req.correlation_id,
-				status: BackendStatusCodes::Ok(format!("NATS has one susbscription for topic {}",topic.clone()).to_string()),
-                            }) {
-				warn!("Can't send response back {:?}", e);
-                            }
-			}						
-                    } else {
-                        warn!("Can't find topic {:?}", req);
-                        if let Err(e) = sender.send(structs::MessagingResult {
-			    correlation_id: req.correlation_id,
-                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                        }) {
-                            warn!("Can't send response back {:?}", e);
-                        }
-                    }
-
-                }
+                Job::Subscribe(value) => {		    
+		    self.subscribe(value,sender).await;
+                },
 
 		Job::Unsubscribe(value)=>{
-		    let req = value;
-                    info!("Unsubscribe {}", req);
-
-                    let maybe_topic = self.nats.get_consumer_topic_for_client_topic(&req.client_topic);
-
-                    if let Some(topic) = maybe_topic {
-			let mut remove_topic = false;
-			let mut subscriptions = self.subscriptions.lock().await;		
-			if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
-			    if let Ok(index) = subscriptions_for_topic.binary_search(&req){
-				debug!("Subscription exists for {}",req);
-				subscriptions_for_topic.remove(index);
-				if subscriptions_for_topic.len()==0{
-				    remove_topic=true;
-				    debug!("All subscriptions removed for {}",topic);				    
-				}
-				
-				if let Err(e) = sender.send(structs::MessagingResult {
-				    correlation_id: req.correlation_id,
-				    status: BackendStatusCodes::Ok(format!("NATS has {} susbscriptions for topic {}",subscriptions_for_topic.len(),topic.clone()).to_string()),
-				}) {
-				    warn!("Can't send response back {:?}", e);
-				}
-			    }else{
-				debug!("No subscriptions  {}",req);
-				if let Err(e) = sender.send(structs::MessagingResult {
-				    correlation_id: req.correlation_id,
-				    status: BackendStatusCodes::NoTopic(format!("No subscription for topic {}",topic.clone()).to_string()),
-				}) {
-				    warn!("Can't send response back {:?}", e);
-				}
-			    }
-			}
-			if remove_topic{
-			    subscriptions.remove(&topic);
-			}
-                    } else {
-                        warn!("Can't find topic {}", req);
-                        if let Err(e) = sender.send(structs::MessagingResult {
-			    correlation_id: req.correlation_id,
-                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                        }) {
-                            warn!("Can't send response back {:?}", e);
-                        }
-                    }
-		}
+		    self.unsubscribe(value,sender).await;
+		},
 		
 
                 Job::Publish(value) => {

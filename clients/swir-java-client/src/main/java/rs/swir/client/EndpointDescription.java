@@ -26,6 +26,7 @@ final class EndpointDescription {
         return this;
     }
 
+
     @Override
     public String toString() {
         return "EndpointDescription{" +
@@ -33,4 +34,5 @@ final class EndpointDescription {
                 ", clientId='" + clientId + '\'' +
                 '}';
     }
+
 }

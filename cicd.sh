@@ -49,10 +49,12 @@ docker-compose  -f docker/docker-compose-swir.yml up -d
 #use these to produce and receive messasges
 
 #Kafka test over REST
+
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","producerTopics":["ProduceToAppA","ProduceToAppC"],"subscriberTopics":["SubscribeToAppA","SubscribeToAppC"],"missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
 
 #Nats test over REST
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":100, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","producerTopics":["ProduceToAppB","ProduceToAppD"],"subscriberTopics":["SubscribeToAppB","SubscribeToAppD"],"missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
+
 
 #Kafka test over gRPC
 #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA -e publish_type=[unary|bidi] swir-grpc-client:v2

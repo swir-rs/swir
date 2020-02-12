@@ -27,6 +27,7 @@ final class ClientSubscribeRequest {
         return this;
     }
 
+
     @Override
     public String toString() {
         return "ClientSubscribeRequest{" +
@@ -34,4 +35,5 @@ final class ClientSubscribeRequest {
                 ", clientTopic='" + clientTopic + '\'' +
                 '}';
     }
+
 }
