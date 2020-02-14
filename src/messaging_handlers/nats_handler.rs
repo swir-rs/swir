@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-
+use std::thread;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use nats::*;
@@ -27,27 +27,34 @@ pub struct NatsBroker{
 
 fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
     let msg = String::from_utf8_lossy(&p);
-    debug!("Processing message {} {:?}", subscriptions.len(), msg);
+    debug!("Processing message {} {}", subscriptions.len(), msg);
     
     for subscription in subscriptions.iter_mut(){	
-	let (s, _r) = futures::channel::oneshot::channel();
-	debug!("Processing subscription  {:?}", subscription);
-	let mrc = MessagingToRestContext {
-	    sender: s,
-	    payload: p.to_vec(),
-	    uri: subscription.endpoint.url.clone(),
-        };
-	match subscription.tx.try_send(mrc){
-	    Ok(_) => {
-		debug!("Message sent {:?}",msg);
-	    },
+	
+
+	let mut got_sent = false;
+	while !got_sent{
+	    let (s, _r) = futures::channel::oneshot::channel();	    	    
+	    let mrc = MessagingToRestContext {
+		sender: s,
+		payload: p.to_vec(),
+		uri: subscription.endpoint.url.clone(),
+            };
 	    
-	    Err(mpsc::error::TrySendError::Closed(_)) => {
-		warn!("Unable to send {}. Channel is closed", subscription);
-	    },
-	    Err(mpsc::error::TrySendError::Full(_)) => {
-		warn!("Unable to send {}. Channel is full", subscription);
-	    },
+	    match subscription.tx.try_send(mrc){
+		Ok(_) => {
+		    debug!("Message sent {}",msg);
+		    got_sent = true;
+		},	    
+		Err(mpsc::error::TrySendError::Closed(_)) => {
+		    got_sent = true;
+		    warn!("Unable to send {}. Channel is closed", subscription);
+		},
+		Err(mpsc::error::TrySendError::Full(_)) => {
+		    warn!("Unable to send {} {} . Channel is full", subscription,msg);		    
+		    thread::yield_now();
+		},
+	    }
 	}	
     }
 }
@@ -148,7 +155,7 @@ impl NatsBroker {
 			}
 			has_lock = true;
 		    }			
-		}		
+		}
 		send_request(subs, event.msg);		
             }
         });

@@ -235,7 +235,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 	info!("Subscribe {}", request);
         let topic = request.topic;
 	let correlation_id = request.correlation_id;	
-	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(100);
+	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(1000);
 	let mut small_rng = SmallRng::from_entropy();
 	let mut array: [u8; 32]=[0;32];
 	small_rng.fill(&mut array);
@@ -265,7 +265,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
             return Err(tonic::Status::invalid_argument("Invalid topic"));
         }
 
-        let (mut tx, rx) = mpsc::channel(100);
+        let (mut tx, rx) = mpsc::channel(1000);
         tokio::spawn(async move {
 	    let mut msgs:i32  = 0;
 	    while let Some(messaging_context) = to_client_rx.recv().await{

@@ -1,23 +1,32 @@
 package rs.swir.api.client.payload;
 
-
 public class Payload {
-    private String name;
-    private String surname;
+    private String producer;
+    private String consumer;
     private int counter;
+    private long timestamp;
+    private String payload;
 
-
-    public String getName() {
-        return name;
+    public String getProducer() {
+        return producer;
     }
 
-    @Override
-    public String toString() {
-        return "Payload{" +
-                "name='" + name + '\'' +
-                ", surname='" + surname + '\'' +
-                ", counter=" + counter +
-                '}';
+    public Payload setProducer(String producer) {
+        this.producer = producer;
+        return this;
+    }
+
+    public String getConsumer() {
+        return consumer;
+    }
+
+    public Payload setConsumer(String consumer) {
+        this.consumer = consumer;
+        return this;
+    }
+
+    public int getCounter() {
+        return counter;
     }
 
     public Payload setCounter(int counter) {
@@ -25,23 +34,33 @@ public class Payload {
         return this;
     }
 
-    public String getSurname() {
-        return surname;
+    public long getTimestamp() {
+        return timestamp;
     }
 
-    public Payload setSurname(String surname) {
-        this.surname = surname;
+    public Payload setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
         return this;
     }
 
-    public Payload setName(String name) {
-        this.name = name;
+    public String getPayload() {
+        return payload;
+    }
+
+    public Payload setPayload(String payload) {
+        this.payload = payload;
         return this;
     }
 
-
-
-    public int getCounter() {
-        return counter;
+    @Override
+    public String toString() {
+        return "Payload{" +
+                "producer='" + producer + '\'' +
+                ", consumer='" + consumer + '\'' +
+                ", counter=" + counter +
+                ", timestamp=" + timestamp +
+                ", payload='" + payload + '\'' +
+                '}';
     }
 }
+

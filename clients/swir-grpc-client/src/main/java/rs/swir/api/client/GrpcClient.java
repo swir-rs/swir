@@ -12,10 +12,8 @@ import io.grpc.stub.StreamObserver;
 import rs.swir.api.client.payload.Payload;
 
 
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.*;
 
-import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,6 +30,7 @@ public class GrpcClient {
     private final ManagedChannel channel;
     private final ClientApiGrpc.ClientApiBlockingStub blockingStub;
     private final ClientApiGrpc.ClientApiStub apiStub;
+    private static final Random random = new Random();
 
     /**
      * Construct client connecting to HelloWorld server at {@code host:port}.
@@ -112,8 +111,8 @@ public class GrpcClient {
 
         var messages = Integer.parseInt(System.getenv("messages"));
         var threads = Integer.parseInt(System.getenv("threads"));
-        var clientRequestTopic = System.getenv("client_request_topic");
-        var clientResponseTopic = System.getenv("client_response_topic");
+        var producerTopic= System.getenv("client_request_topic");
+        var subscriberTopic = System.getenv("client_response_topic");
 
         String publishType;
         var pt = System.getenv("publish_type");
@@ -142,7 +141,7 @@ public class GrpcClient {
 
         logger.info(String.format("offset %d", offset));
 
-        subscribeForMessagesFromSidecar(clientResponseTopic, processedCounter);
+        subscribeForMessagesFromSidecar(subscriberTopic, processedCounter);
 
         Thread.sleep(5000);
 
@@ -163,13 +162,13 @@ public class GrpcClient {
 
                     switch (publishType) {
                         case "unary":
-                            unaryMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore);
+                            unaryMessagesToSidecar(apiStub, k, offset, om, producerTopic, subscriberTopic, sentCount, totalSendTime, semaphore);
                             break;
 //                        case "uni":
-//                            streamMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore);
+//                            streamMessagesToSidecar(apiStub, k, offset, om, producerTopics, sentCount, totalSendTime, semaphore);
 //                            break;
                         case "bidi":
-                            streamObservers.add(biStreamMessagesToSidecar(apiStub, k, offset, om, clientRequestTopic, sentCount, totalSendTime, semaphore));
+                            streamObservers.add(biStreamMessagesToSidecar(apiStub, k, offset, om, producerTopic, subscriberTopic, sentCount, totalSendTime, semaphore));
                             break;
                         default:
                             logger.error(String.format("Don't know what to do with %s", publishType));
@@ -241,7 +240,7 @@ public class GrpcClient {
     }
 
 
-    io.grpc.stub.StreamObserver<rs.swir.api.client.PublishRequest> biStreamMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String clientTopic, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+    io.grpc.stub.StreamObserver<rs.swir.api.client.PublishRequest> biStreamMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String consumer, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
         var responses = new AtomicInteger(0);
 
         try {
@@ -268,9 +267,11 @@ public class GrpcClient {
             try {
                 for (int j = 0; j < offset; j++) {
                     final int c = k * offset + j;
-                    var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+                    byte[] bytes = new byte[64];
+                    random.nextBytes(bytes);;
+                    var p = new Payload().setProducer(producer).setConsumer(consumer).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
                     logger.debug(String.format("sending request %s", p));
-                    PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+                    PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(producer).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
                     response.onNext(request);
                     sentCount.incrementAndGet();
                 }
@@ -344,13 +345,13 @@ public class GrpcClient {
 //        }
 //    }
 
-    void unaryMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String clientTopic, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+    void unaryMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String subscriber, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
         logger.debug(String.format("Executing run %d ", k));
         long start = System.nanoTime();
         try {
             for (int j = 0; j < offset; j++) {
                 final int c = k * offset + j;
-                sendMessageToSidecar(blockingStub, c, om, clientTopic, sentCount);
+                sendMessageToSidecar(blockingStub, c, om, producer, subscriber, sentCount);
             }
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
@@ -363,10 +364,12 @@ public class GrpcClient {
 
     }
 
-    void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String clientTopic, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
-        var p = new Payload().setName("client").setSurname("fooo").setCounter(c);
+    void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String producer,String subscriber, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
+        byte[] bytes = new byte[64];
+        random.nextBytes(bytes);;
+        var p = new Payload().setProducer(producer).setConsumer(subscriber).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
         logger.debug(String.format("sending request %s", p));
-        PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(clientTopic).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
+        PublishRequest request = PublishRequest.newBuilder().setCorrelationId(UUID.randomUUID().toString()).setTopic(producer).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
         PublishResponse response;
         try {
             response = blockingStub.publish(request);
