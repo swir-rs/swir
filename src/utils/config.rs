@@ -121,11 +121,22 @@ pub struct Swir {
 impl Swir {
     pub fn new() -> Box<Swir> {
         let mut s = Config::new();
-        s.merge(File::with_name("swir.yaml")).unwrap();
-        s.merge(config::Environment::with_prefix("APP")).unwrap();
-
+	s.merge(config::Environment::with_prefix("SWIR")).unwrap();
+	debug!("{:?}",s);
+	
+	match s.get_str("config_file"){
+	    Ok(config_file)=>{
+		debug!("Trying config file at : {}", config_file);
+		s.merge(File::with_name(&config_file)).unwrap();
+	    },
+	    Err(e)=>{
+		debug!("Trying default config file ./swir.yaml {:?}",e);
+		s.merge(File::with_name("swir.yaml")).unwrap();
+	    }
+	}
+	    	
         let s = s.try_into().unwrap();
-        println!("SWIR Config : {:?}", s);
+        info!("SWIR Config : {:?}", s);
         Box::new(s)
     }
 }
