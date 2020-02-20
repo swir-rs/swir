@@ -140,7 +140,7 @@ impl KafkaBroker {
                         //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);
                         //                            }
                     } else {
-                        warn!("Can't find topic {:?}", req);
+                        warn!("Can't find topic {}", req);
                         if let Err(e) = sender.send(structs::MessagingResult {
 			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),

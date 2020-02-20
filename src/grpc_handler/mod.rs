@@ -95,15 +95,15 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		    let response = internal_rx.next().await;		
 		    match response{		
 			Some(response)=>{
-			    debug!("Got message {:?}",response);
+			    debug!("Got message {}",response);
 			    let pr :client_api::PublishResponse = response.clone();
                             let r = tx.send(Ok(pr.clone())).await; //.expect("I should not panic as I should not be here!");
 			    if let Err(_) = r {			
 				error.swap(true,Ordering::Relaxed);
-				info!("gRPC connection closed for message {:?}",pr);
+				info!("gRPC connection closed for message {}",pr);
 				break;
 			    }else{
-				debug!("Message sent {:?}",pr);
+				debug!("Message sent {}",pr);
 			    }
 			},
 			None=>{
@@ -163,11 +163,11 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 				    correlation_id: request.correlation_id,
 				    status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
 				};
-				debug!("Sending internally  {:?}",reply);
+				debug!("Sending internally  {}",reply);
 				let r = internal_tx.send(reply.clone()).await;
 				
 				if let Err(_) =r{
-				    info!("Internal channel closed for message {:?}", reply);
+				    info!("Internal channel closed for message {}", reply);
 				    error.swap(true,Ordering::Relaxed);
 				    break;
 				}
@@ -198,7 +198,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
                 payload: request.payload,
                 client_topic: request.topic.clone(),
             };
-            debug!("{:?}", p);
+            debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
             let job = RestToMessagingContext {
                 job: Job::Publish(p),

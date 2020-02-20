@@ -275,7 +275,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
         .method("POST")
         .uri(uri)
         .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
-	.header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
+//	.header(hyper::header::HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()), HeaderValue::from_string(payload."application/octet-stream"))
         .body(Body::from(payload.payload))
         .expect("request builder");
 

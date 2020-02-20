@@ -1,0 +1,24 @@
+client_ip: "0.0.0.0"
+client_http_port: 8080
+client_https_port: 8443
+client_grpc_port: 50051
+client_tls_private_key: "/swir.CA.pem"
+client_tls_certificate: "/demoCA/cacert.pem"
+#client_executable: "client.jar"
+channels:
+  kafka:
+    - brokers: [kafka:9094]
+      consumer_topics:
+        - consumer_topic: processor1_kafka_blue
+          consumer_group: swir
+          client_topic: orders
+      producer_topics: []
+
+  nats:
+    - brokers:
+        - nats://nats:4222
+      producer_topics:
+        - producer_topic: processor2_nats_green
+          client_topic: inventory
+      consumer_topics: []
+

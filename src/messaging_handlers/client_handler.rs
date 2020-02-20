@@ -45,7 +45,7 @@ pub trait ClientHandler{
 		    }
 		}			
 	    }else{
-		warn!("Can't find subscriptions {} adding new one", req);
+		info!("Can't find subscriptions {} adding new one", req);
 		subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                 if let Err(e) = sender.send(structs::MessagingResult {
 		    correlation_id: req.correlation_id,
