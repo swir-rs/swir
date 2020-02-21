@@ -38,6 +38,9 @@
           <li class="nav-item mx-0 mx-lg-1">
               <a class="nav-link py-3 px-0 px-lg-3 rounded js-scroll-trigger" href="#documentation">Documentation</a>
           </li>
+	  <li class="nav-item mx-0 mx-lg-1">
+              <a class="nav-link py-3 px-0 px-lg-3 rounded js-scroll-trigger" href="#examples">Examples</a>
+          </li>
           <li class="nav-item mx-0 mx-lg-1">
             <a class="nav-link py-3 px-0 px-lg-3 rounded js-scroll-trigger" href="#source">Source</a>
           </li>
@@ -138,79 +141,41 @@
         <!-- Documentation Content -->
         <div class="row">
             <h3 class="Heading text-center text-uppercase text-white mb-5">Top level architecture</h3>
-            <img class="img-responsive" src="img/swir.png" style="padding: 1rem; max-width: 100%;" alt="Top level architecture">
+            <img class="img-responsive" src="img/swir2.png" style="padding: 1rem; max-width: 100%;" alt="Top level architecture">
+        </div>
+
+      </div>
+  </section>
+
+    <section class="page-section" id="examples">
+      <div class="container">
+
+        <!-- Documentation Section Heading -->
+        <h2 class="page-section-heading text-center text-uppercase text-secondary mb-0">SWIR Based Solutions</h2>
+
+        <!-- Icon Divider -->
+        <div class="divider-custom divider-light">
+          <div class="divider-custom-line"></div>
+          <div class="divider-custom-icon">
+            <i class="fas fa-book"></i>
+          </div>
+          <div class="divider-custom-line"></div>
         </div>
 
         <div class="row">
-            <h3 class="Heading text-center text-uppercase text-white mb-0">Running</h3>
-            <p class="lead text-white mb-0">
-              <ul class="lead text-white">
-                <li>Most of the steps are documented in <a href="https://github.com/swir-rs/swir/blob/master/cicd.sh" target="_blank"> cicd.sh file</a>.</li>
-              </ul>
+          <h3 class="Heading text-center text-uppercase text-secondary mb-0">Docker-compose and SWIR based solution</h3>
+	  <img class="img-responsive" src="img/example-solution.png" style="padding: 1rem; max-width: 100%;" alt="Top level architecture">
+	  <div class="">
+            <p class="lead">
+	      In this example we use two docker-compose files to create a full solution.
+	      The first <a href="https://github.com/swir-rs/swir/docker/solution-example/docker-compose-example-sidecars.yaml" target="_blank"> <i class="fab fa-fw fa-github"></i>docker compose</a> file is used to create a network of SWIR sidecars fully configured and connected with the brokers. Only when we are happy that evertying is working as expected, we use the second <a href="https://github.com/swir-rs/swir/docker/solution-example/docker-compose-example-applications.yaml" target="_blank"> <i class="fab fa-fw fa-github"></i>docker compose</a> file to deploy applications. From the enterprise perspective this allows us :
+	      <ul>
+	  	<li><p class="lead">separate infrastructure and business logic</p></li>
+		<li><p class="lead">allow many different techonology stacks to co-exist as part of one solution</p></li>
+		<li><p class="lead">give the application teams have a simple interface to code against and enable the teams to roll features quickly</p></li>
+	      </ul>
             </p>
-            <pre style="color: white;">
-              <font color="gray">#Generating necessary certs for HTTPs but only on the first run. This requires openssl.</font>
-              ./generate-cert.sh
-
-              <font color="gray">#Building java based clients and sinks </font>
-              cd clients/swir-java-client
-              ./gradlew clean bootJar
-              docker build --tag swir-java-client:v2 .
-
-              cd ../swir-kafka-sink
-              ./gradlew clean bootJar
-              docker build --tag swir-kafka-sink:v2 .
-
-              cd ../swir-nats-sink
-              ./gradlew clean bootJar
-              docker build --tag swir-nats-sink:v2 .
-
-              cd ../swir-grpc-client
-              ./gradlew clean build installDist assembleDist
-              docker build --tag swir-grpc-client:v2 .
-
-              cd ../swir-grpc-sink
-              ./gradlew clean build installDist assembleDist
-              docker build --tag swir-grpc-sink:v2 .
-              cd ../../
-
-              <font color="gray">#Building SWIR</font>
-              cargo build --release --features="with_nats"
-              <font color="gray">#Ideally the operating system use to build a swir binary should be the same as specified in Dockerfile</font>
-              docker build . --build-arg executable=target/release/swir --build-arg client=clients/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
-
-              <font color="gray">#Cleaning Docker enrironment just in case</font>
-              docker-compose -f docker/docker-compose-swir.yml down --remove-orphans
-
-              <font color="gray">#Deploying infrastructure (Kafka, Nats)
-              #Docker instance names/network name created by docker compose could change </font>
-              docker-compose -f docker/docker-compose-infr.yml up -d
-
-              <font color="gray">#Creating topics </font>
-              docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request --partitions 2 --replication-factor 1
-              docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response --partitions 2 --replication-factor 1
-              docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic RequestNoSidecar --partitions 2 --replication-factor 1
-              docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic ResponseNoSidecar --partitions 2 --replication-factor 1
-
-              <font color="gray">#Deploying SWIR, clients and sinks</font>
-              docker-compose  -f docker/docker-compose-swir.yml up -d
-
-              <font color="gray">#Running test client over REST to Kafka</font>
-
-              #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppA"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-              #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":1000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppA","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
-
-              <font color="gray">#Running test client over REST to Nats</font>
-
-              #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"endpoint":{"url":"http://docker_swir-java-client_1:8090/response"},"client_topic":"SubscribeToAppB"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8080/subscribe
-              #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":1000, "threads":10, "sidecarUrl":"http://docker_swir_1:8080","clientTopic":"ProduceToAppB","missedPackets":50}' -H "Content-Type: application/json" -X POST http://docker_swir-java-client_1:8090/test
-
-              <font color="gray">#Running test client over gRPC to Kafka</font>
-              #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=1000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v2
-              <font color="gray">#Running test client over gRPC to Nats</font>
-              #docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=1000 -e threads=10 -e client_request_topic=ProduceToAppB -e client_response_topic=SubscribeToAppB  swir-grpc-client:v2
-
-            </pre>
+          </div>
         </div>
         <!-- /.row -->
 
@@ -218,11 +183,11 @@
     </section>
 
   <!-- Source Section -->
-  <section class="page-section" id="source">
+  <section class="page-section bg-secondary"  id="source">
     <div class="container">
 
       <!-- Source Section Heading -->
-      <h2 class="page-section-heading text-center text-uppercase text-secondary mb-0">Source</h2>
+      <h2 class="page-section-heading text-center text-uppercase text-white mb-0">Source</h2>
 
       <!-- Icon Divider -->
       <div class="divider-custom">
@@ -235,8 +200,7 @@
 
       <!-- Source Content -->
       <div class="row">
-        <p class="lead text-center"> All the source code is available on <a href="https://github.com/swir-rs/swir" target="_blank"> <i class="fab fa-fw fa-github"></i>github repository </a>. </p>
-        <p class="lead text-center"> All PRs are welcome and instructions on how to create one or submit an issue are here and here - TODO add links or other info. </p>
+        <p class="lead text-white text-center"> All the source code is available on <a href="https://github.com/swir-rs/swir" target="_blank"> <i class="fab fa-fw fa-github"></i>github repository</a>. All PRs are welcome!  </p>
       </div>
 
     </div>
@@ -273,9 +237,11 @@
 
         <!-- Footer About Text -->
         <div class="col-lg-4">
-          <h4 class="text-uppercase mb-4">About SWIR</h4>
-          <p class="lead mb-0">SWIR is a free to use tool under Apache 2.0 license created by
-            <a href="https://github.com/dawid-nowak">Dawid Nowak</a>.</p>
+          <h4 class="text-uppercase mb-4">Authors</h4>
+          <p class="lead mb-0">
+            <a href="https://github.com/dawid-nowak">Dawid Nowak</a></p>
+	            <p class="lead mb-0">
+            <a href="https://github.com/MadaManu">Mada Manu</a></p>
         </div>
 
       </div>
