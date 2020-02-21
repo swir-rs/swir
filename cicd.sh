@@ -22,4 +22,5 @@ docker-compose -f docker/docker-compose-infr.yml up -d
 
 cd docker/performance-framework
 ./cicd.sh
-docker-compose -p pf -f docker/performance-framework/docker-compose-swir.yml down --remove-orphans
+cd ../../
+#docker-compose -p pf -f docker/performance-framework/docker-compose-swir.yml down --remove-orphans
