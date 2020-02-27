@@ -30,3 +30,15 @@ channels:
 #        - producer_topic: "Request"
 #          client_topic: "ProduceToAppB"
 
+  aws_kinesis:
+    - regions:
+        - "eu_west2"
+        - "eu_west1"
+      consumer_topics:       
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topic: "SubscribeToAppA"
+      producer_topics:
+        - producer_topic: "Request"
+          client_topic: "ProduceToAppA"
+

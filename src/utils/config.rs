@@ -83,10 +83,42 @@ impl ClientTopicsConfiguration for Nats {
     }
 }
 
+#[derive(Debug, Deserialize,Clone)]
+pub struct AwsKinesis {
+    pub aws_access_key_id: String,
+    pub aws_secret_access_key: String,
+    pub regions: Vec<String>,
+    pub producer_topics: Vec<ProducerTopic>,
+    pub consumer_topics: Vec<ConsumerTopic>,
+}
+
+impl ClientTopicsConfiguration for AwsKinesis {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut maybe_topic = None;
+        for t in self.producer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.producer_topic.clone());
+            }
+        }
+        maybe_topic
+    }
+
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+        let mut maybe_topic = None;
+        for t in self.consumer_topics.iter() {
+            if t.client_topic.eq(client_topic) {
+                maybe_topic = Some(t.consumer_topic.clone());
+            }
+        }
+        maybe_topic
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Channels {
     pub kafka: Vec<Kafka>,
     pub nats: Vec<Nats>,
+    pub aws_kinesis: Vec<AwsKinesis>,
 }
 
 #[derive(Debug)]
@@ -100,6 +132,7 @@ pub struct MemoryChannelEndpoint {
 pub struct MemoryChannel {
     pub kafka_memory_channels: Vec<MemoryChannelEndpoint>,
     pub nats_memory_channels: Vec<MemoryChannelEndpoint>,
+    pub aws_kinesis_memory_channels: Vec<MemoryChannelEndpoint>,
     pub to_client_sender_for_rest: Box<HashMap<String,Box<mpsc::Sender<MessagingToRestContext>>>>,
     pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
@@ -202,6 +235,30 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
 	    to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
         }
     }
+
+
+    let mut aws_kinesis_memory_channels = vec![];
+    for aws_kinesis_channels in config.channels.aws_kinesis.iter() {
+        let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
+        let mme = MemoryChannelEndpoint {
+            from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
+            to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
+            to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
+        };
+        let from_client_sender = Box::new(from_client_sender);
+
+        aws_kinesis_memory_channels.push(mme);
+        for producer_topic in aws_kinesis_channels.producer_topics.iter() {
+            from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+        }
+
+        for consumer_topic in aws_kinesis_channels.consumer_topics.iter() {
+            from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+	    to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
+        }
+    }
+    
+    
     let mut nats_memory_channels = vec![];
     #[cfg(feature = "with_nats")]
     {
@@ -230,6 +287,7 @@ pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
     let mc = MemoryChannel {
         kafka_memory_channels,
         nats_memory_channels,
+	aws_kinesis_memory_channels,
 	to_client_sender_for_rest:Box::new(to_client_sender_for_rest_map),
         to_client_receiver_for_rest,
         to_client_receiver_for_grpc,

@@ -4,6 +4,8 @@ use crate::utils::config::{Channels, MemoryChannel};
 
 mod client_handler;
 mod kafka_handler;
+mod aws_kinesis_handler;
+
 #[cfg(feature = "with_nats")]
 mod nats_handler;
 
@@ -44,6 +46,19 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
             let nats_broker = nats_handler::NatsBroker::new(nats,rx);
             brokers.push(Box::new(nats_broker));
         }
+    }
+
+    let mut i = 0;
+    for aws_kinesis in messaging.aws_kinesis {
+        let mce = mc.aws_kinesis_memory_channels.get(i);
+        i = i + 1;
+        if let None = mce {
+            continue;
+        }
+        let mce = mce.unwrap();
+        let rx = mce.from_client_receiver.to_owned();        
+        let aws_kinesis_broker = aws_kinesis_handler::AwsKinesisBroker::new(aws_kinesis,rx);
+        brokers.push(Box::new(aws_kinesis_broker));
     }
 
     debug!("Brokers to configure {}", brokers.len());

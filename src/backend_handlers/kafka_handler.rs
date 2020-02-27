@@ -16,13 +16,13 @@ use tokio::sync::mpsc;
 use async_trait::async_trait;
 
 
-use crate::messaging_handlers::Broker;
+use crate::backend_handlers::Broker;
 use crate::utils::config::Kafka;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 use super::super::utils::config::ClientTopicsConfiguration;
-use crate::messaging_handlers::client_handler::ClientHandler;
+use crate::backend_handlers::client_handler::ClientHandler;
 
 impl ClientContext for CustomContext {}
 

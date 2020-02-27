@@ -14,8 +14,8 @@ use std::{
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
 use hyper::service::{make_service_fn, service_fn};
-use http_handler::client_handler;
-use http_handler::handler;
+use frontend_handlers::http_handler::{client_handler,handler};
+
 use utils::pki_utils::{load_certs, load_private_key};
 use hyper::{
     server::{accept::Accept, conn},
@@ -25,10 +25,10 @@ use hyper::{
 use tokio_rustls::TlsAcceptor;
 use crate::utils::config::MemoryChannel;
 use boxio::BoxedIo;
+use frontend_handlers::grpc_handler;
 mod boxio;
-mod grpc_handler;
-mod http_handler;
-mod messaging_handlers;
+mod frontend_handlers;
+mod backend_handlers;
 mod utils;
 
 #[derive(Debug)]
@@ -133,7 +133,7 @@ async fn main() {
     let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
     let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
     let broker = async {
-        messaging_handlers::configure_broker(swir_config.channels,  mc).await;
+        backend_handlers::configure_broker(swir_config.channels,  mc).await;
     };
 
     let server = Server::bind(&client_http_addr).serve(http_service);

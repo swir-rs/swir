@@ -8,8 +8,8 @@ use tokio::sync::mpsc;
 use tokio::task;
     
 use async_trait::async_trait;
-use crate::messaging_handlers::Broker;
-use crate::messaging_handlers::client_handler::ClientHandler;
+use crate::backend_handlers::Broker;
+use crate::backend_handlers::client_handler::ClientHandler;
 use crate::utils::config::Nats;
 
 
