@@ -10,11 +10,10 @@ channels:
     - brokers:
         - "127.0.0.1:9092"
         - "127.0.0.1:9094"
-      consumer_topics: []
-#        - 
-#consumer_topic: "Response"
-#          consumer_group: "swir"
-#          client_topic: "SubscribeToAppA"
+      consumer_topics:
+        - consumer_topic: "Response"
+          consumer_group: "swir"
+          client_topic: "SubscribeToAppA"
       producer_topics:
         - producer_topic: "Request"
           client_topic: "ProduceToAppA"
@@ -26,19 +25,31 @@ channels:
         - consumer_topic: "Response"
           consumer_group: "swir"
           client_topic: "SubscribeToAppB"
-      producer_topics:[]
-#        - producer_topic: "Request"
-#          client_topic: "ProduceToAppB"
+      producer_topics:
+       - producer_topic: "Request"
+         client_topic: "ProduceToAppB"
 
   aws_kinesis:
-    - regions:
-        - "eu_west2"
-        - "eu_west1"
+    - aws_access_key_id: "AKIASMSQEUYH3TQIJPXR"
+      aws_secret_access_key: "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"
+      regions:
+        - "eu-west-1"
       consumer_topics:       
-        - consumer_topic: "Response"
+        - consumer_topic: "some-Response"
           consumer_group: "swir"
-          client_topic: "SubscribeToAppA"
+          client_topic: "SubscribeToKinesis"
       producer_topics:
-        - producer_topic: "Request"
-          client_topic: "ProduceToAppA"
-
+        - producer_topic: "event-framework-stream"
+          client_topic: "ProduceToKinesis"
+    - aws_access_key_id: "AKIASMSQEUYH3TQIJPXR"
+      aws_secret_access_key: "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"
+      regions:
+        - "eu-west-1"
+      consumer_topics:       
+        - consumer_topic: "some-Response"
+          consumer_group: "swir"
+          client_topic: "SubscribeToKinesis"
+      producer_topics:
+        - producer_topic: "event-framework-stream2"
+          client_topic: "ProduceToKinesis2"          
+        

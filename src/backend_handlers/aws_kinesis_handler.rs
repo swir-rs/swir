@@ -1,16 +1,20 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-
-use futures::future::FutureExt;
+use std::str::FromStr;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
-
+use bytes;
 use tokio::sync::mpsc;
 use async_trait::async_trait;
-
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::distributions::{Alphanumeric};
+use base64;
 
 use crate::backend_handlers::Broker;
 use crate::utils::config::AwsKinesis;
+
+use rusoto_kinesis::Kinesis;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
@@ -19,7 +23,7 @@ use crate::backend_handlers::client_handler::ClientHandler;
 
 
 
-#[derive(Debug)]
+
 pub struct AwsKinesisBroker {
     aws_kinesis: AwsKinesis,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
@@ -51,6 +55,25 @@ async fn send_request(subscriptions:  &mut Box<Vec<SubscribeRequest>>, p: Vec<u8
     }
 }
 
+async fn aws_put_record(client:rusoto_kinesis::KinesisClient, stream_name:String, payload: bytes::Bytes, partition_key: String)->Result<(),()>{
+    let put_record_input = rusoto_kinesis::PutRecordInput{
+		data: payload,
+		explicit_hash_key: None,
+		partition_key,
+		sequence_number_for_ordering: None,
+		stream_name
+	    };
+    
+    match client.put_record(put_record_input).await{
+		Ok(resp)=> {
+		    info!("Resp {:?}",resp);
+		    Ok(())
+		},
+		Err(e)=>{error!("Err {:?}",e); Err(()) }
+	    }
+}
+
+
 #[async_trait]
 impl ClientHandler for AwsKinesisBroker {
     fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>{
@@ -66,6 +89,7 @@ impl ClientHandler for AwsKinesisBroker {
 
 impl AwsKinesisBroker {
     pub fn new(config:AwsKinesis,rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>)->Self{
+	
 	AwsKinesisBroker{
 	    aws_kinesis:config,
 	    rx,
@@ -73,10 +97,12 @@ impl AwsKinesisBroker {
 	}	
     }
     
-    async fn aws_kinesis_event_handler(&self) {
+    async fn aws_kinesis_event_handler(&self,aws_kinesis_client:rusoto_kinesis::KinesisClient) {
 	
         info!("Aws Kinesis running {:?}",self.aws_kinesis );
         let mut rx = self.rx.lock().await;
+
+	
         while let Some(job) = rx.next().await {
             let sender = job.sender;
             match job.job {
@@ -92,40 +118,43 @@ impl AwsKinesisBroker {
                     let req = value;
                     debug!("Publish {}", req);
 		    let maybe_topic = self.aws_kinesis.get_producer_topic_for_client_topic(&req.client_topic);
+		    let client = aws_kinesis_client.clone();
                     if let Some(topic) = maybe_topic {
-                    //     tokio::spawn(async move {
-                    //         let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
-                    //         let foo = kafka_producer.send(r, 0).map(move |status| match status {
-                    //             Ok(_) => sender.send(structs::MessagingResult {
-		    // 		    correlation_id: req.correlation_id,
-                    //                 status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
-                    //             }),
-                    //             Err(e) => sender.send(structs::MessagingResult {
-		    // 		    correlation_id: req.correlation_id,
-                    //                 status: BackendStatusCodes::Error(e.to_string()),
-                    //             }),
-                    //         });
-
-                    //         foo.await.expect("Should not panic!");
-                    //     });
-                    //     //                            if let Err(e) = foo.await {
-                    //     //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);
-                    //     //                            }
+			let partition_key = SmallRng::from_entropy().sample_iter(Alphanumeric).take(32).collect();			
+			tokio::spawn(async move {
+			    debug!("Partition topic {} key {}", topic, partition_key);
+			    match aws_put_record(client.clone(),topic,bytes::Bytes::from(req.payload),partition_key).await {
+				Ok(())=> {
+				    sender.send(structs::MessagingResult {
+		     			correlation_id: req.correlation_id,
+					status: BackendStatusCodes::Ok("AWS Kinesis is good".to_string())
+                                    });
+				},
+				Err(())=> {
+				    sender.send(structs::MessagingResult {
+ 					correlation_id: req.correlation_id,
+					status: BackendStatusCodes::Error("AWS Kinesis error".to_string()),
+				    });
+				}
+			    }
+			});
                     } else {
-                        warn!("Can't find topic {}", req);
-                         if let Err(e) = sender.send(structs::MessagingResult {
+			warn!("Can't find topic {}", req);
+			if let Err(e) = sender.send(structs::MessagingResult {
 		     	    correlation_id: req.correlation_id,
-                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                         }) {
-                             warn!("Can't send response back {:?}", e);
-                         }
+                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+			}) {
+                            warn!("Can't send response back {:?}", e);
+			}
                     }
-                }
+		}
             }
-        }
+	}
     }
 
-    async fn aws_kinesis_incoming_event_handler(&self) {
+
+
+    async fn aws_kinesis_incoming_event_handler(&self, aws_kinesis_client:rusoto_kinesis::KinesisClient) {
 
 
         let mut consumer_topics = vec![];
@@ -149,9 +178,23 @@ impl AwsKinesisBroker {
 #[async_trait]
 impl Broker for AwsKinesisBroker {
     async fn configure_broker(&self) {
-        info!("Configuring Aws Kinesis broker {:?} ", self);
-        let f1 = async { self.aws_kinesis_incoming_event_handler().await };
-        let f2 = async { self.aws_kinesis_event_handler().await };
+        info!("Configuring Aws Kinesis broker {:?} ", self.aws_kinesis);	
+	if self.aws_kinesis.regions.len() != 1{
+	    warn!("Invalid regions {:?}",self.aws_kinesis.regions);
+	    return;
+	}
+	
+	let region = if let Ok(region) = rusoto_signature::Region::from_str(&self.aws_kinesis.regions[0]){
+	    region
+	}else{
+	    warn!("Unknown region {}",self.aws_kinesis.regions[0]);
+	    return;
+	};
+
+	let kinesis_client = rusoto_kinesis::KinesisClient::new(region);
+			
+        let f1 = async { self.aws_kinesis_incoming_event_handler(kinesis_client.clone()).await };
+        let f2 = async { self.aws_kinesis_event_handler(kinesis_client.clone()).await };
         let (_r1, _r2) = futures::join!(f1, f2);
     }
 }
