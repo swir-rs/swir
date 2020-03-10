@@ -1,7 +1,4 @@
-#For kafka
-cargo build
-export RUST_LOG=info; export RUST_BACKTRACE=full;  cargo run --package rustycar --bin rustycar -- -a 127.0.0.1  -b 127.0.0.1:9092 -s Request -r Response -g rustycar
+export RUST_LOG=INFO,rusoto_core=INFO,swir=DEBUG,aws_lock_client=trace
+export RUST_BACKTRACE=full
+export SWIR_FILE_NAME=./swir.yaml; cargo run 
 
-#For NATS
-cargo build build --features="with_nats"
-cargo RUST_LOG=info; export RUST_BACKTRACE=full; run --features "with_nats" --package rustycar --bin rustycar -- -a 127.0.0.1  -b 127.0.0.1:4222 -s Request -r Response -g rustycar

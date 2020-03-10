@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 use std::io::{Error as StdError, ErrorKind};
 use std::{
@@ -30,6 +32,9 @@ mod boxio;
 mod frontend_handlers;
 mod backend_handlers;
 mod utils;
+
+
+
 
 #[derive(Debug)]
 struct TcpIncoming {
