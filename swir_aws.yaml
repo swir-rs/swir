@@ -41,8 +41,8 @@ channels:
       producer_topics:
         - producer_topic: "event-framework-stream"
           client_topic: "ProduceToKinesis"
-    - aws_access_key_id: "AKIASMSQEUYHTA2E6FHX"
-      aws_secret_access_key: "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"          
+    - aws_access_key_id: "${AWS_ACCESS_KEY}"
+      aws_secret_access_key: "${AWS_SECURE_ACCESS_KEY}"
       regions:
         - "eu-west-1"
       consumer_topics:       
