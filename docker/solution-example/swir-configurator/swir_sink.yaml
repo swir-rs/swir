@@ -17,4 +17,6 @@ channels:
     - brokers:
         - nats://nats:4222
       consumer_topics: []
-      producer_topics: []                
+      producer_topics: []
+
+  aws_kinesis: []

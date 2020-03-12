@@ -64,3 +64,7 @@ docker-compose  -f docker-compose-swir.yml -p pf up -d
 #docker logs pf_swir_1 > logs 2>&1
 
 #docker cp pf_swir_1:/pcap.logs ~/Workspace/rustycar/
+
+
+#curl -v -d '{"messages":100, "threads":10, "sidecarUrl":"http://127.0.0.1:8080","producerTopics":["ProduceToKinesis"],"subscriberTopics":["SubscribeToKinesis"],"missedPackets":50}' -H "Content-Type: application/json" -X POST http://127.0.0.1:8090/test
+

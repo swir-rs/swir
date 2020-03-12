@@ -21,4 +21,6 @@ channels:
         - producer_topic: processor2_nats_green
           client_topic: inventory
       consumer_topics: []
+      
+  aws_kinesis: []
 

@@ -22,4 +22,6 @@ channels:
           consumer_group: swir
           client_topic: inventory
       producer_topics: []
+      
+  aws_kinesis: []
 

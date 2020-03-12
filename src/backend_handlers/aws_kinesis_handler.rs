@@ -204,7 +204,9 @@ impl AwsKinesisBroker {
 		let aws_kinesis_client = aws_kinesis_client.clone();
 		let aws_lock_client = aws_lock_client.clone();
 		// starting a task per stream name
+		let subscriptions = self.subscriptions.clone();
 		let handle = tokio::spawn(async move {
+		    let subscriptions = subscriptions;
 		    let (stream_name, group_name,_) = desc.clone();
 	    	    let list_shards_input = rusoto_kinesis::ListShardsInput{
 	    		exclusive_start_shard_id: None,
@@ -218,14 +220,13 @@ impl AwsKinesisBroker {
 	    		if let Some(shards) = list_shards_output.shards{
 			    // iterating over all shards, only processing data from a shard when lock succeeds 
 	    		    for shard in shards.iter(){
-	    			debug!("Stream {:?} shard id {}",desc, shard.shard_id);
-				debug!("Stream {:?} shard {:?}",desc, shard);
+	    			debug!("Stream {:?} shard id {} shard {:?}",desc, shard.shard_id,shard);
 				let aws_lock_client = aws_lock_client.clone();
 				let shard_id = shard.shard_id.clone();
 				let key = format!("{}-{}-{}",stream_name.clone(), group_name,shard_id);
 				let mut shard_sequence_number = shard.sequence_number_range.starting_sequence_number.clone();
 				let maybe_lock = aws_lock_client.try_acquire_lock(key.clone(),Duration::from_millis(10000)).await;
-				debug!("Lock ? {:?}", maybe_lock);
+				debug!("Lock acquired {:?}", maybe_lock);
 				
 				let mut lock = if let Ok(lock) = maybe_lock{
 				    lock
@@ -239,7 +240,7 @@ impl AwsKinesisBroker {
 				}
 								
 				let get_shard_iterator_input =  rusoto_kinesis::GetShardIteratorInput{
-				    shard_id,
+				    shard_id:shard_id.clone(),
 				    shard_iterator_type:String::from("AFTER_SEQUENCE_NUMBER"),
 				    starting_sequence_number:Some(shard_sequence_number.clone()),
 				    stream_name:stream_name.clone(),
@@ -251,7 +252,7 @@ impl AwsKinesisBroker {
 
 				match get_shard_iterator_output {				    
 				    Ok(get_shard_iterator_output) => {				
-					info!("Shard iterator {:?}", get_shard_iterator_output);
+					debug!("Shard iterator {:?}", get_shard_iterator_output);
 					let mut maybe_shard_iterator = get_shard_iterator_output.shard_iterator;
 					
 					while let Some(shard_iterator) = maybe_shard_iterator{
@@ -262,11 +263,20 @@ impl AwsKinesisBroker {
 					    
 					    match aws_kinesis_client.get_records(get_records_input).await{		
 						Ok(get_records_output) => {
-						    info!("Get records {}",get_records_output.records.len());
-						    info!("Get records {:?}",get_records_output);
+						    info!("Records {} {} {}",stream_name, shard_id.clone(),get_records_output.records.len());
 						    for record in get_records_output.records.iter(){
-							info!("Record is {:?}", record);
+							debug!("Record {} {} {:?}", stream_name, shard_id.clone(),record);							
+							let vec = record.data.to_vec();		    		    
+							let mut subscriptions = subscriptions.lock().await;		    
+							if let Some(mut subs) = subscriptions.get_mut(&stream_name){
+							    if subs.len()!=0{
+								send_request(&mut subs, vec).await;
+							    }else{
+								warn!("No subscriptions for {} {}",stream_name,String::from_utf8_lossy(&vec));
+							    }
+							}							
 							shard_sequence_number = record.sequence_number.clone();
+							
 						    }
 						    if get_records_output.records.len() !=0 {
 							maybe_shard_iterator = get_records_output.next_shard_iterator;

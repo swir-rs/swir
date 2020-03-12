@@ -13,14 +13,14 @@ docker-compose -f docker/docker-compose-infr.yml down --remove-orphans
 # Docker instance names/network name created by docker compose could change
 docker-compose -f docker/docker-compose-infr.yml up -d
 
-# cd docker/solution-example
-# ./cicd.sh
-# cd ../../
+ cd docker/solution-example
+ ./cicd.sh
+ cd ../../
 
 # docker-compose -f docker/solution-example/docker-compose-example-applications.yaml -p app logs -t -f 
 # docker-compose -f docker/solution-example/docker-compose-example-sidecars.yaml -p app down --remove-orphans
 
-cd docker/performance-framework
-./cicd.sh
-cd ../../
+#cd docker/performance-framework
+#./cicd.sh
+#cd ../../
 #docker-compose -p pf -f docker/performance-framework/docker-compose-swir.yml down --remove-orphans

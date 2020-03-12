@@ -29,27 +29,5 @@ channels:
        - producer_topic: "Request"
          client_topic: "ProduceToAppB"
 
-  aws_kinesis:
-    - aws_access_key_id: "AKIASMSQEUYH3TQIJPXR"
-      aws_secret_access_key: "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"
-      regions:
-        - "eu-west-1"
-      consumer_topics:       
-        - consumer_topic: "some-Response"
-          consumer_group: "swir"
-          client_topic: "SubscribeToKinesis"
-      producer_topics:
-        - producer_topic: "event-framework-stream"
-          client_topic: "ProduceToKinesis"
-    - aws_access_key_id: "AKIASMSQEUYH3TQIJPXR"
-      aws_secret_access_key: "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"
-      regions:
-        - "eu-west-1"
-      consumer_topics:       
-        - consumer_topic: "some-Response"
-          consumer_group: "swir"
-          client_topic: "SubscribeToKinesis"
-      producer_topics:
-        - producer_topic: "event-framework-stream2"
-          client_topic: "ProduceToKinesis2"          
+  aws_kinesis: []
         

@@ -37,4 +37,6 @@ channels:
           client_topic: "ProduceToAppB"
         - producer_topic: "Request2"
           client_topic: "ProduceToAppD"
+          
+  aws_kinesis: []
 
