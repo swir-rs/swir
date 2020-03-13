@@ -5,6 +5,7 @@ rust:
   - stable
   - nightly
 script:
+  - rustup component add rustfmt --toolchain stable-x86_64-unknown-linux-gnu
   - cargo build --verbose --workspace
   - cargo test --verbose --workspace
 
