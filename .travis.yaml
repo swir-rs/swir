@@ -1,11 +1,13 @@
 language: rust
 cache: cargo
+
 rust:
   - stable
   - nightly
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all
+
 jobs:
   allow_failures:
     - rust: nightly
