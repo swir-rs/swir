@@ -35,7 +35,7 @@ docker-compose -f docker-compose-example-applications.yaml -p app up -d
 
 
 #Sidecar logs 
-#docker-compose  -f docker-compose-example-sidecars.yaml logs
+#docker-compose  -f docker-compose-example-sidecars.yaml -p app logs
 
 #docker logs solution-example_order-processor-sidecar_1
 #docker logs solution-example_shipments-sink-sidecar_1
@@ -44,7 +44,7 @@ docker-compose -f docker-compose-example-applications.yaml -p app up -d
 #docker logs solution-example_order-generator-sidecar_1
 
 #Application logs
-#docker-compose  -f docker-compose-example-applications.yaml logs
+#docker-compose  -f docker-compose-example-applications.yaml -p app logs
 
 #docker logs solution-example_order-generator_1
 #docker logs solution-example_order-processor_1

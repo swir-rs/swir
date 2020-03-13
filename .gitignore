@@ -5,6 +5,7 @@
 **/*.pem
 **/*.csr
 **/*.crt
+secure.sh
 pass.txt
 /demoCA
 /.idea/
