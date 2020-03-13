@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/swir-rs/swir.svg?branch=master)](https://travis-ci.org/swir-rs/swir)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Awesome Badges](https://img.shields.io/badge/badges-awesome-green.svg)](https://swir.rs)
 # SWIR or Sidecar Written in Rust
 
 ![Logo](graphics/swir_logo.png)
