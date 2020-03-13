@@ -5,8 +5,8 @@ rust:
   - stable
   - nightly
 script:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
+  - cargo build --verbose --workspace
+  - cargo test --verbose --workspace
 
 jobs:
   allow_failures:

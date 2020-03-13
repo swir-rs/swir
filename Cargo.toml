@@ -43,8 +43,8 @@ nats = {version="*",optional=true}
 rusoto_kinesis={ version="0.43.0-beta.1"}
 rusoto_signature={ version="0.43.0-beta.1"}
 rusoto_core={ version="0.43.0-beta.1"}
-#aws-lock-client = {version="*", git="https://github.com/swir-rs/aws-lock-client-rs", path="../aws-lock-client-rs"}
-aws-lock-client = {version="*", path="../aws-lock-client-rs"}
+aws-lock-client = {version="*", git="https://github.com/swir-rs/aws-lock-client-rs"} 
+#aws-lock-client = {version="*", path="../aws-lock-client-rs"}
 regex ="*"
 lazy_static="*"
 
