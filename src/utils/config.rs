@@ -85,8 +85,7 @@ impl ClientTopicsConfiguration for Nats {
 
 #[derive(Debug, Deserialize,Clone)]
 pub struct AwsKinesis {
-    pub aws_access_key_id: String,
-    pub aws_secret_access_key: String,
+
     pub regions: Vec<String>,
     pub producer_topics: Vec<ProducerTopic>,
     pub consumer_topics: Vec<ConsumerTopic>,

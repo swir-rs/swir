@@ -24,7 +24,7 @@ env_logger = "*"
 color-backtrace="*"
 rand = "*"
 base64 = "*"
-time = { version ="0.2.8"}
+
 cfg-if = { version = "=0.1.10" }
 
 tokio = { version = "=0.2", features = ["full","sync"]}
