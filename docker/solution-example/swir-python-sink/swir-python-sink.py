@@ -24,19 +24,25 @@ import queue
 import threading
 import client_api_pb2
 import client_api_pb2_grpc
-
+import time
 
 logger = logging.getLogger('swir')
 
 def receiver(queue,client_api_stub,topic):
-    subscribe = client_api_pb2.SubscribeRequest(
-        correlation_id=str(uuid.uuid4()),
-        topic=topic
-    )
-    messages = client_api_stub.Subscribe(subscribe)
-    for message in messages:
-        logger.debug("Subscription : %s" % message)
-        queue.put(message)
+    while True:
+        try:
+            subscribe = client_api_pb2.SubscribeRequest(
+                correlation_id=str(uuid.uuid4()),
+                topic=topic
+            )
+
+            messages = client_api_stub.Subscribe(subscribe)
+            for message in messages:
+                logger.debug("Subscription : %s" % message)
+                queue.put(message)        
+        except:
+            logger.error("Can't connect to sidecar")            
+        time.sleep(5)
 
 
 def processor(incoming_queue,outgoing_queue):

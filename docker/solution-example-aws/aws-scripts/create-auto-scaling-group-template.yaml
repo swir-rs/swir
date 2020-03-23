@@ -1,0 +1,8 @@
+AutoScalingGroupName: 'swir_demo_autoscaling_group'
+LaunchConfigurationName: 'swir_demo_launch_configuration'
+MinSize: 5
+DesiredCapacity: 5
+MaxSize: 5
+AvailabilityZones: ['eu-west-1b', 'eu-west-1a']
+
+

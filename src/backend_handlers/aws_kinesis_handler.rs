@@ -19,9 +19,6 @@ use crate::utils::config::AwsKinesis;
 
 use rusoto_kinesis::Kinesis;
 use rusoto_core::Region;
-use rusoto_core::RusotoError;
-use rusoto_kinesis::ResourceInUseException;
-use rusoto_kinesis::RegisterStreamConsumerError;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
@@ -169,36 +166,42 @@ impl AwsKinesisBroker {
 
 
 
+    async fn get_shards_arns(&self,aws_kinesis_client:&rusoto_kinesis::KinesisClient)-> Vec<(String,String, String)>{
+	// get arn for all streams on the list
+	// register consumers for all arns and get consumer_arn	
+	let mut arns =  vec![];
+	for ct in self.aws_kinesis.consumer_topics.iter() {
+		let consumer_topic = ct.consumer_topic.clone();
+		let consumer_group = ct.consumer_group.clone();
+		let stream_description_summary_input = rusoto_kinesis::DescribeStreamSummaryInput{
+		    stream_name:consumer_topic.clone()
+		};
+		let stream_description_summary_output = aws_kinesis_client.describe_stream_summary(stream_description_summary_input).await;
+		if let Ok(stream_description_summary_output) = stream_description_summary_output{
+		    let stream_arn = stream_description_summary_output.stream_description_summary.stream_arn.clone();
+		    debug!("Stream {} {} arn {}",consumer_topic,consumer_group, stream_arn);			
+		    arns.push((consumer_topic, consumer_group,stream_arn));
+		}else{
+		    warn!("Error {} {:?}", consumer_topic, stream_description_summary_output.unwrap_err());
+		}
+	}
+	arns
+    }
+
     async fn aws_kinesis_incoming_event_handler(&self, aws_kinesis_client:rusoto_kinesis::KinesisClient) {
 	if self.aws_kinesis.consumer_topics.is_empty(){
 	    info!("No consumers configured, bye");
 	    return
 	}
-
-	let mut arns =  vec![];
-	// get arn for all streams on the list
-	// register consumers for all arns and get consumer_arn
-        for ct in self.aws_kinesis.consumer_topics.iter() {
-	    let consumer_topic = ct.consumer_topic.clone();
-	    let consumer_group = ct.consumer_group.clone();
-	    let stream_description_summary_input = rusoto_kinesis::DescribeStreamSummaryInput{
-		stream_name:consumer_topic.clone()
-	    };
-	    let stream_description_summary_output = aws_kinesis_client.describe_stream_summary(stream_description_summary_input).await;
-	    if let Ok(stream_description_summary_output) = stream_description_summary_output{
-		let stream_arn = stream_description_summary_output.stream_description_summary.stream_arn.clone();
-		debug!("Stream {} {} arn {}",consumer_topic,consumer_group, stream_arn);			
-		arns.push((consumer_topic, consumer_group,stream_arn));
-	    }else{
-		warn!("Error {} {:?}", consumer_topic, stream_description_summary_output.unwrap_err());
-	    }
-	}
+	
 	let aws_lock_client = AwsLockClientDynamoDb::new(Region::EuWest1,DYNAMO_DB_LOCK_TABLE_NAME.to_string());
+	
 	loop{
+	    let arns = self.get_shards_arns(&aws_kinesis_client).await;    	    
 	    let now = tokio::time::Instant::now();
 	    let interval_duration = tokio::time::Duration::from_millis(5000);
 	    let mut tasks = vec![];
-
+	    
 	    for desc in arns.iter() {
 		let desc = desc.clone();
 		let aws_kinesis_client = aws_kinesis_client.clone();

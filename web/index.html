@@ -164,7 +164,7 @@
 
         <div class="row">
           <h3 class="Heading text-center text-uppercase text-secondary mb-0">Docker-compose and SWIR based solution</h3>
-	  <img class="img-responsive" src="img/example-solution.png" style="padding: 1rem; max-width: 100%;" alt="Top level architecture">
+	  <img class="img-responsive" src="img/example-solution.png" style="padding: 1rem; max-width: 100%;" alt="Example solution">
 	  <div class="">
             <p class="lead">
 	      In this example we use two docker-compose files to create a full solution.
@@ -175,6 +175,23 @@
 		<li><p class="lead">give the application teams have a simple interface to code against and enable the teams to roll features quickly</p></li>
 	      </ul>
             </p>
+          </div>
+        </div>
+        <p class="lead">
+	</p>
+	
+        <div class="divider-custom-line"></div>
+	<div class="row">
+          <h3 class="Heading text-center text-uppercase text-secondary mb-0">Docker, AWS ECS, Kinesis and SWIR based solution</h3>
+	  <img class="img-responsive" src="img/example-aws-solution.png" style="padding: 1rem; max-width: 100%;" alt="Example AWS solution">
+	  <div class="">
+            <p class="lead">
+	      In this example we show how to migrate above documented solution into AWS ECS. Despite having to use a completely different technology stack, SWIR allows applications to migrate to AWS without having to rebuild the artefacts. Here the applications are deployed into AWS Elastic Container Service and using AWS Kinesis instead of Nats and Kafka to communicate with each other.	      
+            </p>
+
+            <p class="lead">
+	      The whole deployment is automated so as long as you have a valid AWS id and AWS CLI is properly configured on your PC, you should be able to <a href="https://github.com/swir-rs/swir/blob/master/docker/solution-example/docker-compose-example-sidecars.yaml" target="_blank"> <i class="fab fa-fw fa-github"></i>execute script</a> to deploy SWIR based demo to AWS.
+            </p>	    
           </div>
         </div>
         <!-- /.row -->

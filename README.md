@@ -4,6 +4,7 @@
 [![Awesome Badges](https://img.shields.io/badge/badges-awesome-green.svg)](https://swir.rs)
 # SWIR or Sidecar Written in Rust
 
+
 ![Logo](graphics/swir_logo.png)
 
 
@@ -36,6 +37,11 @@ The use case is broken into two layers:
 
 ![Example solution](./graphics/example-solution.png)
 
+The real power of sidecars can be appreciated when we consider migrating this example to a public cloud. Figure below shows how to migrate this example into AWS. Despite having to use a completely different technology stack, SWIR allows applications to migrate to a new environment without having to rebuild the artefacts. Here the applications are deployed into AWS Elastic Container Service and using AWS Kinesis instead of Nats and Kafka to communicate with each other. 
+
+![Example solution in AWS](./graphics/example-aws-solution.png)
+
+
 
 ### Similar Frameworks
 
@@ -59,7 +65,7 @@ SWIR:
  - SWIR uses conditional compilation which allows creating sidecars with just Kafka or Kafka and NATS
  - SpringBoot and gRPC Java clients and other components allowing testing it end to end
  - SWIR can start the client application (for time being only SpringBoot standalone jars)
-
+   
 
 ## Short Term Roadmap
 - gRPC service meshing at the backend
