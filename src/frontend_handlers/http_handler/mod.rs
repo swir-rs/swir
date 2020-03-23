@@ -309,7 +309,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: Messa
 }
 
 pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>) {
-    let client = hyper::Client::builder().keep_alive(true).build_http();
+    let client = hyper::Client::builder().build_http();
     info!("Client done");
     let mut rx = rx.lock().await;
     while let Some(payload) = rx.next().await {

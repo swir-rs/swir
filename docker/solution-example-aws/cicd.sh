@@ -5,19 +5,15 @@ if [ ! -f ../../secure.sh ]; then
     exit 1
 fi
 
-./aws-delete-table.sh "swir-locks"
-./aws-create-table.sh "swir-locks"
-./aws-kinesis-create-stream.sh aws_processor_orders_blue 2
-./aws-kinesis-create-stream.sh aws_processor_inventory_green 2
-./aws-kinesis-create-stream.sh aws_processor_billing_blue 2
-./aws-kinesis-create-stream.sh aws_sink_green 2
+./aws-scripts/create_aws_streams.sh
+
 
 
 # Compile, build and generate necessary docker images
 
 
 cd ./swir-configurator
-docker build --tag swir-example-configurator:v2 .
+docker build --tag swir-aws-example-configurator:v2 .
 
 cd ../../solution-example/swir-python-processor
 ./build.sh
@@ -47,7 +43,6 @@ source ../../secure.sh
 docker-compose -f docker-compose-example-sidecars.yaml -p app up -d
 docker-compose -f docker-compose-example-applications.yaml -p app up -d
 
-
 #Sidecar logs 
 #docker-compose  -f docker-compose-example-sidecars.yaml -p app logs -ft
 
@@ -68,6 +63,6 @@ docker-compose  -f docker-compose-example-applications.yaml -p app logs -ft
 
 
 #clean all
-./cleanup.sh
+./aws-scripts/cleanup.sh
 
 

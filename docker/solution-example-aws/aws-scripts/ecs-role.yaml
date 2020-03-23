@@ -1,0 +1,8 @@
+Path: '/'  #  The path to the role.
+RoleName: 'swirEcsTaskExecutionRole' # [REQUIRED] The name of the role to create.
+AssumeRolePolicyDocument: '{"Version":"2012-10-17","Statement":[{"Sid":"","Effect": "Allow","Principal":{"Service": "ecs-tasks.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+Description: 'Swir role so taks can access the Docker registry and Kinesis' # A description of the role.
+MaxSessionDuration: 7200 # The maximum session duration (in seconds) that you want to set for the specified role.
+
+
+

@@ -15,8 +15,10 @@
 
 from __future__ import print_function
 
+import sys
 import random
 import logging
+import time
 import uuid
 import grpc
 import os
@@ -29,14 +31,21 @@ import client_api_pb2_grpc
 logger = logging.getLogger('swir')
 
 def receiver(queue,client_api_stub,topic):
-    subscribe = client_api_pb2.SubscribeRequest(
-        correlation_id=str(uuid.uuid4()),
-        topic=topic
-    )
-    messages = client_api_stub.Subscribe(subscribe)
-    for message in messages:
-        logger.debug("Subscription : %s" % message)
-        queue.put(message)
+    while True:
+        try:
+            subscribe = client_api_pb2.SubscribeRequest(
+                correlation_id=str(uuid.uuid4()),
+                topic=topic
+            )
+
+            messages = client_api_stub.Subscribe(subscribe)
+            for message in messages:
+                logger.debug("Subscription : %s" % message)
+                queue.put(message)        
+        except:
+            logger.error("Can't connect to sidecar")
+        time.sleep(5)
+
 
 
 def processor(incoming_queue,outgoing_queue):
@@ -77,21 +86,24 @@ def run():
     
     with grpc.insecure_channel(sidecar) as channel:
         threads = []
-        client_api_stub = client_api_pb2_grpc.ClientApiStub(channel)
-        t1 = threading.Thread(target=receiver, args=[incoming_queue, client_api_stub,subscribe_topic] )
-        t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue])
-        t3 = threading.Thread(target=sender,args=[outgoing_queue,client_api_stub,publish_topic])
-        t1.start()
-        threads.append(t1)
-        t2.start()
-        threads.append(t2)
-        t3.start()
-        threads.append(t3)
+        try:
+            client_api_stub = client_api_pb2_grpc.ClientApiStub(channel)
+        except:
+            logger.error("Can't connect to sidecar")
+            exit
+        else:            
+            t1 = threading.Thread(target=receiver, args=[incoming_queue, client_api_stub,subscribe_topic] )
+            t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue])
+            t3 = threading.Thread(target=sender,args=[outgoing_queue,client_api_stub,publish_topic])
+            t1.start()
+            threads.append(t1)
+            t2.start()
+            threads.append(t2)
+            t3.start()
+            threads.append(t3)
 
-        for t in threads:
-            t.join()
-
-        
+            for t in threads:
+                t.join()        
             
 
 if __name__ == '__main__':
