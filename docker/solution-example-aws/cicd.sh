@@ -5,9 +5,8 @@ if [ ! -f ../../secure.sh ]; then
     exit 1
 fi
 
+../../cicd.sh
 ./aws-scripts/create_aws_streams.sh
-
-
 
 # Compile, build and generate necessary docker images
 

@@ -1,5 +1,7 @@
 
 # Compile, build and generate necessary docker images
+../../cicd.sh
+
 cd swir-java-client
 ./gradlew clean bootJar
 docker build --tag swir-java-client:v2 .
@@ -22,8 +24,13 @@ docker build --tag swir-grpc-sink:v2 .
 
 cd ..
 
-
+docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
+# this should deploy the infrastructure
+# Docker instance names/network name created by docker compose could change
+docker-compose -f docker-compose-infr.yml -p docker up -d
+ 
 # Create necessary topics for Kafka
+sleep 5
 
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Request --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic Response --partitions 2 --replication-factor 1

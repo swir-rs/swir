@@ -10,6 +10,11 @@ fi
 
 echo "Accout " $1 " region " $2
 
+
+../../cicd.sh
+
+
+
 cd ./swir-configurator
 docker build --tag swir-aws-example-configurator:v2 .
 
