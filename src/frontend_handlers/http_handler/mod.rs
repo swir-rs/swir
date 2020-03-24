@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext};
 use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
 
-static X_CORRRELATION_ID_HEADER_NAME:&'static str = "x-correlation-id";
+static X_CORRRELATION_ID_HEADER_NAME:& str = "x-correlation-id";
 
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
     extract_value_from_headers(String::from("topic"),headers)
@@ -36,7 +36,7 @@ fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> Opti
 
 
 fn find_channel_by_topic<'a>(
-    client_topic: &'a String,
+    client_topic: &'a str,
     from_client_to_backend_channel_sender: &'a Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
 ) -> Option<&'a Box<mpsc::Sender<RestToMessagingContext>>> {
     from_client_to_backend_channel_sender.get(client_topic)
@@ -52,12 +52,12 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
         Some(header) => {
             if header == HeaderValue::from_static("application/json") {
 		debug!{"Found header {:?}",header}
-                return Some(true);
+                Some(true)
             } else {
-                return None;
+                None
             }
         }
-        None => return None,
+        None => None,
     }
 }
     
@@ -127,7 +127,7 @@ async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeReque
 	    correlation_id,
             client_interface_type: CustomerInterfaceType::REST,
             client_topic: json.client_topic.clone(),
-            endpoint: endpoint,
+            endpoint,
 	    tx:to_client_sender.clone()
 	};
 	
@@ -209,7 +209,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             let p = PublishRequest {
 		correlation_id,
                 payload: whole_body,
-                client_topic: client_topic,
+                client_topic,
             };
 
             let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
@@ -234,7 +234,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                 *response.body_mut() = Body::empty();
             }
             info!("Publish end {}", wb);
-            return Ok(response);
+            Ok(response)
         }
 
         (&Method::POST, "/subscribe") => {

@@ -19,11 +19,10 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
     let mut brokers: Vec<Box<dyn Broker>> = vec![];
     let mut futures = vec![];
 
-    let mut i = 0;
-    for kafka in messaging.kafka {
+    
+    for (i,kafka) in messaging.kafka.into_iter().enumerate() {
         let mce = mc.kafka_memory_channels.get(i);
-        i = i + 1;
-        if let None = mce {
+        if mce.is_none() {
             continue;
         }
         let mce = mce.unwrap();
@@ -34,11 +33,10 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
 
     #[cfg(feature = "with_nats")]
     {
-        i = 0;	
-        for nats in messaging.nats {
+
+        for (i,nats) in messaging.nats.into_iter().enumerate() {
 	    let mce = mc.nats_memory_channels.get(i);
-            i = i + 1;
-            if let None = mce {
+            if mce.is_none() {
 		continue;
             }
             let mce = mce.unwrap();
@@ -48,11 +46,10 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
         }
     }
 
-    let mut i = 0;
-    for aws_kinesis in messaging.aws_kinesis {
+
+    for (i,aws_kinesis) in messaging.aws_kinesis.into_iter().enumerate() {
         let mce = mc.aws_kinesis_memory_channels.get(i);
-        i = i + 1;
-        if let None = mce {
+        if mce.is_none() {
             continue;
         }
         let mce = mce.unwrap();

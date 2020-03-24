@@ -123,7 +123,7 @@ impl KafkaBroker {
                     if let Some(topic) = maybe_topic {
                         tokio::spawn(async move {
                             let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key");
-                            let foo = kafka_producer.send(r, 0).map(move |status| match status {
+                            let kafka_send = kafka_producer.send(r, 0).map(move |status| match status {
                                 Ok(_) => sender.send(structs::MessagingResult {
 				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
@@ -134,7 +134,7 @@ impl KafkaBroker {
                                 }),
                             });
 
-                            foo.await.expect("Should not panic!");
+                            kafka_send.await.expect("Should not panic!");
                         });
                         //                            if let Err(e) = foo.await {
                         //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);

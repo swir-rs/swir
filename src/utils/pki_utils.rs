@@ -14,7 +14,7 @@ pub fn load_certs(filename: String) -> io::Result<Vec<rustls::Certificate>> {
         .map_err(|_| error("failed to load certificate".into()))
         .unwrap();
     info!("Certs = {:?}", certs.len());
-    if certs.len() == 0 {
+    if certs.is_empty() {
         return Err(error("expected at least one certificate".into()));
     }
     Ok(certs)

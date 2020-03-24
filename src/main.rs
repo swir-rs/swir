@@ -55,7 +55,7 @@ impl Stream for TcpIncoming {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match ready!(Accept::poll_accept(Pin::new(&mut self.inner), cx)) {
             Some(Ok(s)) => Poll::Ready(Some(Ok(s))),
-            Some(Err(e)) => Poll::Ready(Some(Err(e.into()))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
             None => Poll::Ready(None),
         }
     }
@@ -70,9 +70,9 @@ async fn main() {
     let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
 
     let client_ip = swir_config.client_ip.clone();
-    let client_https_port: u16 = swir_config.client_https_port.clone();
-    let client_http_port: u16 = swir_config.client_http_port.clone();
-    let client_grpc_port: u16 = swir_config.client_grpc_port.clone();
+    let client_https_port: u16 = swir_config.client_https_port;
+    let client_http_port: u16 = swir_config.client_http_port;
+    let client_grpc_port: u16 = swir_config.client_grpc_port;
     let client_executable = swir_config.client_executable.clone();
 
     let http_tls_certificate = swir_config.client_tls_certificate.clone();

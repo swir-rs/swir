@@ -236,7 +236,7 @@ impl AwsKinesisBroker {
 				}else{
 				    return;
 				};
-				let maybe_sequence_number = lock.lock_data.clone().unwrap_or("".to_string());
+				let maybe_sequence_number = lock.lock_data.clone().unwrap_or_else(|| "".to_string());
 				
 				if validate_sequence_number(&maybe_sequence_number){				    
 				    shard_sequence_number = maybe_sequence_number;
@@ -281,7 +281,7 @@ impl AwsKinesisBroker {
 							shard_sequence_number = record.sequence_number.clone();
 							
 						    }
-						    if get_records_output.records.len() !=0 {
+						    if !get_records_output.records.is_empty() {
 							maybe_shard_iterator = get_records_output.next_shard_iterator;
 						    }else{
 							maybe_shard_iterator = None;

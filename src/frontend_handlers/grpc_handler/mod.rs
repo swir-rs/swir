@@ -53,7 +53,7 @@ pub struct SwirAPI {
 }
 
 impl SwirAPI {
-    fn find_channel(&self, topic_name: &String) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
+    fn find_channel(&self, topic_name: &str) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 
@@ -98,7 +98,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 			    debug!("Got message {}",response);
 			    let pr :client_api::PublishResponse = response.clone();
                             let r = tx.send(Ok(pr.clone())).await; //.expect("I should not panic as I should not be here!");
-			    if let Err(_) = r {			
+			    if r.is_err() {			
 				error.swap(true,Ordering::Relaxed);
 				info!("gRPC connection closed for message {}",pr);
 				break;
@@ -161,12 +161,12 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 				}
 				let reply = client_api::PublishResponse {
 				    correlation_id: request.correlation_id,
-				    status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+				    status: msg.to_string(), // We must use .into_inner() as the fields of gRPC requests and responses are private
 				};
 				debug!("Sending internally  {}",reply);
 				let r = internal_tx.send(reply.clone()).await;
 				
-				if let Err(_) =r{
+				if r.is_err(){
 				    info!("Internal channel closed for message {}", reply);
 				    error.swap(true,Ordering::Relaxed);
 				    break;
@@ -220,7 +220,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
             }
             let reply = client_api::PublishResponse {
 		correlation_id: request.correlation_id,
-                status: format!("{}", msg).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+                status: msg, 
             };
             Ok(tonic::Response::new(reply)) // Send back our formatted greeting
         } else {
@@ -242,7 +242,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 	let client_id = base64::encode(&array);	
         let sr = crate::utils::structs::SubscribeRequest {
 	    correlation_id:correlation_id.clone(),
-            endpoint: EndpointDesc { url: "".to_string(), client_id:client_id },
+            endpoint: EndpointDesc { url: "".to_string(), client_id },
             client_topic: topic.clone(),
             client_interface_type: GRPC,
 	    tx: Box::new(to_client_tx)
@@ -273,7 +273,7 @@ impl client_api::client_api_server::ClientApi for SwirAPI {
 		msgs+=1;
 		debug!("Sending message {}",s);
 		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
-		if let Err(_) = r {
+		if r.is_err() {
 		    info!("Message pushed back {}", s);
 		    let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();	
 		    let unsubscribe_job = RestToMessagingContext {

@@ -26,12 +26,12 @@ pub trait ClientHandler{
         if let Some(topic) = maybe_topic {			
 	    let mut subscriptions = subscriptions.lock().await;
 	    if let Some(subscriptions_for_topic) = subscriptions.get_mut(&topic){
-		if let Err(_) = subscriptions_for_topic.binary_search(&req){
+		if subscriptions_for_topic.binary_search(&req).is_err() {
 		    debug!("Adding subscription {}",req);
 		    subscriptions_for_topic.push(req.clone());
 		    if let Err(e) = sender.send(structs::MessagingResult {
 			correlation_id: req.correlation_id,
-			status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}",broker_type,subscriptions_for_topic.len(),&client_topic).to_string()),
+			status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}",broker_type,subscriptions_for_topic.len(),&client_topic)),
 		    }) {
 			warn!("Can't send response back {:?}", e);
 		    }
@@ -39,7 +39,7 @@ pub trait ClientHandler{
 		    debug!("Subscription exists for {:?}",req);
 		    if let Err(e) = sender.send(structs::MessagingResult {
 			correlation_id: req.correlation_id,
-			status: BackendStatusCodes::NoTopic(format!("{}: Duplicate subscription for topic {}",broker_type, &client_topic).to_string()),
+			status: BackendStatusCodes::NoTopic(format!("{}: Duplicate subscription for topic {}",&broker_type, &client_topic)),
 		    }) {
 			warn!("Can't send response back {:?}", e);
 		    }
@@ -49,7 +49,7 @@ pub trait ClientHandler{
 		subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                 if let Err(e) = sender.send(structs::MessagingResult {
 		    correlation_id: req.correlation_id,
-		    status: BackendStatusCodes::Ok(format!("{} has one susbscription for topic {}",broker_type, &client_topic).to_string()),
+		    status: BackendStatusCodes::Ok(format!("{} has one susbscription for topic {}",&broker_type, &client_topic)),
                 }) {
 		    warn!("Can't send response back {:?}", e);
                 }
@@ -58,7 +58,7 @@ pub trait ClientHandler{
             warn!("Can't find topic {:?}", req);
             if let Err(e) = sender.send(structs::MessagingResult {
 		correlation_id: req.correlation_id,
-                status: BackendStatusCodes::NoTopic(format!("{} has no topic {}",broker_type,&client_topic).to_string()),
+                status: BackendStatusCodes::NoTopic(format!("{} has no topic {}",&broker_type,&client_topic)),
             }) {
                 warn!("Can't send response back {:?}", e);
             }
@@ -87,7 +87,7 @@ pub trait ClientHandler{
 		    
 		    if let Err(e) = sender.send(structs::MessagingResult {
 			correlation_id: req.correlation_id,
-			status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}",broker_type, subscriptions_for_topic.len(),&client_topic).to_string()),
+			status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}",&broker_type, subscriptions_for_topic.len(),&client_topic)),
 		    }) {
 			warn!("Can't send response back {:?}", e);
 		    }
@@ -95,7 +95,7 @@ pub trait ClientHandler{
 		    debug!("No subscriptions  {}",req);
 		    if let Err(e) = sender.send(structs::MessagingResult {
 			correlation_id: req.correlation_id,
-			status: BackendStatusCodes::NoTopic(format!("{} has no subscription for topic {}",broker_type, &client_topic).to_string()),
+			status: BackendStatusCodes::NoTopic(format!("{} has no subscription for topic {}",&broker_type, &client_topic)),
 		    }) {
 			warn!("Can't send response back {:?}", e);
 		    }
@@ -108,7 +108,7 @@ pub trait ClientHandler{
             warn!("Can't find topic {}", req);
             if let Err(e) = sender.send(structs::MessagingResult {
 		correlation_id: req.correlation_id,
-		status: BackendStatusCodes::NoTopic(format!("{} has no topic {}",broker_type,&client_topic).to_string())
+		status: BackendStatusCodes::NoTopic(format!("{} has no topic {}",&broker_type,&client_topic))
             }) {
                 warn!("Can't send response back {:?}", e);
             }

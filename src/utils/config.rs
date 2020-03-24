@@ -28,12 +28,12 @@ pub struct Kafka {
 }
 
 pub trait ClientTopicsConfiguration {
-    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String>;
-    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String>;
+    fn get_producer_topic_for_client_topic(&self, client_topic: &str) -> Option<String>;
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &str) -> Option<String>;
 }
 
 impl ClientTopicsConfiguration for Kafka {
-    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -43,7 +43,7 @@ impl ClientTopicsConfiguration for Kafka {
         maybe_topic
     }
 
-    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -62,7 +62,7 @@ pub struct Nats {
 }
 
 impl ClientTopicsConfiguration for Nats {
-    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -72,7 +72,7 @@ impl ClientTopicsConfiguration for Nats {
         maybe_topic
     }
 
-    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -92,7 +92,7 @@ pub struct AwsKinesis {
 }
 
 impl ClientTopicsConfiguration for AwsKinesis {
-    fn get_producer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_producer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.producer_topics.iter() {
             if t.client_topic.eq(client_topic) {
@@ -102,7 +102,7 @@ impl ClientTopicsConfiguration for AwsKinesis {
         maybe_topic
     }
 
-    fn get_consumer_topic_for_client_topic(&self, client_topic: &String) -> Option<String> {
+    fn get_consumer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
         for t in self.consumer_topics.iter() {
             if t.client_topic.eq(client_topic) {
