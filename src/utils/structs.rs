@@ -72,17 +72,12 @@ impl fmt::Display for SubscribeRequest{
 
 impl PartialEq for SubscribeRequest {
     fn eq(&self, other: &Self) -> bool {
-	if self.correlation_id != other.correlation_id{
-	    false
-        }else if self.client_topic != other.client_topic{
-	    false
-	}else if self.endpoint != other.endpoint{
-	    false
-	}else if self.client_interface_type != other.client_interface_type{
-	    false
-	}else{
-	    true
-	}	    		    	    
+	let c1 = self.correlation_id == other.correlation_id;
+	let c2 = self.client_topic == other.client_topic;
+	let c3 = self.endpoint == other.endpoint;
+	let c4 = self.client_interface_type == other.client_interface_type;
+	c1 && c2 && c3 && c4 
+
     }
 }
 

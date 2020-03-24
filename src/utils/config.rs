@@ -198,7 +198,7 @@ impl Swir {
 //  to_client_receiver3 <----------------- broker 3 < ---- to_client_sender3
 
 
-pub fn create_client_to_backend_channels(config: &Box<Swir>) -> MemoryChannel {
+pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
 

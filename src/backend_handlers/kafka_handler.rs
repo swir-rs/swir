@@ -24,13 +24,15 @@ use super::super::utils::structs::*;
 use super::super::utils::config::ClientTopicsConfiguration;
 use crate::backend_handlers::client_handler::ClientHandler;
 
+type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
+
 impl ClientContext for CustomContext {}
 
 #[derive(Debug)]
 pub struct KafkaBroker {
     kafka: Kafka,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
+    subscriptions: Arc<Mutex<Box<Subscriptions>>>,
 }
 
 impl ConsumerContext for CustomContext {
@@ -78,7 +80,7 @@ impl ClientHandler for KafkaBroker {
     fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>{
 	Box::new(self.kafka.clone())
     }
-    fn get_subscriptions(&self)->Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>{
+    fn get_subscriptions(&self)->Arc<Mutex<Box<Subscriptions>>>{
 	self.subscriptions.clone()
     }
     fn get_type(&self)->String{

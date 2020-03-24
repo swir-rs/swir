@@ -30,6 +30,8 @@ lazy_static! {
     static ref RE: Regex = Regex::new(r"0|([1-9]\\d{0,128})").unwrap();
 }
 
+type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
+
 const DYNAMO_DB_LOCK_TABLE_NAME:&str = "swir-locks";
 
 fn validate_sequence_number(input: &str) -> bool {
@@ -39,7 +41,7 @@ fn validate_sequence_number(input: &str) -> bool {
 pub struct AwsKinesisBroker {
     aws_kinesis: AwsKinesis,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
+    subscriptions: Arc<Mutex<Box<Subscriptions>>>,
 }
 
 
@@ -91,7 +93,7 @@ impl ClientHandler for AwsKinesisBroker {
     fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>{
 	Box::new(self.aws_kinesis.clone())
     }
-    fn get_subscriptions(&self)->Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>{
+    fn get_subscriptions(&self)->Arc<Mutex<Box<Subscriptions>>>{
 	self.subscriptions.clone()
     }
     fn get_type(&self)->String{
@@ -137,16 +139,22 @@ impl AwsKinesisBroker {
 			    debug!("Partition topic {} key {}", topic, partition_key);
 			    match aws_put_record(client.clone(),topic,bytes::Bytes::from(req.payload),partition_key).await {
 				Ok(())=> {
-				    sender.send(structs::MessagingResult {
+				    let res = sender.send(structs::MessagingResult {
 		     			correlation_id: req.correlation_id,
 					status: BackendStatusCodes::Ok("AWS Kinesis is good".to_string())
                                     });
+				    if res.is_err() {
+					warn!("{:?}",res);
+				    }
 				},
 				Err(())=> {
-				    sender.send(structs::MessagingResult {
+				    let res = sender.send(structs::MessagingResult {
  					correlation_id: req.correlation_id,
 					status: BackendStatusCodes::Error("AWS Kinesis error".to_string()),
 				    });
+				    if res.is_err() {
+					warn!("{:?}",res);
+				    }
 				}
 			    }
 			});

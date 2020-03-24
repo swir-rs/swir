@@ -130,9 +130,6 @@ impl NatsBroker {
             }
         }
     }
-
-
-
     
     async fn nats_incoming_event_handler(&self, client: Option<Client>) {        
 	if client.is_none(){

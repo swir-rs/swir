@@ -7,9 +7,12 @@ use async_trait::async_trait;
 use super::super::utils::config::ClientTopicsConfiguration;
 use futures::channel::oneshot::Sender;
 
+type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
+
+
 #[async_trait]
 pub trait ClientHandler{
-    fn get_subscriptions(&self)->Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>;
+    fn get_subscriptions(&self)->Arc<Mutex<Box<Subscriptions>>>;
     fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>;
     fn get_type(&self)->String;
 
