@@ -45,7 +45,7 @@ pub struct AwsKinesisBroker {
 }
 
 
-async fn send_request(subscriptions:  &mut Box<Vec<SubscribeRequest>>, p: Vec<u8> ) {
+async fn send_request(subscriptions:  &mut Vec<SubscribeRequest>, p: Vec<u8> ) {
     let msg = String::from_utf8_lossy(&p);
     debug!("Processing message {} {:?}", subscriptions.len(),msg);
     

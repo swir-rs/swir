@@ -51,7 +51,7 @@ impl ConsumerContext for CustomContext {
 
 type LoggingConsumer = StreamConsumer<CustomContext>;
 
-async fn send_request(subscriptions:  &mut Box<Vec<SubscribeRequest>>, p: Vec<u8> ) {
+async fn send_request(subscriptions:  &mut Vec<SubscribeRequest>, p: Vec<u8> ) {
     let msg = String::from_utf8_lossy(&p);
     debug!("Processing message {} {:?}", subscriptions.len(),msg);
     
@@ -143,11 +143,12 @@ impl KafkaBroker {
                         //                            }
                     } else {
                         warn!("Can't find topic {}", req);
-                        if let Err(e) = sender.send(structs::MessagingResult {
+			let res = sender.send(structs::MessagingResult {
 			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                        }) {
-                            warn!("Can't send response back {:?}", e);
+                        });
+                        if res.is_err() {
+                            warn!("Can't send response back {:?}", res);
                         }
                     }
                 }

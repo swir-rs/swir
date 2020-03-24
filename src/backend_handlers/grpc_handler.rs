@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 pub struct GrpcBroker {
     pub db: Db,
     pub rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    pub tx: Box<HashMap<CustomerInterfaceType, Box<mpsc::Sender<MessagingToRestContext>>>>,
+    pub tx: HashMap<CustomerInterfaceType, mpsc::Sender<MessagingToRestContext>>,
 }
 
 

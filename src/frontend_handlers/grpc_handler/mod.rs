@@ -48,17 +48,17 @@ impl fmt::Display for client_api::PublishResponse{
 #[derive(Debug)]
 pub struct SwirAPI {
     missed_messages: Arc<Mutex<Box<VecDeque<client_api::SubscribeResponse>>>>,
-    pub from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
+    pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
     pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
 }
 
 impl SwirAPI {
-    fn find_channel(&self, topic_name: &str) -> Option<&Box<mpsc::Sender<RestToMessagingContext>>> {
+    fn find_channel(&self, topic_name: &str) -> Option<&mpsc::Sender<RestToMessagingContext>> {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 
     pub fn new(
-        from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
+        from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
         to_client_receiver: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     ) -> SwirAPI {
         let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));

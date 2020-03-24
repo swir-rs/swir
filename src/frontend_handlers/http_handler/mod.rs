@@ -37,12 +37,12 @@ fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> Opti
 
 fn find_channel_by_topic<'a>(
     client_topic: &'a str,
-    from_client_to_backend_channel_sender: &'a Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,
-) -> Option<&'a Box<mpsc::Sender<RestToMessagingContext>>> {
+    from_client_to_backend_channel_sender: &'a HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+) -> Option<&'a mpsc::Sender<RestToMessagingContext>> {
     from_client_to_backend_channel_sender.get(client_topic)
 }
 
-fn find_to_client_sender<'a>(client_topic: &'a String,to_client_sender: &'a Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>)->Option<&'a Box<mpsc::Sender<MessagingToRestContext>>>{
+fn find_to_client_sender<'a>(client_topic: &'a str,to_client_sender: &'a HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Option<&'a mpsc::Sender<MessagingToRestContext>>{
     to_client_sender.get(client_topic)
 	
 }
@@ -89,7 +89,7 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correlation_id:String, from_client_to_backend_channel_sender: &Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>, to_client_sender_for_rest:&Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>)->Response<Body>{
+async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Response<Body>{
     let wb = String::from_utf8_lossy(&whole_body);
     if is_subscribe{
 	info!("Subscribe {} ",wb);
@@ -112,7 +112,7 @@ async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correla
 }
     
 
-async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeRequest,correlation_id:String, from_client_to_backend_channel_sender: &Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>, to_client_sender_for_rest:&Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>)->Response<Body>{
+async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeRequest,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Response<Body>{
 
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
@@ -128,7 +128,7 @@ async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeReque
             client_interface_type: CustomerInterfaceType::REST,
             client_topic: json.client_topic.clone(),
             endpoint,
-	    tx:to_client_sender.clone()
+	    tx:Box::new(to_client_sender.clone())
 	};
 	
 	let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
@@ -173,7 +173,7 @@ async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeReque
     response
 }
 
-pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: Box<HashMap<String, Box<mpsc::Sender<RestToMessagingContext>>>>,to_client_sender_for_rest:Box<HashMap<String, Box<mpsc::Sender<MessagingToRestContext>>>>) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,to_client_sender_for_rest:HashMap<String, mpsc::Sender<MessagingToRestContext>>) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 

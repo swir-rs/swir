@@ -18,14 +18,16 @@ use super::super::utils::structs::*;
 use super::super::utils::config::ClientTopicsConfiguration;
 
 
+type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
+
 #[derive(Debug)]
 pub struct NatsBroker{
     nats: Nats,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
-    subscriptions: Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>,
+    subscriptions: Arc<Mutex<Box<Subscriptions>>>,
 }
 
-fn send_request(mut subscriptions:  Box<Vec<SubscribeRequest>>, p: Vec<u8>) {
+fn send_request(subscriptions:  &mut Vec<SubscribeRequest>, p: Vec<u8>) {
     let msg = String::from_utf8_lossy(&p);
     debug!("Processing message {} {}", subscriptions.len(), msg);
     
@@ -65,7 +67,7 @@ impl ClientHandler for NatsBroker {
     fn get_configuration(&self)->Box<dyn ClientTopicsConfiguration+Send>{
 	Box::new(self.nats.clone())
     }
-    fn get_subscriptions(&self)->Arc<Mutex<Box<HashMap<String, Box<Vec<SubscribeRequest>>>>>>{
+    fn get_subscriptions(&self)->Arc<Mutex<Box<Subscriptions>>>{
 	self.subscriptions.clone()
     }
     fn get_type(&self)->String{
@@ -102,28 +104,35 @@ impl NatsBroker {
                     debug!("Publish {}", req);
                     let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
                     if let Some(topic) = maybe_topic {
-                        let foo = nats.publish(&topic, &req.payload);
-                        match foo {
+                        let nats_publish = nats.publish(&topic, &req.payload);
+                        match nats_publish {
                             Ok(_) => {
-                                let _res = sender.send(structs::MessagingResult {
+                                let res = sender.send(structs::MessagingResult {
 				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Ok("NATS is good".to_string()),
                                 });
+				if res.is_err() {
+				    warn!("{:?}",res);
+				}
                             }
                             Err(e) => {
-                                let _res = sender.send(structs::MessagingResult {
+                                let res = sender.send(structs::MessagingResult {
 				    correlation_id: req.correlation_id,
                                     status: BackendStatusCodes::Error(e.to_string()),
                                 });
+				if res.is_err(){
+				    warn!("{:?}",res);
+				}
                             }
                         }
                     } else {
                         warn!("Can't find topic {:?}", req);
-                        if let Err(e) = sender.send(structs::MessagingResult {
+                        let res = sender.send(structs::MessagingResult {
 			    correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                        }) {
-                            warn!("Can't send response back {:?}", e);
+                        });
+			if res.is_err() {
+                            warn!("Can't send response back {:?}", res);
                         }
                     }
                 }
@@ -153,7 +162,7 @@ impl NatsBroker {
 			has_lock = true;
 		    }			
 		}
-		send_request(subs, event.msg);		
+		send_request(&mut subs, event.msg);		
             }
         });
         let _res = join.await;
