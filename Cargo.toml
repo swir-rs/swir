@@ -28,8 +28,9 @@ base64 = "*"
 cfg-if = { version = "=0.1.10" }
 
 tokio = { version = "=0.2", features = ["full","sync"]}
-tokio-rustls = "0.12.0-alpha.8"
-rustls = "0.16"
+tokio-tls = "0.3"
+tokio-rustls = "0.13"
+rustls = "0.17"
 async-stream = "0.2"
 hyper = "0.13"
 http = "0.2"   #hyper = { path = "../hyper" , features = ["runtime","stream"]}

@@ -5,61 +5,30 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use std::io::{Error as StdError, ErrorKind};
 use std::{
-    net::SocketAddr,
-    pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
 };
 
-use futures_core::Stream;
-use futures_util::{ready, TryStreamExt};
 use hyper::service::{make_service_fn, service_fn};
 use frontend_handlers::http_handler::{client_handler,handler};
 
 use utils::pki_utils::{load_certs, load_private_key};
 use hyper::{
-    server::{accept::Accept, conn},
     Body, Request, Server,
 };
+use futures_util::stream::StreamExt;
 
 use tokio_rustls::TlsAcceptor;
+use tokio::net::TcpListener;
+
 use crate::utils::config::MemoryChannel;
-use boxio::BoxedIo;
 use frontend_handlers::grpc_handler;
-mod boxio;
+
 mod frontend_handlers;
 mod backend_handlers;
 mod utils;
 
 
-
-
-#[derive(Debug)]
-struct TcpIncoming {
-    inner: conn::AddrIncoming,
-}
-
-impl TcpIncoming {
-    fn bind(addr: SocketAddr) -> Result<Self, StdError> {
-        let mut inner = conn::AddrIncoming::bind(&addr).map_err(|_| StdError::from(ErrorKind::NotFound))?;
-        inner.set_nodelay(true);
-        Ok(Self { inner })
-    }
-}
-
-impl Stream for TcpIncoming {
-    type Item = Result<conn::AddrStream, StdError>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match ready!(Accept::poll_accept(Pin::new(&mut self.inner), cx)) {
-            Some(Ok(s)) => Poll::Ready(Some(Ok(s))),
-            Some(Err(e)) => Poll::Ready(Some(Err(e))),
-            None => Poll::Ready(None),
-        }
-    }
-}
 
 #[tokio::main(core_threads = 8)]
 async fn main() {
@@ -87,26 +56,31 @@ async fn main() {
 
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
     config.set_single_cert(certs, key).expect("invalid key or certificate");
-    let tls = TlsAcceptor::from(Arc::new(config));
+    let tls_acceptor = TlsAcceptor::from(Arc::new(config));
+    let _arc_acceptor = Arc::new(tls_acceptor);
+    let mut listener = TcpListener::bind(&client_https_addr).await.unwrap();
+    let incoming = listener.incoming();
 
-    let incoming = hyper::server::accept::from_stream::<_, _, StdError>(async_stream::try_stream! {
-        let mut tcp = TcpIncoming::bind(client_https_addr)?;
-        while let Some(stream) = tcp.try_next().await? {
-            {
-                let io = match boxio::connect(tls.clone(), stream.into_inner()).await {
-                    Ok(io) => io,
-                    Err(error) => {
-                        error!("Unable to accept incoming connection. {:?}", error);
-                        continue
+    let incoming=  hyper::server::accept::from_stream(incoming.filter_map(|socket| {
+            async {
+                match socket {
+                    Ok(stream) => {
+                        match _arc_acceptor.clone().accept(stream).await {
+                            Ok(val) => Some(Ok::<_, hyper::Error>(val)),
+                            Err(e) => {
+                                println!("TLS error: {}", e);
+                                None
+                            }
+                        }
                     },
-                };
-                yield BoxedIo::new(io);
-                continue;
+                    Err(e) => {
+                        println!("TCP socket error: {}", e);
+                        None
+                    }
+                }
             }
-            yield boxio::BoxedIo::new(stream)
-        }
-    });
-
+        }));
+    
     let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
     let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
 
