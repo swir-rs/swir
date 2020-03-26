@@ -30,4 +30,10 @@ channels:
          client_topic: "ProduceToAppB"
 
   aws_kinesis: []
+databases:  
+  redis:
+    - cluster: ["redis://127.0.0.1:6379/","redis://127.0.0.1:6378/"]
+      client_name: some_random_name    
+  dynamodb:
+    
         

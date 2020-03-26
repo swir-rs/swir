@@ -36,7 +36,7 @@ async fn main() {
     env_logger::builder().format_timestamp_nanos().init();
     let swir_config = utils::config::Swir::new();
 
-    let mc: MemoryChannel = utils::config::create_client_to_backend_channels(&swir_config);
+    let mc: MemoryChannel = utils::config::create_memory_channels(&swir_config);
 
     let client_ip = swir_config.client_ip.clone();
     let client_https_port: u16 = swir_config.client_https_port;
@@ -82,35 +82,36 @@ async fn main() {
         }));
     
     let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
-    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
 
     
     let http_service = make_service_fn(move |_| {
-        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         async move {
-            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+            let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	    let to_client_sender_for_rest = to_client_sender_for_rest;
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone(),to_client_sender_for_rest.clone())))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone())))
         }
     });
 
     let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
-    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
     
     let https_service = make_service_fn(move |_| {
-        let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+        let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         async move {
-            let from_client_to_backend_channel_sender = from_client_to_backend_channel_sender.clone();
+            let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	    let to_client_sender_for_rest = to_client_sender_for_rest;
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_backend_channel_sender.clone(),to_client_sender_for_rest.clone())))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone())))
         }
     });
 
-    let from_client_to_backend_channel_sender = mc.from_client_to_backend_channel_sender.clone();
+    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
     let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
     let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
+    let from_client_to_persistence_sender = mc.from_client_to_persistence_sender.clone();
     let broker = async {
         backend_handlers::configure_broker(swir_config.channels,  mc).await;
     };
@@ -118,9 +119,15 @@ async fn main() {
     let server = Server::bind(&client_http_addr).serve(http_service);
     let tls_server = Server::builder(incoming).serve(https_service);
     let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
-    let swir = grpc_handler::SwirAPI::new(from_client_to_backend_channel_sender, to_client_receiver_for_grpc);
-    let svc = grpc_handler::client_api::client_api_server::ClientApiServer::new(swir);
-    let grpc = tonic::transport::Server::builder().add_service(svc).serve(client_grpc_addr);
+    let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
+    let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_sender);
+    
+    let pub_sub_svc = grpc_handler::swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
+    let persistence_svc = grpc_handler::swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
+    let grpc = tonic::transport::Server::builder()
+	.add_service(pub_sub_svc)
+	.add_service(persistence_svc)
+	.serve(client_grpc_addr);
 
     if let Some(command) = client_executable {
         utils::command_utils::run_java_command(command);

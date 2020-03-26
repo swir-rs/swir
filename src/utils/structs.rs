@@ -38,6 +38,31 @@ impl fmt::Display for PublishRequest{
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StoreRequest {
+    pub(crate) correlation_id: String,
+    pub(crate) payload: Vec<u8>,
+    pub(crate) key: String,
+}
+
+impl fmt::Display for StoreRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "StoreRequest {{ correlation_id: {}, key: {}, payload:{} }}", &self.correlation_id, &self.key, String::from_utf8_lossy(&self.payload))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RetrieveRequest {
+    pub(crate) correlation_id: String,
+    pub(crate) key: String,
+}
+
+impl fmt::Display for RetrieveRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RetrieveRequest {{ correlation_id: {}, key: {} }}", &self.correlation_id, &self.key)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone,Eq,PartialEq,Ord,PartialOrd)]
 pub struct EndpointDesc {
     pub(crate) url: String,
@@ -137,10 +162,25 @@ pub struct MessagingResult {
 }
 
 #[derive(Debug)]
+pub struct PersistenceResult {
+    pub(crate) correlation_id: String,
+    pub(crate) status: BackendStatusCodes,
+    pub(crate) payload: Vec<u8>
+}
+
+
+#[derive(Debug)]
 pub enum Job {
     Subscribe(SubscribeRequest),
     Unsubscribe(SubscribeRequest),
     Publish(PublishRequest),
+
+}
+
+#[derive(Debug)]
+pub enum PersistenceJobType {
+    Store(StoreRequest),
+    Retrieve(RetrieveRequest)
 }
 
 
@@ -158,4 +198,10 @@ pub struct MessagingToRestContext {
     pub sender: Sender<MessagingResult>,
     pub payload: Vec<u8>,
     pub uri: String,
+}
+
+#[derive(Debug)]
+pub struct RestToPersistenceContext {
+    pub job: PersistenceJobType,
+    pub sender: Sender<PersistenceResult>,
 }

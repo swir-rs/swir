@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext};
+use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext,RestToPersistenceContext};
 
 #[derive(Debug, Deserialize,Clone)]
 pub struct ProducerTopic {
@@ -135,7 +135,8 @@ pub struct MemoryChannel {
     pub to_client_sender_for_rest: HashMap<String,mpsc::Sender<MessagingToRestContext>>,
     pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
     pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
-    pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    pub from_client_to_messaging_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    pub from_client_to_persistence_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,7 +199,7 @@ impl Swir {
 //  to_client_receiver3 <----------------- broker 3 < ---- to_client_sender3
 
 
-pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
+pub fn create_memory_channels(config: &Swir) -> MemoryChannel {
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
 
 
@@ -213,7 +214,8 @@ pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
     let to_client_receiver_for_grpc = Arc::new(Mutex::new(to_client_receiver_for_grpc));
 
     let mut kafka_memory_channels = vec![];
-    let mut from_client_to_backend_channel_sender = HashMap::new();
+    let mut from_client_to_messaging_sender = HashMap::new();
+    let mut from_client_to_persistence_sender = HashMap::new();
 
     for kafka_channels in config.channels.kafka.iter() {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
@@ -225,11 +227,11 @@ pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
 
         kafka_memory_channels.push(mme);
         for producer_topic in kafka_channels.producer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+            from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
         }
 
         for consumer_topic in kafka_channels.consumer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+            from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
 	    to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
         }
     }
@@ -246,11 +248,11 @@ pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
 
         aws_kinesis_memory_channels.push(mme);
         for producer_topic in aws_kinesis_channels.producer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+            from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
         }
 
         for consumer_topic in aws_kinesis_channels.consumer_topics.iter() {
-            from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+            from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
 	    to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
         }
     }
@@ -270,11 +272,11 @@ pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
             };
             nats_memory_channels.push(mme);
             for producer_topic in nats_channels.producer_topics.iter() {
-                from_client_to_backend_channel_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+                from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
             }
 
             for consumer_topic in nats_channels.consumer_topics.iter() {
-                from_client_to_backend_channel_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
+                from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
 		to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(),box_to_client_sender_for_rest.clone());
             }
         }
@@ -287,7 +289,8 @@ pub fn create_client_to_backend_channels(config: &Swir) -> MemoryChannel {
 	to_client_sender_for_rest:to_client_sender_for_rest_map,
         to_client_receiver_for_rest,
         to_client_receiver_for_grpc,
-        from_client_to_backend_channel_sender,
+        from_client_to_messaging_sender,
+	from_client_to_persistence_sender
     };
 
     debug! {"MC {:?}", mc};
