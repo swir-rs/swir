@@ -349,7 +349,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
     async fn store(&self, request: tonic::Request<swir_grpc_api::StoreRequest>) -> Result<tonic::Response<swir_grpc_api::StoreResponse>, tonic::Status>{
 	let request = request.into_inner();
         info!("Retrieve {}", request);
-        if let Some(tx) = self.find_channel(&request.key) {
+        if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::StoreRequest {
 		correlation_id: request.correlation_id.clone(),
 		payload: request.payload,
@@ -375,8 +375,9 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             } else {
                 msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
             }
-	    let reply = swir_grpc_api::StoreResponse {
+	    let reply = swir_grpc_api::StoreResponse {		
 		correlation_id: request.correlation_id,
+		database_name: request.database_name,
 		key: request.key,
                 status: msg, 
             };
@@ -390,7 +391,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
     async fn retrieve(&self, request: tonic::Request<swir_grpc_api::RetrieveRequest>) -> Result<tonic::Response<swir_grpc_api::RetrieveResponse>, tonic::Status>{
 	let request = request.into_inner();
         info!("Retrieve {}", request);
-        if let Some(tx) = self.find_channel(&request.key) {
+        if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::RetrieveRequest {
 		correlation_id: request.correlation_id.clone(),
                 key: request.key.clone(),
@@ -415,6 +416,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 msg.push_str(&res.status.to_string());
 		swir_grpc_api::RetrieveResponse {
 		    correlation_id: request.correlation_id,
+		    database_name: request.database_name,
 		    key: request.key,
 		    payload: res.payload,
                     status: msg,
@@ -425,6 +427,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
 
 		swir_grpc_api::RetrieveResponse {
 		    correlation_id: request.correlation_id,
+		    database_name: request.database_name,		    
 		    key: request.key,
 		    payload: vec![],
                     status: msg,

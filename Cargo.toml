@@ -18,7 +18,6 @@ futures-core= "=0.3"
 futures-util = "=0.3"
 futures-executor = "=0.3"
 
-
 log = "0.4"
 env_logger = "*"
 color-backtrace="*"
@@ -56,6 +55,7 @@ prost = "0.6"
 prost-derive = "0.6"
 tonic = {version="0.1", optional=false} #tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
 config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" } #config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
+redis = { version="0.15",features = ["cluster"]}
 
 [build-dependencies]
 tonic-build = { version="0.1" } #tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }

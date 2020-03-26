@@ -21,11 +21,12 @@ use futures_util::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 use tokio::net::TcpListener;
 
-use crate::utils::config::MemoryChannel;
+use crate::utils::config::MemoryChannels;
 use frontend_handlers::grpc_handler;
 
+mod persistence_handlers;
 mod frontend_handlers;
-mod backend_handlers;
+mod messaging_handlers;
 mod utils;
 
 
@@ -36,7 +37,9 @@ async fn main() {
     env_logger::builder().format_timestamp_nanos().init();
     let swir_config = utils::config::Swir::new();
 
-    let mc: MemoryChannel = utils::config::create_memory_channels(&swir_config);
+    let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);
+    let mmc = mc.messaging_memory_channels;
+    let pmc = mc.persistence_memory_channels;
 
     let client_ip = swir_config.client_ip.clone();
     let client_https_port: u16 = swir_config.client_https_port;
@@ -81,46 +84,55 @@ async fn main() {
             }
         }));
     
-    let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
-    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
+    let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
+    let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
+    let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
 
     
     let http_service = make_service_fn(move |_| {
         let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
+	let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
 	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         async move {
             let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	    let to_client_sender_for_rest = to_client_sender_for_rest;
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone())))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone(),from_client_to_persistence_senders.clone())))
         }
     });
 
-    let to_client_sender_for_rest = mc.to_client_sender_for_rest.clone();
-    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
+    let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
+    let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
+    let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
     
     let https_service = make_service_fn(move |_| {
         let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	let to_client_sender_for_rest = to_client_sender_for_rest.clone();
+	let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         async move {
             let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
 	    let to_client_sender_for_rest = to_client_sender_for_rest;
-            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone())))
+            Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| handler(req, from_client_to_messaging_sender.clone(),to_client_sender_for_rest.clone(),from_client_to_persistence_senders.clone())))
         }
     });
 
-    let from_client_to_messaging_sender = mc.from_client_to_messaging_sender.clone();
-    let to_client_receiver_for_rest = mc.to_client_receiver_for_rest.clone();
-    let to_client_receiver_for_grpc = mc.to_client_receiver_for_grpc.clone();
-    let from_client_to_persistence_sender = mc.from_client_to_persistence_sender.clone();
+    let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
+    let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
+    let to_client_receiver_for_rest = mmc.to_client_receiver_for_rest.clone();
+    let to_client_receiver_for_grpc = mmc.to_client_receiver_for_grpc.clone();
+
     let broker = async {
-        backend_handlers::configure_broker(swir_config.channels,  mc).await;
+        messaging_handlers::configure_broker(swir_config.channels.clone(),  mmc).await;
+    };
+
+    let stores = async {
+        persistence_handlers::configure_stores(swir_config.stores.clone(),  pmc.from_client_to_persistence_receivers_map).await;
     };
 
     let server = Server::bind(&client_http_addr).serve(http_service);
     let tls_server = Server::builder(incoming).serve(https_service);
     let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
     let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
-    let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_sender);
+    let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
     
     let pub_sub_svc = grpc_handler::swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
     let persistence_svc = grpc_handler::swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
@@ -133,5 +145,5 @@ async fn main() {
         utils::command_utils::run_java_command(command);
     }
 
-    let (_r1, _r2, _r3, _r4, _r5) = futures::join!(tls_server, server, client, broker, grpc);
+    let (_r1, _r2, _r3, _r4, _r5,_r6) = futures::join!(tls_server, server, client, broker, stores, grpc);
 }

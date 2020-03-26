@@ -69,23 +69,27 @@ message SubscribeResponse {
 
 message StoreRequest {
   string correlation_id=1;
-  string key = 2;
-  bytes payload = 3;
+  string database_name=2;
+  string key = 3;
+  bytes payload = 4;
 }
 message StoreResponse {
   string correlation_id=1;
-  string key = 2;
-  string status = 3;
+  string database_name=2;
+  string key = 3;
+  string status = 4;
 }
 
 message RetrieveRequest {
   string correlation_id=1;
-  string key = 2;
+  string database_name=2;
+  string key = 3;
 }
 
 message RetrieveResponse {
   string correlation_id=1;
-  string status = 2;
-  string key =3;
-  bytes payload = 4;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
 }

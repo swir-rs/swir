@@ -16,13 +16,13 @@ use tokio::sync::mpsc;
 use async_trait::async_trait;
 
 
-use crate::backend_handlers::Broker;
+use crate::messaging_handlers::Broker;
 use crate::utils::config::Kafka;
 
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 use super::super::utils::config::ClientTopicsConfiguration;
-use crate::backend_handlers::client_handler::ClientHandler;
+use crate::messaging_handlers::client_handler::ClientHandler;
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
 

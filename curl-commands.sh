@@ -26,4 +26,8 @@ docker run --network docker_swir-net -it curlimages/curl -v -d '{"endpoint":{"ur
 docker run --network docker_swir-net -it curlimages/curl -v -d '{"messages":10000, "threads":4, "sidecarUrl":"http://127.0.0.1:8080/publish"}' -H "Content-Type: application/json" -X POST http://docker_swir_1:8090/test
 
 
-curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -H "topic:ProduceToKinesis" -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/publish
+#Redis ok
+curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -H "x-database-key: dfkdkfjdkjf" -H "x-database-name: my_db_store1" -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/store
+curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -H "x-database-key: dfkdkfjdkjf" -H "x-database-name: my_db_store1" -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/retrieve
+
+

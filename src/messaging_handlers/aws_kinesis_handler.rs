@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use aws_lock_client::{AwsLockClient,AwsLockClientDynamoDb};
 
-use crate::backend_handlers::Broker;
+use crate::messaging_handlers::Broker;
 use crate::utils::config::AwsKinesis;
 
 use rusoto_kinesis::Kinesis;
@@ -23,7 +23,7 @@ use rusoto_core::Region;
 use super::super::utils::structs;
 use super::super::utils::structs::*;
 use super::super::utils::config::ClientTopicsConfiguration;
-use crate::backend_handlers::client_handler::ClientHandler;
+use crate::messaging_handlers::client_handler::ClientHandler;
 use regex::Regex;
 
 lazy_static! {

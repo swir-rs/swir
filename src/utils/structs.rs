@@ -38,7 +38,7 @@ impl fmt::Display for PublishRequest{
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StoreRequest {
     pub(crate) correlation_id: String,
     pub(crate) payload: Vec<u8>,
@@ -51,7 +51,7 @@ impl fmt::Display for StoreRequest{
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct RetrieveRequest {
     pub(crate) correlation_id: String,
     pub(crate) key: String,
@@ -161,11 +161,23 @@ pub struct MessagingResult {
     pub(crate) status: BackendStatusCodes,
 }
 
-#[derive(Debug)]
+
 pub struct PersistenceResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
     pub(crate) payload: Vec<u8>
+}
+
+impl fmt::Display for PersistenceResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+	write!(f, "PersistenceResult {{ correlation_id: {}, status :  {}}}", &self.correlation_id, &self.status)
+    }
+}
+
+impl fmt::Debug for PersistenceResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+	write!(f, "PersistenceResult {{ correlation_id: {}, status :  {}}}", &self.correlation_id, &self.status)
+    }
 }
 
 
