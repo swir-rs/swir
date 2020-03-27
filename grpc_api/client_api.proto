@@ -34,6 +34,8 @@ service PersistenceApi {
     rpc Store (StoreRequest) returns (StoreResponse) {
     }
     rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
+    }  
+    rpc Delete (DeleteRequest) returns (DeleteResponse) {
     }
   
 }
@@ -87,6 +89,20 @@ message RetrieveRequest {
 }
 
 message RetrieveResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
+}
+
+message DeleteRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+}
+
+message DeleteResponse {
   string correlation_id=1;
   string database_name=2;
   string key = 3; 

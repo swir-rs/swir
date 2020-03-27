@@ -10,16 +10,19 @@ use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
 
+use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext,RestToPersistenceContext,StoreRequest, RetrieveRequest, PersistenceJobType,PersistenceResult,DeleteRequest};
+use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
+
+
 
 #[derive(Debug)]
 enum PersistenceOperationType{
     Store,
-    Retrieve
-    
+    Retrieve,
+    Delete    
 }
 
-use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext,RestToPersistenceContext,StoreRequest, RetrieveRequest, PersistenceJobType,PersistenceResult};
-use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
+
 
 static X_CORRRELATION_ID_HEADER_NAME:& str = "x-correlation-id";
 static X_DATABASE_NAME_HEADER_NAME:& str = "x-database-name";
@@ -138,7 +141,7 @@ async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correla
 }
     
 
-async fn store_retrieve_processor(op_type:PersistenceOperationType, correlation_id: String,  headers:&HeaderMap<HeaderValue>,  req: Request<Body> , from_client_to_persistence_sender: &HashMap<String, mpsc::Sender<RestToPersistenceContext>>)->Response<Body>{
+async fn persistence_processor(op_type:PersistenceOperationType, correlation_id: String,  headers:&HeaderMap<HeaderValue>,  req: Request<Body> , from_client_to_persistence_sender: &HashMap<String, mpsc::Sender<RestToPersistenceContext>>)->Response<Body>{
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     let database_name = extract_database_name_from_headers(headers).unwrap();
@@ -181,6 +184,19 @@ async fn store_retrieve_processor(op_type:PersistenceOperationType, correlation_
     
 	    let job = RestToPersistenceContext {
 		job: PersistenceJobType::Retrieve(rr.clone()),
+		sender: local_tx,
+	    };
+	    sender.try_send(job)
+	},
+	PersistenceOperationType::Delete=>{
+	    let rr = DeleteRequest {
+		correlation_id,
+		table_name: database_name.clone(),
+		key:key.clone()
+	    };
+    
+	    let job = RestToPersistenceContext {
+		job: PersistenceJobType::Delete(rr.clone()),
 		sender: local_tx,
 	    };
 	    sender.try_send(job)
@@ -351,13 +367,18 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 	    Ok(response)
 	}
 
-	(&Method::POST, "/store") => {	  
-	    let response = store_retrieve_processor(PersistenceOperationType::Store, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+	(&Method::POST, "/persistence/store") => {	  
+	    let response = persistence_processor(PersistenceOperationType::Store, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
             Ok(response)
 	},
 	
-	(&Method::POST, "/retrieve") => {
-	    let response = store_retrieve_processor(PersistenceOperationType::Retrieve, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+	(&Method::POST, "/persistence/retrieve") => {
+	    let response = persistence_processor(PersistenceOperationType::Retrieve, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+            return Ok(response);
+
+	},
+	(&Method::POST, "/persistence/delete") => {
+	    let response = persistence_processor(PersistenceOperationType::Delete, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
             return Ok(response);
 
 	},

@@ -4,7 +4,7 @@ use rusoto_dynamodb::{DynamoDb,DynamoDbClient};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use crate::utils::config;
-use crate::utils::structs::{RestToPersistenceContext,PersistenceJobType,StoreRequest,RetrieveRequest,PersistenceResult,BackendStatusCodes};
+use crate::utils::structs::{RestToPersistenceContext,PersistenceJobType,StoreRequest,RetrieveRequest,PersistenceResult,BackendStatusCodes,DeleteRequest};
 use crate::persistence_handlers::Store;
 use tokio::stream::StreamExt;
 use futures::channel::oneshot::Sender;
@@ -162,6 +162,71 @@ impl<'l> DynamoDbStore<'l>{
 	};		
     }
 
+    async fn delete(&self, client: &DynamoDbClient, rr:DeleteRequest,sender:Sender<PersistenceResult>){
+	let key_attr = rusoto_dynamodb::AttributeValue{
+	    s:Some(rr.key.clone()),
+	    .. Default::default()			
+	};
+
+	let mut key = HashMap::new();
+	key.insert("key".to_string(),key_attr);
+	
+	let delete_item_input = rusoto_dynamodb::DeleteItemInput{
+	    table_name:rr.table_name.clone(),
+	    return_values:Some("ALL_OLD".to_string()),
+	    key,
+	    .. Default::default()			    			    			    			    
+	};	
+	let delete_item_output = client.delete_item(delete_item_input).await;
+	    	    		
+	let gr = match delete_item_output{
+	    Ok(output)=>{		
+		let payload = match output.attributes {
+		    Some(item)=>{
+			let maybe_data_attr = item.get("data");
+			match maybe_data_attr{
+			    Some(data_attr)=>{
+				match data_attr.b.clone(){
+				    Some(data)=>{
+					data.to_vec()
+				    },
+				    None =>{
+					vec![]				
+				    }
+				}
+			    },
+			    None =>{
+				vec![]
+			    }
+			}
+			
+		    },
+		    None =>{
+			vec![]
+		    }
+		};
+		
+		PersistenceResult{
+		    correlation_id: rr.correlation_id,
+		    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
+		    payload
+		}
+	    },
+	    Err(e)=>{
+		PersistenceResult{
+		    correlation_id: rr.correlation_id,
+		    status: BackendStatusCodes::Error(e.to_string()),
+		    payload: vec![]
+		}
+	    }
+	};
+	
+	let r = sender.send(gr);
+	if r.is_err() {
+	    warn!("Can't send response {:?}",r);
+	};		
+    }
+
     async fn event_handler(&self) {
 	let region = if let Ok(region) = rusoto_signature::Region::from_str(&self.config.region){
 	    region
@@ -183,6 +248,10 @@ impl<'l> DynamoDbStore<'l>{
 
 		PersistenceJobType::Retrieve(value)=>{
 		    self.retrieve(&client, value,sender).await;
+		},
+		
+		PersistenceJobType::Delete(value)=>{
+		    self.delete(&client, value,sender).await;
 		},
 	    }
 	}

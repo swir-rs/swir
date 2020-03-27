@@ -71,6 +71,18 @@ impl fmt::Display for swir_grpc_api::RetrieveRequest{
     }
 }
 
+impl fmt::Display for swir_grpc_api::DeleteResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DeleteResponse {{ correlation_id:{}, key:{}}}", &self.correlation_id,&self.key)
+    }
+}
+
+impl fmt::Display for swir_grpc_api::DeleteRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DeleteRequest {{ correlation_id:{}, key: {} }}", &self.correlation_id, &self.key)
+    }
+}
+
 
 
 #[derive(Debug)]
@@ -428,6 +440,57 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
 
 		swir_grpc_api::RetrieveResponse {
+		    correlation_id: request.correlation_id,
+		    database_name: request.database_name,		    
+		    key: request.key,
+		    payload: vec![],
+                    status: msg,
+		}
+            };            
+            Ok(tonic::Response::new(reply)) // Send back our formatted greeting
+        } else {
+            Err(tonic::Status::invalid_argument("Invalid topic"))
+        }
+    }
+
+    async fn delete(&self, request: tonic::Request<swir_grpc_api::DeleteRequest>) -> Result<tonic::Response<swir_grpc_api::DeleteResponse>, tonic::Status>{
+	let request = request.into_inner();
+        info!("Delete {}", request);
+        if let Some(tx) = self.find_channel(&request.database_name) {
+            let p = crate::utils::structs::DeleteRequest {
+		table_name: request.database_name.clone(),
+		correlation_id: request.correlation_id.clone(),
+                key: request.key.clone(),
+            };
+            debug!("{}", p);
+            let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
+            let job = RestToPersistenceContext {
+                job: PersistenceJobType::Delete(p),
+                sender: local_tx,
+            };
+	
+
+            let mut tx = tx.clone();
+            if let Err(e) = tx.try_send(job) {
+                warn!("Channel is dead {:?}", e);
+            }
+	   
+            let response_from_storage: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;	   
+            
+            let reply = if let Ok(res) = response_from_storage {
+		let mut msg = String::new();
+                msg.push_str(&res.status.to_string());
+		swir_grpc_api::DeleteResponse {
+		    correlation_id: request.correlation_id,
+		    database_name: request.database_name,
+		    key: request.key,
+		    payload: res.payload,
+                    status: msg,
+		}
+            } else {
+		let mut msg = String::new();
+                msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
+		swir_grpc_api::DeleteResponse {
 		    correlation_id: request.correlation_id,
 		    database_name: request.database_name,		    
 		    key: request.key,

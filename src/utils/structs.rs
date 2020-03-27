@@ -59,9 +59,22 @@ pub struct RetrieveRequest {
     pub(crate) key: String
 }
 
+#[derive(Serialize, Deserialize, Debug,Clone)]
+pub struct DeleteRequest {
+    pub(crate) correlation_id: String,
+    pub(crate) table_name: String,
+    pub(crate) key: String
+}
+
 impl fmt::Display for RetrieveRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RetrieveRequest {{ correlation_id: {}, key: {} }}", &self.correlation_id, &self.key)
+    }
+}
+
+impl fmt::Display for DeleteRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DeleteRequest {{ correlation_id: {}, key: {} }}", &self.correlation_id, &self.key)
     }
 }
 
@@ -194,7 +207,9 @@ pub enum Job {
 #[derive(Debug)]
 pub enum PersistenceJobType {
     Store(StoreRequest),
-    Retrieve(RetrieveRequest)
+    Retrieve(RetrieveRequest),
+    Delete(DeleteRequest)
+
 }
 
 
