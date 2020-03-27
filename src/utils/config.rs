@@ -118,16 +118,22 @@ impl ClientTopicsConfiguration for AwsKinesis {
     }
 }
 
+#[derive(Debug, Deserialize,Clone)]
+pub struct TableDescription{
+    pub table_name: String,
+    pub client_name: String
+}
 
 #[derive(Debug, Deserialize,Clone)]
 pub struct Redis {
     pub nodes: Vec<String>,
-    pub client_database_names: Vec<String>,
+    pub tables: Vec<TableDescription>
 }
 
 #[derive(Debug, Deserialize,Clone)]
 pub struct DynamoDb {
-    pub client_database_names: Vec<String>,
+    pub region: String,
+    pub tables: Vec<TableDescription>
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -337,10 +343,10 @@ fn create_persistence_channels(config: &Swir)->PersistenceMemoryChannels{
     let mut from_client_to_persistence_receivers = Vec::new();
     
     for redis_store in config.stores.redis.iter() {
-	if !redis_store.client_database_names.is_empty(){
+	if !redis_store.tables.is_empty(){
 	    let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToPersistenceContext>, mpsc::Receiver<RestToPersistenceContext>) = mpsc::channel(10);
-	    for database_name in redis_store.client_database_names.iter(){
-		from_client_to_persistence_senders.insert(database_name.clone(),from_client_sender.clone());
+	    for database_desc in redis_store.tables.iter(){
+		from_client_to_persistence_senders.insert(database_desc.client_name.clone(),from_client_sender.clone());
 	    };
 	    from_client_to_persistence_receivers.push(Arc::new(Mutex::new(from_client_receiver)));
 	};
@@ -351,10 +357,10 @@ fn create_persistence_channels(config: &Swir)->PersistenceMemoryChannels{
     let mut from_client_to_persistence_receivers = Vec::new();
    
     for dynamodb_store in config.stores.dynamodb.iter() {
-	if !dynamodb_store.client_database_names.is_empty(){
+	if !dynamodb_store.tables.is_empty(){
 	    let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToPersistenceContext>, mpsc::Receiver<RestToPersistenceContext>) = mpsc::channel(10);
-	    for database_name in dynamodb_store.client_database_names.iter(){
-		from_client_to_persistence_senders.insert(database_name.clone(),from_client_sender.clone());
+	    for database_desc in dynamodb_store.tables.iter(){
+		from_client_to_persistence_senders.insert(database_desc.client_name.clone(),from_client_sender.clone());
 	    };
 	    from_client_to_persistence_receivers.push(Arc::new(Mutex::new(from_client_receiver)));
 	};

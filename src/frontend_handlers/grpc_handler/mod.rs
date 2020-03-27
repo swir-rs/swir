@@ -348,12 +348,13 @@ impl SwirPersistenceApi {
 impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceApi {    
     async fn store(&self, request: tonic::Request<swir_grpc_api::StoreRequest>) -> Result<tonic::Response<swir_grpc_api::StoreResponse>, tonic::Status>{
 	let request = request.into_inner();
-        info!("Retrieve {}", request);
+        info!("Store {}", request);
         if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::StoreRequest {
 		correlation_id: request.correlation_id.clone(),
 		payload: request.payload,
                 key: request.key.clone(),
+		table_name: request.database_name.clone()
             };
             debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
@@ -393,6 +394,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
         info!("Retrieve {}", request);
         if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::RetrieveRequest {
+		table_name: request.database_name.clone(),
 		correlation_id: request.correlation_id.clone(),
                 key: request.key.clone(),
             };

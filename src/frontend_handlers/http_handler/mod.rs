@@ -162,7 +162,8 @@ async fn store_retrieve_processor(op_type:PersistenceOperationType, correlation_
 	    let sr = StoreRequest {
 		correlation_id,
 		payload: whole_body,
-		key:key.clone()
+		table_name: database_name.clone(),
+		key:key.clone()		   
 	    };
     
 	    let job = RestToPersistenceContext {
@@ -174,6 +175,7 @@ async fn store_retrieve_processor(op_type:PersistenceOperationType, correlation_
 	PersistenceOperationType::Retrieve=>{
 	    let rr = RetrieveRequest {
 		correlation_id,
+		table_name: database_name.clone(),
 		key:key.clone()
 	    };
     

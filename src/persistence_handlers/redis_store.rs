@@ -29,60 +29,53 @@ impl<'l> RedisStore<'l>{
     }
     fn store(&self, connection:&mut Connection, sr:StoreRequest,sender:Sender<PersistenceResult>){
 	let r:Result<(),redis::RedisError> = connection.set(sr.key,sr.payload);
-	match r{
+	let pr = match r{
 	    Ok(()) => {
-		let pr = PersistenceResult{
+		PersistenceResult{
 		    correlation_id: sr.correlation_id,
 		    status: BackendStatusCodes::Ok("REDIS is good".to_string()),
 		    payload: vec![]
-		};
-		let r = sender.send(pr);
-		if r.is_err() {
-		    warn!("Can't send response {:?}",r);
-		};
+		}
 	    },
 	    
 	    Err(e) => {
-		let pr = PersistenceResult{
+		PersistenceResult{
 		    correlation_id: sr.correlation_id,
 		    status: BackendStatusCodes::Error(e.to_string()),
 		    payload: vec![]
-		};
-		let r = sender.send(pr);
-		if r.is_err() {
-		    warn!("Can't send response {:?}",r);
-		};		
+		}
 	    }
-	}
+	};
+	let r = sender.send(pr);
+	if r.is_err() {
+	    warn!("Can't send response {:?}",r);
+	};
     }
 
     fn retrieve(&self, connection:&mut Connection,sr:RetrieveRequest,sender:Sender<PersistenceResult>){
 	let r:Result<String,redis::RedisError> = connection.get(sr.key);
-	match r{
+	let rr = match r {
 	    Ok(data) => {
-		let pr = PersistenceResult{
+		PersistenceResult{
 		    correlation_id: sr.correlation_id,
 		    status: BackendStatusCodes::Ok("REDIS is good".to_string()),
 		    payload: data.into_bytes()
-		};
-		let r = sender.send(pr);
-		if r.is_err() {
-		    warn!("Can't send response {:?}",r);
-		};
+		}
 	    },
 	    
 	    Err(e) => {
-		let pr = PersistenceResult{
+		PersistenceResult{
 		    correlation_id: sr.correlation_id,
 		    status: BackendStatusCodes::Error(e.to_string()),
 		    payload: vec![]
-		};
-		let r = sender.send(pr);
-		if r.is_err() {
-		    warn!("Can't send response {:?}",r);
-		};		
+		}		
 	    }	    
-	}
+	};
+	
+	let r = sender.send(rr);
+	if r.is_err() {
+	    warn!("Can't send response {:?}",r);
+	};
     }
     
 

@@ -43,6 +43,7 @@ pub struct StoreRequest {
     pub(crate) correlation_id: String,
     pub(crate) payload: Vec<u8>,
     pub(crate) key: String,
+    pub(crate) table_name: String
 }
 
 impl fmt::Display for StoreRequest{
@@ -54,7 +55,8 @@ impl fmt::Display for StoreRequest{
 #[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct RetrieveRequest {
     pub(crate) correlation_id: String,
-    pub(crate) key: String,
+    pub(crate) table_name: String,
+    pub(crate) key: String
 }
 
 impl fmt::Display for RetrieveRequest{

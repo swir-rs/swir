@@ -129,7 +129,9 @@ async fn main() {
     };
 
     let server = Server::bind(&client_http_addr).serve(http_service);
+
     let tls_server = Server::builder(incoming).serve(https_service);
+
     let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
     let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
     let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
