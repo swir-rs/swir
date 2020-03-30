@@ -15,14 +15,14 @@ use bytes::Bytes;
 
 
 #[derive(Debug)]
-pub struct DynamoDbStore<'l>{
-    config:&'l config::DynamoDb,
+pub struct DynamoDbStore{
+    config: config::DynamoDb,
     rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>
 }
 
 
-impl<'l> DynamoDbStore<'l>{    
-    pub fn new(config:&'l config::DynamoDb,rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>)->Self{
+impl DynamoDbStore{    
+    pub fn new(config:config::DynamoDb,rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>)->Self{
 	DynamoDbStore{
 	    config,
 	    rx
@@ -259,7 +259,7 @@ impl<'l> DynamoDbStore<'l>{
 }
 
 #[async_trait]
-impl<'l> Store for DynamoDbStore<'l> {
+impl Store for DynamoDbStore {
     async fn configure_store(&self){		
 	info!("Configuring DynamoDB store {:?} ", self);
         let f1 = async { self.event_handler().await };

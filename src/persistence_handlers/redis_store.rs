@@ -15,13 +15,13 @@ use redis::{pipe, Commands, Client, Connection};
 
 
 #[derive(Debug)]
-pub struct RedisStore<'l>{
-    config:&'l Redis,
+pub struct RedisStore{
+    config:Redis,
     rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>,    
 }
 
-impl<'l> RedisStore<'l>{    
-    pub fn new(config:&'l Redis,rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>)->Self{	
+impl RedisStore{    
+    pub fn new(config:Redis,rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>)->Self{	
 	RedisStore {
 	    config,
 	    rx,		
@@ -152,7 +152,7 @@ impl<'l> RedisStore<'l>{
 }
 
 #[async_trait]
-impl<'l> Store for RedisStore<'l> {
+impl Store for RedisStore {
     async fn configure_store(&self){
 	info!("Configuring Redis store {:?} ", self);
         let f1 = async { self.event_handler().await };

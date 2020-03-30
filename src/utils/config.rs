@@ -178,7 +178,7 @@ pub struct MemoryChannels {
 
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize,Clone)]
 pub struct Swir {
     pub client_ip: String,
     pub client_http_port: u16,

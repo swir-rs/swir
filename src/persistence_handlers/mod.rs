@@ -17,15 +17,14 @@ trait Store {
 }
 
 pub async fn configure_stores(stores: Stores, from_client_to_persistence_receivers:HashMap<StoreType, Vec<Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>>>) {
-    let mut store_handlers: Vec<Box<dyn Store>> = vec![];
     let mut futures = vec![];
 
     let receivers = from_client_to_persistence_receivers.get(&StoreType::Redis);
     if let Some(receivers) = receivers{
 	for (i,redis_store) in stores.redis.iter().enumerate(){
 	    let receiver = &receivers[i];
-	    let redis_store = redis_store::RedisStore::new(redis_store,receiver.clone());
-	    store_handlers.push(Box::new(redis_store));	  
+	    let redis_store = redis_store::RedisStore::new(redis_store.to_owned(),receiver.clone());
+	    futures.push(tokio::spawn(async move {redis_store.configure_store().await }));
 	}
     }
 
@@ -33,16 +32,14 @@ pub async fn configure_stores(stores: Stores, from_client_to_persistence_receive
     if let Some(receivers) = receivers{
 	for (i,dynamodb_store) in stores.dynamodb.iter().enumerate(){
 	    let receiver = &receivers[i];
-	    let redis_store = dynamodb_store::DynamoDbStore::new(dynamodb_store,receiver.clone());
-	    store_handlers.push(Box::new(redis_store));
+	    let dynamo_store = dynamodb_store::DynamoDbStore::new(dynamodb_store.to_owned(),receiver.clone());
+	    futures.push(tokio::spawn(async move {dynamo_store.configure_store().await }));	    
+	    
 	}
     }
 
-    debug!("Store handlers to configure {}", store_handlers.len());
-    for store_handler in store_handlers.iter() {
-        let f = async move { store_handler.configure_store().await };
-        futures.push(f);
-    }
+    debug!("Store handlers configured {}", futures.len());
+
     join_all(futures).await;
 }
 

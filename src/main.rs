@@ -57,32 +57,8 @@ async fn main() {
     // Load private key.
     let key = load_private_key(http_tls_key).unwrap();
 
-    let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-    config.set_single_cert(certs, key).expect("invalid key or certificate");
-    let tls_acceptor = TlsAcceptor::from(Arc::new(config));
-    let _arc_acceptor = Arc::new(tls_acceptor);
-    let mut listener = TcpListener::bind(&client_https_addr).await.unwrap();
-    let incoming = listener.incoming();
 
-    let incoming=  hyper::server::accept::from_stream(incoming.filter_map(|socket| {
-            async {
-                match socket {
-                    Ok(stream) => {
-                        match _arc_acceptor.clone().accept(stream).await {
-                            Ok(val) => Some(Ok::<_, hyper::Error>(val)),
-                            Err(e) => {
-                                println!("TLS error: {}", e);
-                                None
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        println!("TCP socket error: {}", e);
-                        None
-                    }
-                }
-            }
-        }));
+    
     
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
@@ -120,32 +96,86 @@ async fn main() {
     let to_client_receiver_for_rest = mmc.to_client_receiver_for_rest.clone();
     let to_client_receiver_for_grpc = mmc.to_client_receiver_for_grpc.clone();
 
-    let broker = async {
-        messaging_handlers::configure_broker(swir_config.channels.clone(),  mmc).await;
-    };
+    let mut tasks = vec![];
+    let config = swir_config.clone();
+    let messaging = tokio::spawn(async move {
+        messaging_handlers::configure_broker(config.channels,  mmc).await;
+    });
+    tasks.push(messaging);
 
-    let stores = async {
-        persistence_handlers::configure_stores(swir_config.stores.clone(),  pmc.from_client_to_persistence_receivers_map).await;
-    };
+    let config = swir_config.clone();
+    let persistence = tokio::spawn(async move {
+	persistence_handlers::configure_stores(config.stores,  pmc.from_client_to_persistence_receivers_map).await;       
+    });
+    tasks.push(persistence);
 
-    let server = Server::bind(&client_http_addr).serve(http_service);
-
-    let tls_server = Server::builder(incoming).serve(https_service);
-
-    let client = async { client_handler(to_client_receiver_for_rest.clone()).await };
-    let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
-    let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
+    let http_client_interface = tokio::spawn(async move {
+	let res = Server::bind(&client_http_addr).serve(http_service).await;
+	if let Err(e) = res{
+	    warn!("Problem starting HTTP interface {:?}",e);
+	}else{
+	    info!("HTTP Interface started ");
+	}
+    });
+    tasks.push(http_client_interface);
     
-    let pub_sub_svc = grpc_handler::swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
-    let persistence_svc = grpc_handler::swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
-    let grpc = tonic::transport::Server::builder()
-	.add_service(pub_sub_svc)
-	.add_service(persistence_svc)
-	.serve(client_grpc_addr);
+    let https_client_interface = tokio::spawn(async move {
+	let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+	config.set_single_cert(certs, key).expect("invalid key or certificate");
+	let tls_acceptor = TlsAcceptor::from(Arc::new(config));
+	let _arc_acceptor = Arc::new(tls_acceptor);
+	let mut listener = TcpListener::bind(&client_https_addr).await.unwrap();
+	let incoming = listener.incoming();
+	
+	let incoming=  hyper::server::accept::from_stream(incoming.filter_map(|socket| {
+            async {
+                match socket {
+                    Ok(stream) => {
+                        match _arc_acceptor.clone().accept(stream).await {
+                            Ok(val) => Some(Ok::<_, hyper::Error>(val)),
+                            Err(e) => {
+                                println!("TLS error: {}", e);
+                                None
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        println!("TCP socket error: {}", e);
+                        None
+                    }
+                }
+            }
+        }));
+	let res = Server::builder(incoming).serve(https_service).await;
+	if let Err(e) = res{
+	    warn!("Problem starting HTTPs interface {:?}",e);
+	}
+    });
 
+    tasks.push(https_client_interface);
+
+    let http_client = tokio::spawn(async move {
+	client_handler(to_client_receiver_for_rest.clone()).await
+    });
+    tasks.push(http_client);
+
+    let grpc_client_interface = tokio::spawn(async move {
+	let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
+	let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);    
+	let pub_sub_svc = grpc_handler::swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
+	let persistence_svc = grpc_handler::swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
+	let grpc = tonic::transport::Server::builder()
+	    .add_service(pub_sub_svc)
+	    .add_service(persistence_svc)
+	    .serve(client_grpc_addr);
+	let res = grpc.await;
+	if let Err(e) = res{
+	    warn!("Problem starting gRPC interface {:?}",e);
+	}
+    });    
+    tasks.push(grpc_client_interface);
     if let Some(command) = client_executable {
         utils::command_utils::run_java_command(command);
     }
-
-    let (_r1, _r2, _r3, _r4, _r5,_r6) = futures::join!(tls_server, server, client, broker, stores, grpc);
+    futures::future::join_all(tasks).await;
 }
