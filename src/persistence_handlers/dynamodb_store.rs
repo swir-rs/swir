@@ -4,7 +4,8 @@ use rusoto_dynamodb::{DynamoDb,DynamoDbClient};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use crate::utils::config;
-use crate::utils::structs::{RestToPersistenceContext,PersistenceJobType,StoreRequest,RetrieveRequest,PersistenceResult,BackendStatusCodes,DeleteRequest};
+use crate::utils::config::{ClientToBackendDatabaseResolver};
+use crate::utils::structs::{RestToPersistenceContext,PersistenceJobType,StoreRequest,RetrieveRequest,PersistenceResult,BackendStatusCodes,DeleteRequest,PersistenceRequest};
 use crate::persistence_handlers::Store;
 use tokio::stream::StreamExt;
 use futures::channel::oneshot::Sender;
@@ -21,6 +22,8 @@ pub struct DynamoDbStore{
 }
 
 
+
+
 impl DynamoDbStore{    
     pub fn new(config:config::DynamoDb,rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>)->Self{
 	DynamoDbStore{
@@ -28,70 +31,94 @@ impl DynamoDbStore{
 	    rx
 	}	
     }
+//     correlation_id: String, client_table_name: &str
+    fn validate_mapping(&self, pr: &dyn PersistenceRequest)->Option<String>{	
+	let maybe_table_name = self.config.get_backend_table_name_for_client_table_name(&pr.get_table_name());
+	if let Some(table_name) = maybe_table_name{
+	    Some(table_name)
+	}else{	    	    
+	    None
+	}	
+    }
+    
     async fn store(&self, client: &DynamoDbClient, sr:StoreRequest,sender:Sender<PersistenceResult>){
-	let data_attr = rusoto_dynamodb::AttributeValue{
-	    b:Some(Bytes::from(sr.payload.clone())),
-	    .. Default::default()			
-	};
-
-	let key_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(sr.key.clone()),
-	    .. Default::default()			
-	};
-	let mut item = HashMap::new();
-	item.insert("key".to_string(),key_attr);
-	item.insert("data".to_string(), data_attr);
-
-
-	let put_item_input = rusoto_dynamodb::PutItemInput{
-	    table_name:sr.table_name.clone(),
-	    item,
-	    return_values:Some("ALL_OLD".to_string()),
-	    .. Default::default()			    			    			    			    
-	};	
-	
-	let put_item_output = client.put_item(put_item_input).await;
-	let pr = match put_item_output{
-	    Ok(output)=>{
-		let payload = match output.attributes {
-		    Some(item)=>{
-			let maybe_data_attr = item.get("data");
-			match maybe_data_attr{
-			    Some(data_attr)=>{
-				match data_attr.b.clone(){
-				    Some(data)=>{
-					data.to_vec()
-				    },
-				    None=>{
-					vec![]				
-				    }
-				}
-			    },
-			    None=>{
-				vec![]
-			    }
-			}
-			
-		    },
-		    None =>{
-			vec![]
-		    }
-		};
-		
+	let maybe_mapping = self.validate_mapping(&sr);
+	let pr = match maybe_mapping{
+	    None=>{
 		PersistenceResult{
-		    correlation_id: sr.correlation_id,
-		    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
-		    payload: payload
+		    correlation_id: sr.get_correlation_id(),
+		    status: BackendStatusCodes::Error(format!("No mapping for {}", sr.get_table_name())),
+		    payload: vec![]
 		}
 	    },
-	    Err(e)=>{
-		PersistenceResult{
-		    correlation_id: sr.correlation_id,
-		    status: BackendStatusCodes::Error(e.to_string()),
-		    payload: vec![]
+	    Some(table_name)=>{
+		let data_attr = rusoto_dynamodb::AttributeValue{
+		    b:Some(Bytes::from(sr.payload.clone())),
+		    .. Default::default()			
+		};
+
+		let key_attr = rusoto_dynamodb::AttributeValue{
+		    s:Some(sr.key.clone()),
+		    .. Default::default()			
+		};
+		let mut item = HashMap::new();
+		item.insert("partition_key".to_string(),key_attr);
+		item.insert("data".to_string(), data_attr);
+		
+		let put_item_input = rusoto_dynamodb::PutItemInput{
+		    table_name,
+		    item,
+		    return_values:Some("ALL_OLD".to_string()),
+		    .. Default::default()			    			    			    			    
+		};
+		debug!("Store request => {:?}",put_item_input);
+		
+		let put_item_output = client.put_item(put_item_input).await;
+		match put_item_output{
+		    Ok(output)=>{
+			let payload = match output.attributes {
+			    Some(item)=>{
+				let maybe_data_attr = item.get("data");
+				match maybe_data_attr{
+				    Some(data_attr)=>{
+					match data_attr.b.clone(){
+					    Some(data)=>{
+						data.to_vec()
+					    },
+					    None=>{
+					vec![]				
+					    }
+					}
+				    },
+				    None=>{
+					vec![]
+				    }
+				}
+				
+			    },
+			    None =>{
+				vec![]
+			    }
+			};
+			
+			PersistenceResult{
+			    correlation_id: sr.correlation_id,
+			    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
+			    payload: payload
+			}
+		    },
+		    Err(e)=>{
+			debug!("Can't store -> {:?}",e);
+			PersistenceResult{
+			    correlation_id: sr.correlation_id,
+			    status: BackendStatusCodes::Error(e.to_string()),
+			    payload: vec![]
+			}
+		    }
 		}
 	    }
 	};
+	
 	let r = sender.send(pr);
 	if r.is_err() {
 	    warn!("Can't send response {:?}",r);
@@ -99,129 +126,156 @@ impl DynamoDbStore{
     }
 
     async fn retrieve(&self, client: &DynamoDbClient, rr:RetrieveRequest,sender:Sender<PersistenceResult>){
-	let key_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(rr.key.clone()),
-	    .. Default::default()			
-	};
-
-	let mut key = HashMap::new();
-	key.insert("key".to_string(),key_attr);
-	
-	let get_item_input = rusoto_dynamodb::GetItemInput{
-	    table_name:rr.table_name.clone(),
-	    key,
-	    .. Default::default()			    			    			    			    
-	};	
-	let get_item_output = client.get_item(get_item_input).await;
-	    	    		
-	let gr = match get_item_output{
-	    Ok(output)=>{		
-		let payload = match output.item {
-		    Some(item)=>{
-			let maybe_data_attr = item.get("data");
-			match maybe_data_attr{
-			    Some(data_attr)=>{
-				match data_attr.b.clone(){
-				    Some(data)=>{
-					data.to_vec()
-				    },
-				    None=>{
-					vec![]				
-				    }
-				}
-			    },
-			    None=>{
-				vec![]
-			    }
-			}
-			
-		    },
-		    None =>{
-			vec![]
-		    }
-		};
-		
+	let maybe_mapping = self.validate_mapping(&rr);
+	let pr = match maybe_mapping{
+	    None=>{
 		PersistenceResult{
-		    correlation_id: rr.correlation_id,
-		    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
-		    payload
+		    correlation_id: rr.get_correlation_id(),
+		    status: BackendStatusCodes::Error(format!("No mapping for {}", rr.get_table_name())),
+		    payload: vec![]
 		}
 	    },
-	    Err(e)=>{
-		PersistenceResult{
-		    correlation_id: rr.correlation_id,
-		    status: BackendStatusCodes::Error(e.to_string()),
-		    payload: vec![]
+	    Some(table_name)=>{
+		
+		let key_attr = rusoto_dynamodb::AttributeValue{
+		    s:Some(rr.key.clone()),
+		    .. Default::default()			
+		};
+
+		let mut key = HashMap::new();
+		key.insert("partition_key".to_string(),key_attr);
+		
+		let get_item_input = rusoto_dynamodb::GetItemInput{
+		    table_name,
+		    key,
+		    .. Default::default()			    			    			    			    
+		};	
+		let get_item_output = client.get_item(get_item_input).await;
+	    	
+		match get_item_output{
+		    Ok(output)=>{		
+			let payload = match output.item {
+			    Some(item)=>{
+				let maybe_data_attr = item.get("data");
+				match maybe_data_attr{
+				    Some(data_attr)=>{
+					match data_attr.b.clone(){
+					    Some(data)=>{
+						data.to_vec()
+					    },
+					    None=>{
+						vec![]				
+					    }
+					}
+				    },
+				    None=>{
+					vec![]
+				    }
+				}
+				
+			    },
+			    None =>{
+				vec![]
+			    }
+			};
+			
+			PersistenceResult{
+			    correlation_id: rr.correlation_id,
+			    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
+			    payload
+			}
+		    },
+		    Err(e)=>{
+			debug!("Can't retrieve -> {:?}",e);
+			PersistenceResult{
+			    correlation_id: rr.correlation_id,
+			    status: BackendStatusCodes::Error(e.to_string()),
+			    payload: vec![]
+			}
+		    }
 		}
 	    }
 	};
 	
-	let r = sender.send(gr);
+	let r = sender.send(pr);
 	if r.is_err() {
 	    warn!("Can't send response {:?}",r);
 	};		
     }
 
     async fn delete(&self, client: &DynamoDbClient, rr:DeleteRequest,sender:Sender<PersistenceResult>){
-	let key_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(rr.key.clone()),
-	    .. Default::default()			
-	};
+	let maybe_mapping = self.validate_mapping(&rr);
+	let pr = match maybe_mapping{
+	    None=>{
+		PersistenceResult{
+		    correlation_id: rr.get_correlation_id(),
+		    status: BackendStatusCodes::Error(format!("No mapping for {}", rr.get_table_name())),
+		    payload: vec![]
+		}
+	    },
+	    Some(table_name)=>{
+		let key_attr = rusoto_dynamodb::AttributeValue{
+		    s:Some(rr.key.clone()),
+		    .. Default::default()			
+		};
 
-	let mut key = HashMap::new();
-	key.insert("key".to_string(),key_attr);
-	
-	let delete_item_input = rusoto_dynamodb::DeleteItemInput{
-	    table_name:rr.table_name.clone(),
-	    return_values:Some("ALL_OLD".to_string()),
-	    key,
-	    .. Default::default()			    			    			    			    
-	};	
-	let delete_item_output = client.delete_item(delete_item_input).await;
-	    	    		
-	let gr = match delete_item_output{
-	    Ok(output)=>{		
-		let payload = match output.attributes {
-		    Some(item)=>{
-			let maybe_data_attr = item.get("data");
-			match maybe_data_attr{
-			    Some(data_attr)=>{
-				match data_attr.b.clone(){
-				    Some(data)=>{
-					data.to_vec()
+		let mut key = HashMap::new();
+		key.insert("partition_key".to_string(),key_attr);
+		
+		let delete_item_input = rusoto_dynamodb::DeleteItemInput{
+		    table_name,
+		    return_values:Some("ALL_OLD".to_string()),
+		    key,
+		    .. Default::default()			    			    			    			    
+		};	
+		let delete_item_output = client.delete_item(delete_item_input).await;
+	    	
+		match delete_item_output{
+		    Ok(output)=>{		
+			let payload = match output.attributes {
+			    Some(item)=>{
+				let maybe_data_attr = item.get("data");
+				match maybe_data_attr{
+				    Some(data_attr)=>{
+					match data_attr.b.clone(){
+					    Some(data)=>{
+						data.to_vec()
+					    },
+					    None =>{
+						vec![]				
+					    }
+					}
 				    },
 				    None =>{
-					vec![]				
+					vec![]
 				    }
 				}
+				
 			    },
 			    None =>{
 				vec![]
 			    }
-			}
+			};
 			
+			PersistenceResult{
+			    correlation_id: rr.correlation_id,
+			    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
+			    payload
+			}
 		    },
-		    None =>{
-			vec![]
+		    Err(e)=>{
+			debug!("Can't delete -> {:?}",e);
+			PersistenceResult{
+			    correlation_id: rr.correlation_id,
+			    status: BackendStatusCodes::Error(e.to_string()),
+			    payload: vec![]
+			}
 		    }
-		};
-		
-		PersistenceResult{
-		    correlation_id: rr.correlation_id,
-		    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
-		    payload
-		}
-	    },
-	    Err(e)=>{
-		PersistenceResult{
-		    correlation_id: rr.correlation_id,
-		    status: BackendStatusCodes::Error(e.to_string()),
-		    payload: vec![]
 		}
 	    }
 	};
 	
-	let r = sender.send(gr);
+	let r = sender.send(pr);
 	if r.is_err() {
 	    warn!("Can't send response {:?}",r);
 	};		
@@ -241,8 +295,10 @@ impl DynamoDbStore{
 	let mut rx = self.rx.lock().await;	
         while let Some(job) = rx.next().await {
             let sender = job.sender;
+	    
             match job.job {
                 PersistenceJobType::Store(value) => {
+		    
 		    self.store(&client, value,sender).await;
                 },
 

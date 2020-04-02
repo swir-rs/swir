@@ -397,7 +397,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             
             Ok(tonic::Response::new(reply)) // Send back our formatted greeting
         } else {
-            Err(tonic::Status::invalid_argument("Invalid topic"))
+            Err(tonic::Status::invalid_argument(format!("Invalid client database name {}",request.database_name)))
         }
 	
     }
@@ -449,7 +449,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             };            
             Ok(tonic::Response::new(reply)) // Send back our formatted greeting
         } else {
-            Err(tonic::Status::invalid_argument("Invalid topic"))
+	    Err(tonic::Status::invalid_argument(format!("Invalid client database name {}",request.database_name)))
         }
     }
 
@@ -500,7 +500,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             };            
             Ok(tonic::Response::new(reply)) // Send back our formatted greeting
         } else {
-            Err(tonic::Status::invalid_argument("Invalid topic"))
+	    Err(tonic::Status::invalid_argument(format!("Invalid client database name {}",request.database_name)))           
         }
     }
 

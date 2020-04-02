@@ -38,6 +38,20 @@ pub trait ClientTopicsConfiguration {
     fn get_consumer_topic_for_client_topic(&self, client_topic: &str) -> Option<String>;
 }
 
+pub trait ClientToBackendDatabaseResolver{
+    fn get_backend_table_name_for_client_table_name(&self, client_name: &str)-> Option<String>{
+	for t in self.get_tables().iter(){
+	    if t.client_name.eq(client_name) {
+		return Some(t.table_name.clone())
+	    }
+	}
+	None
+    }
+    fn get_tables(&self)->&Vec<TableDescription>;
+}
+
+
+
 impl ClientTopicsConfiguration for Kafka {
     fn get_producer_topic_for_client_topic(&self, client_topic: &str) -> Option<String> {
         let mut maybe_topic = None;
@@ -130,10 +144,24 @@ pub struct Redis {
     pub tables: Vec<TableDescription>
 }
 
+impl ClientToBackendDatabaseResolver for Redis{
+    fn get_tables(&self)->&Vec<TableDescription>{
+	&self.tables
+    }
+    
+}
+    
+
 #[derive(Debug, Deserialize,Clone)]
 pub struct DynamoDb {
     pub region: String,
     pub tables: Vec<TableDescription>
+}
+
+impl ClientToBackendDatabaseResolver for DynamoDb{    
+    fn get_tables(&self)->&Vec<TableDescription>{
+	&self.tables
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

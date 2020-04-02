@@ -38,12 +38,26 @@ impl fmt::Display for PublishRequest{
     }
 }
 
+pub trait PersistenceRequest{
+    fn get_correlation_id(&self)->String;
+    fn get_table_name(&self)->String;	
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StoreRequest {
     pub(crate) correlation_id: String,
     pub(crate) payload: Vec<u8>,
     pub(crate) key: String,
     pub(crate) table_name: String
+}
+
+impl PersistenceRequest for StoreRequest{
+    fn get_correlation_id(&self)->String{
+	self.correlation_id.clone()
+    }
+    fn get_table_name(&self)->String{
+	self.table_name.clone()
+    }    
 }
 
 impl fmt::Display for StoreRequest{
@@ -59,11 +73,29 @@ pub struct RetrieveRequest {
     pub(crate) key: String
 }
 
+impl PersistenceRequest for RetrieveRequest{
+    fn get_correlation_id(&self)->String{
+	self.correlation_id.clone()
+    }
+    fn get_table_name(&self)->String{
+	self.table_name.clone()
+    }    
+}
+
 #[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct DeleteRequest {
     pub(crate) correlation_id: String,
     pub(crate) table_name: String,
     pub(crate) key: String
+}
+
+impl PersistenceRequest for DeleteRequest{
+    fn get_correlation_id(&self)->String{
+	self.correlation_id.clone()
+    }
+    fn get_table_name(&self)->String{
+	self.table_name.clone()
+    }    
 }
 
 impl fmt::Display for RetrieveRequest{

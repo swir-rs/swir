@@ -35,16 +35,16 @@ stores:
     - nodes: ["redis://127.0.0.1:6379/"]
       tables:
         - table_name: "my_db_store1"
-          client_name: "my_db_store1"
+          client_name: "client_store1"
         - table_name: "my_db_store2"
-          client_name: "my_db_store2"
+          client_name: "client_store2"
   dynamodb:
     - region: "eu-west-1"
       tables:
         - table_name: "my_db_store3"
-          client_name: "my_db_store3"
+          client_name: "client_store3"
         - table_name: "my_db_store4"
-          client_name: "my_db_store4"
+          client_name: "client_store4"
   
     
         
