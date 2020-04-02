@@ -19,4 +19,6 @@ channels:
         - producer_topic: aws_processor_inventory_green
           client_topic: inventory
 
-
+stores:  
+  redis: []
+  dynamodb: []  

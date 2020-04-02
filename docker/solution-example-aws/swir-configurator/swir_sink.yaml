@@ -17,3 +17,12 @@ channels:
           client_topic: shipments
       producer_topics: []
   
+stores:  
+  redis: []
+  dynamodb:
+    - region: "eu-west-1"
+      tables:
+        - table_name: "swir-demo"
+          client_name: "sink_store"
+
+

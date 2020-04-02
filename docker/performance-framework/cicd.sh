@@ -1,6 +1,8 @@
 
 # Compile, build and generate necessary docker images
-../../cicd.sh
+cd ../../
+./cicd.sh
+cd docker/performance-framework
 
 cd swir-java-client
 ./gradlew clean bootJar

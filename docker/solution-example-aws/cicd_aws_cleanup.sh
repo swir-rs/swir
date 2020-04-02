@@ -6,6 +6,7 @@ fi
 cd aws-scripts
 ./aws-delete-streams.sh
 python3 aws-delete-deployment.py $1
+
 python3 aws-log-groups.py DELETE
 ./aws-clean-registry.sh
 ./aws-delete-role.sh

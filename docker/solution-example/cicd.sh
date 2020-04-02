@@ -1,5 +1,8 @@
 # Compile, build and generate necessary docker images
-../../cicd.sh
+cd ../../
+./cicd.sh
+cd docker/solution-example
+
 
 cd ./swir-configurator
 docker build --tag swir-example-configurator:v2 .
@@ -31,6 +34,7 @@ docker-compose -f docker-compose-infr.yml -p docker up -d
 
 sleep 5
 
+
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic processor1_kafka_blue --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic processor3_kafka_red --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic sink1_kafka_green --partitions 2 --replication-factor 1
@@ -59,8 +63,7 @@ docker-compose  -f docker-compose-example-applications.yaml -p app logs -ft
 
 
 #clean all
-docker-compose -p app -f docker-compose-example-applications.yaml down --remove-orphans
-docker-compose -p app -f docker-compose-example-sidecars.yaml down --remove-orphans
-docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
+./cicd_cleanup.sh
+
 
 

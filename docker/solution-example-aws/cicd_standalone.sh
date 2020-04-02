@@ -5,12 +5,18 @@ if [ ! -f ../../secure.sh ]; then
     exit 1
 fi
 
-../../cicd.sh
-./aws-scripts/create_aws_streams.sh
+cd ../../
+./cicd.sh
+cd docker/solution-example-aws
+
+source ../../secure.sh
+
+cd aws-scripts
+./aws-create-streams.sh
+cd ..
+
 
 # Compile, build and generate necessary docker images
-
-
 cd ./swir-configurator
 docker build --tag swir-aws-example-configurator:v2 .
 
@@ -37,13 +43,12 @@ docker network create docker_swir-net-aws
 docker-compose -f docker-compose-example-sidecars.yaml -p app down
 docker-compose -f docker-compose-example-applications.yaml -p app down
 
-source ../../secure.sh
 
 docker-compose -f docker-compose-example-sidecars.yaml -p app up -d
 docker-compose -f docker-compose-example-applications.yaml -p app up -d
 
 #Sidecar logs 
-#docker-compose  -f docker-compose-example-sidecars.yaml -p app logs -ft
+docker-compose  -f docker-compose-example-sidecars.yaml -p app logs -ft
 
 #docker logs solution-example_order-processor-sidecar_1
 #docker logs solution-example_shipments-sink-sidecar_1
@@ -62,6 +67,5 @@ docker-compose  -f docker-compose-example-applications.yaml -p app logs -ft
 
 
 #clean all
-./aws-scripts/cleanup.sh
-
+./cicd_standalone_cleanup.sh
 

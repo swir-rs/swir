@@ -21,3 +21,6 @@ channels:
           client_topic: billing
 
 
+stores:  
+  redis: []
+  dynamodb: []  

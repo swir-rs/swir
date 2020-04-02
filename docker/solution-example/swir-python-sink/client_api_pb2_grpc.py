@@ -4,7 +4,7 @@ import grpc
 import client_api_pb2 as client__api__pb2
 
 
-class ClientApiStub(object):
+class PubSubApiStub(object):
   """The definition of API exposed by Sidecar.
   """
 
@@ -15,29 +15,29 @@ class ClientApiStub(object):
       channel: A grpc.Channel.
     """
     self.Publish = channel.unary_unary(
-        '/swir.ClientApi/Publish',
+        '/swir.PubSubApi/Publish',
         request_serializer=client__api__pb2.PublishRequest.SerializeToString,
         response_deserializer=client__api__pb2.PublishResponse.FromString,
         )
     self.PublishBiStream = channel.stream_stream(
-        '/swir.ClientApi/PublishBiStream',
+        '/swir.PubSubApi/PublishBiStream',
         request_serializer=client__api__pb2.PublishRequest.SerializeToString,
         response_deserializer=client__api__pb2.PublishResponse.FromString,
         )
     self.Subscribe = channel.unary_stream(
-        '/swir.ClientApi/Subscribe',
+        '/swir.PubSubApi/Subscribe',
         request_serializer=client__api__pb2.SubscribeRequest.SerializeToString,
         response_deserializer=client__api__pb2.SubscribeResponse.FromString,
         )
 
 
-class ClientApiServicer(object):
+class PubSubApiServicer(object):
   """The definition of API exposed by Sidecar.
   """
 
   def Publish(self, request, context):
-    """Publish message to a topic/queue
-    """
+    # missing associated documentation comment in .proto file
+    pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -57,7 +57,7 @@ class ClientApiServicer(object):
     raise NotImplementedError('Method not implemented!')
 
 
-def add_ClientApiServicer_to_server(servicer, server):
+def add_PubSubApiServicer_to_server(servicer, server):
   rpc_method_handlers = {
       'Publish': grpc.unary_unary_rpc_method_handler(
           servicer.Publish,
@@ -76,5 +76,81 @@ def add_ClientApiServicer_to_server(servicer, server):
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'swir.ClientApi', rpc_method_handlers)
+      'swir.PubSubApi', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class PersistenceApiStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Store = channel.unary_unary(
+        '/swir.PersistenceApi/Store',
+        request_serializer=client__api__pb2.StoreRequest.SerializeToString,
+        response_deserializer=client__api__pb2.StoreResponse.FromString,
+        )
+    self.Retrieve = channel.unary_unary(
+        '/swir.PersistenceApi/Retrieve',
+        request_serializer=client__api__pb2.RetrieveRequest.SerializeToString,
+        response_deserializer=client__api__pb2.RetrieveResponse.FromString,
+        )
+    self.Delete = channel.unary_unary(
+        '/swir.PersistenceApi/Delete',
+        request_serializer=client__api__pb2.DeleteRequest.SerializeToString,
+        response_deserializer=client__api__pb2.DeleteResponse.FromString,
+        )
+
+
+class PersistenceApiServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def Store(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Retrieve(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Delete(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+
+def add_PersistenceApiServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Store': grpc.unary_unary_rpc_method_handler(
+          servicer.Store,
+          request_deserializer=client__api__pb2.StoreRequest.FromString,
+          response_serializer=client__api__pb2.StoreResponse.SerializeToString,
+      ),
+      'Retrieve': grpc.unary_unary_rpc_method_handler(
+          servicer.Retrieve,
+          request_deserializer=client__api__pb2.RetrieveRequest.FromString,
+          response_serializer=client__api__pb2.RetrieveResponse.SerializeToString,
+      ),
+      'Delete': grpc.unary_unary_rpc_method_handler(
+          servicer.Delete,
+          request_deserializer=client__api__pb2.DeleteRequest.FromString,
+          response_serializer=client__api__pb2.DeleteResponse.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'swir.PersistenceApi', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

@@ -39,7 +39,9 @@ containerDefinitions: # [REQUIRED] A list of container definitions in JSON forma
     - name: subscribe_topic
       value: shipments
     - name: sidecar
-      value: 127.0.0.1:50051  
+      value: 127.0.0.1:50051
+    - name: client_database_name
+      value: sink_store
 
   mountPoints: # The mount points for data volumes in your container.
   - sourceVolume: 'swir_config'  # The name of the volume to mount.

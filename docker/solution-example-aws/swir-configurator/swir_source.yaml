@@ -16,5 +16,13 @@ channels:
         - producer_topic: aws_processor_orders_blue
           client_topic: orders
 
+stores:  
+  redis: []
+  dynamodb:
+    - region: "eu-west-1"
+      tables:
+        - table_name: "swir-demo"
+          client_name: "source_store"          
+
 
 

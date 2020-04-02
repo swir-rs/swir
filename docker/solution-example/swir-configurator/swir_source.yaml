@@ -19,6 +19,13 @@ channels:
       producer_topics: []
       
   aws_kinesis: []
+stores:  
+  redis:
+    - nodes: [redis://redis:6379/]
+      tables:
+        - table_name: "swir-demo"
+          client_name: "source_store"
+  dynamodb: []
       
 
 

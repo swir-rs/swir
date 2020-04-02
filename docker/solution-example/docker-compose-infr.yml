@@ -33,6 +33,13 @@ services:
       - "4222:4222"
       - "8222:8222"
       - "6222:6222"
+      
+  redis:
+    networks:
+      - swir-net
+    image: redis
+    ports:
+      - "6379:6379"      
 
 networks:
   swir-net:
