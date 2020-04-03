@@ -25,10 +25,11 @@ import threading
 import client_api_pb2
 import client_api_pb2_grpc
 import time
+import json
 
 logger = logging.getLogger('swir')
 
-def receiver(queue,client_api_stub,topic):
+def receiver(queue,pub_sub_stub,topic):
     while True:
         try:
             subscribe = client_api_pb2.SubscribeRequest(
@@ -36,7 +37,7 @@ def receiver(queue,client_api_stub,topic):
                 topic=topic
             )
 
-            messages = client_api_stub.Subscribe(subscribe)
+            messages = pub_sub_stub.Subscribe(subscribe)
             for message in messages:
                 logger.debug("Subscription : %s" % message)
                 queue.put(message)        
@@ -45,12 +46,21 @@ def receiver(queue,client_api_stub,topic):
         time.sleep(5)
 
 
-def processor(incoming_queue,outgoing_queue):
+def processor(incoming_queue,outgoing_queue,persistence_stub,database_name):
     while True:
-        msg = incoming_queue.get()
+        msg = incoming_queue.get()        
         if msg is None:
-            break
+            break        
         logger.info("Consumed : %s %s" %(msg.correlation_id,msg.payload))
+        payload = json.loads(msg.payload)
+        key= str(payload['counter'])
+        delete = client_api_pb2.DeleteRequest(
+            correlation_id=msg.correlation_id,
+            database_name=database_name,
+            key=key
+            )
+        res = persistence_stub.Delete(delete)
+        logger.info("Deleted from store : %s %s %s" %(key,res.payload,res.status))
     
                 
 
@@ -61,15 +71,17 @@ def run():
     outgoing_queue = queue.Queue()
     subscribe_topic = os.environ['subscribe_topic']
     sidecar = os.environ['sidecar']
+    database_name = os.environ['client_database_name']
 
     logger.info("Sidecar is %s" % sidecar)
     logger.info("Subscribe topic is %s" % subscribe_topic)
     
     with grpc.insecure_channel(sidecar) as channel:
         threads = []
-        client_api_stub = client_api_pb2_grpc.ClientApiStub(channel)
-        t1 = threading.Thread(target=receiver, args=[incoming_queue, client_api_stub,subscribe_topic] )
-        t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue])
+        pub_sub_api_stub = client_api_pb2_grpc.PubSubApiStub(channel)
+        persistence_api_stub = client_api_pb2_grpc.PersistenceApiStub(channel)
+        t1 = threading.Thread(target=receiver, args=[incoming_queue, pub_sub_api_stub,subscribe_topic] )
+        t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue,persistence_api_stub,database_name])
         t1.start()
         threads.append(t1)
         t2.start()

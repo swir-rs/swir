@@ -1,6 +1,6 @@
 use futures::future::join_all;
 use async_trait::async_trait;
-use crate::utils::config::{Channels, MemoryChannel};
+use crate::utils::config::{Channels, MessagingMemoryChannels};
 
 mod client_handler;
 mod kafka_handler;
@@ -14,12 +14,9 @@ trait Broker {
     async fn configure_broker(&self);
 }
 
-
-pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
-    let mut brokers: Vec<Box<dyn Broker>> = vec![];
+pub async fn configure_broker(messaging: Channels, mc: MessagingMemoryChannels) {
     let mut futures = vec![];
-
-    
+   
     for (i,kafka) in messaging.kafka.into_iter().enumerate() {
         let mce = mc.kafka_memory_channels.get(i);
         if mce.is_none() {
@@ -28,7 +25,8 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
         let mce = mce.unwrap();
         let rx = mce.from_client_receiver.to_owned();        
         let kafka_broker = kafka_handler::KafkaBroker::new(kafka,rx);
-        brokers.push(Box::new(kafka_broker));
+	let f = tokio::spawn(async move {kafka_broker.configure_broker().await});
+        futures.push(f);
     }
 
     #[cfg(feature = "with_nats")]
@@ -42,7 +40,8 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
             let mce = mce.unwrap();
             let rx = mce.from_client_receiver.to_owned();
             let nats_broker = nats_handler::NatsBroker::new(nats,rx);
-            brokers.push(Box::new(nats_broker));
+	    let f = tokio::spawn(async move {nats_broker.configure_broker().await});
+	    futures.push(f);           
         }
     }
 
@@ -55,14 +54,9 @@ pub async fn configure_broker(messaging: Channels, mc: MemoryChannel) {
         let mce = mce.unwrap();
         let rx = mce.from_client_receiver.to_owned();        
         let aws_kinesis_broker = aws_kinesis_handler::AwsKinesisBroker::new(aws_kinesis,rx);
-        brokers.push(Box::new(aws_kinesis_broker));
+	let f = tokio::spawn(async move {aws_kinesis_broker.configure_broker().await});
+	futures.push(f);           
     }
-
-    debug!("Brokers to configure {}", brokers.len());
-    for broker in brokers.iter() {
-        let f = async move { broker.configure_broker().await };
-        futures.push(f);
-    }
-
+    debug!("Messaging backends configured {}", futures.len());
     join_all(futures).await;
 }

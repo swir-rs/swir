@@ -23,3 +23,6 @@ channels:
       
   aws_kinesis: []
 
+stores:  
+  redis: []
+  dynamodb: []  

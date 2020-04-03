@@ -21,17 +21,23 @@ option java_outer_classname = "SwirClientApiProto";
 package swir;
 
 // The definition of API exposed by Sidecar.
-service ClientApi {
-    // Publish message to a topic/queue
+service PubSubApi {
     rpc Publish (PublishRequest) returns (PublishResponse) {
     }
-    // Publish stream of messages to a topic/queue
-
     rpc PublishBiStream (stream PublishRequest) returns (stream PublishResponse) {
-    }
-  
+    }  
     rpc Subscribe (SubscribeRequest) returns (stream SubscribeResponse) {
     }
+}
+
+service PersistenceApi {
+    rpc Store (StoreRequest) returns (StoreResponse) {
+    }
+    rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
+    }  
+    rpc Delete (DeleteRequest) returns (DeleteResponse) {
+    }
+  
 }
 
 // Publish message structure.
@@ -61,4 +67,45 @@ message SubscribeResponse {
     string correlation_id=1;
   //Payload is copied directly into appropriate format
     bytes payload = 2;
+}
+
+message StoreRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+  bytes payload = 4;
+}
+message StoreResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+  string status = 4;
+}
+
+message RetrieveRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+}
+
+message RetrieveResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
+}
+
+message DeleteRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+}
+
+message DeleteResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
 }

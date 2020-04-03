@@ -30,7 +30,7 @@ import client_api_pb2_grpc
 
 logger = logging.getLogger('swir')
 
-def receiver(queue,client_api_stub,topic):
+def receiver(queue,pub_sub_stub,topic):
     while True:
         try:
             subscribe = client_api_pb2.SubscribeRequest(
@@ -38,7 +38,7 @@ def receiver(queue,client_api_stub,topic):
                 topic=topic
             )
 
-            messages = client_api_stub.Subscribe(subscribe)
+            messages = pub_sub_stub.Subscribe(subscribe)
             for message in messages:
                 logger.debug("Subscription : %s" % message)
                 queue.put(message)        
@@ -87,14 +87,14 @@ def run():
     with grpc.insecure_channel(sidecar) as channel:
         threads = []
         try:
-            client_api_stub = client_api_pb2_grpc.ClientApiStub(channel)
-        except:
-            logger.error("Can't connect to sidecar")
+            pub_sub_api_stub = client_api_pb2_grpc.PubSubApiStub(channel)
+        except e:
+            logger.error("Can't connect to sidecar ")
             exit
         else:            
-            t1 = threading.Thread(target=receiver, args=[incoming_queue, client_api_stub,subscribe_topic] )
+            t1 = threading.Thread(target=receiver, args=[incoming_queue, pub_sub_api_stub,subscribe_topic] )
             t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue])
-            t3 = threading.Thread(target=sender,args=[outgoing_queue,client_api_stub,publish_topic])
+            t3 = threading.Thread(target=sender,args=[outgoing_queue,pub_sub_api_stub,publish_topic])
             t1.start()
             threads.append(t1)
             t2.start()

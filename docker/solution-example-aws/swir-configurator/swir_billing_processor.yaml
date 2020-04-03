@@ -18,5 +18,8 @@ channels:
       producer_topics:
         - producer_topic: aws_sink_green
           client_topic: shipments
+stores:  
+  redis: []
+  dynamodb: []            
 
 

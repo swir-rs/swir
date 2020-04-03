@@ -27,7 +27,7 @@ The rationale of this point could be explained better with a simple stakeholder 
 
 - **Corporate security teams** - From the security teams perspective, the sidecar approach should be particularly appealing. Instead of having to vet many different technology stacks with many different ways of securing network connectivity or encrypting data, only a sidecar needs to be thoroughly vetted. Adherence to security principles could be governed and enforced at the enterprise level through changes to the sidecar and without impacting the schedule or functionality of the business logic. Common but complex things such as the use of encryption could be accessible to applications written in different technology stacks through a simple API call to a sidecar. In a braver scenario, a specialised sidecar could encrypt all highly sensitive fields before being written to persistent storage. Again simplifying the life for the application and security teams and helping the enterprise building a better and more secure solution.
 
-## Usecase
+## Usecases
 The example presented in [docker/solution-example](docker/solution-example) shows how applications using completely different technology stacks can talk to each other seamlessly using SWIR sidecars. As shown in the diagram below, we have python/gRPC, java/Springboot and java/gRPC business logic communicating with each other over Kafka/Nats brokers.  
 The use case is broken into two layers:
 
@@ -60,7 +60,9 @@ SWIR:
  - uses [Hyper](https://hyper.rs/) to expose REST interfaces over HTTP or HTTPS
  - uses [Tonic](https://docs.rs/tonic/0.1.1/tonic/index.html) to handle gRPC calls
  - uses [rdkafka](https://github.com/fede1024/rust-rdkafka) to talk to [Kafka](https://kafka.apache.org/) brokers
- - uses [nats](https://github.com/jedisct1/rust-nats) to talk to [NATS](https://nats.io) brokers
+ - uses [Nats](https://github.com/jedisct1/rust-nats) to talk to [NATS](https://nats.io) brokers
+ - uses [rusoto](https://github.com/rusoto/rusoto) AWS SDK for Rust 
+ - uses [redis-rs](https://github.com/mitsuhiko/redis-rs) Redis SDK for Rust
  - is using modified [config-rs](https://github.com/swir-rs/config-rs) so various aspects can be configured via a yaml file and environment variables can be easily injected based on an environment
  - SWIR uses conditional compilation which allows creating sidecars with just Kafka or Kafka and NATS
  - SpringBoot and gRPC Java clients and other components allowing testing it end to end
@@ -74,21 +76,19 @@ SWIR:
 - logging
 
 ## Top Level Architecture
-![Diagram](./graphics/swir2.png)
+![Diagram](./graphics/swir_architecture.png)
 
 
 # Requirements
 - To compile you will need cargo 1.39.0
 - Linux Ubuntu or similar.
-- Docker and Docker compose to run the infrastructure and the examples
-- Java 1.8 or higher
-- Gradle
+- Docker and Docker compose to run the infrastructure and the examples. Also you will need Java 1.8 or higher and Gradle to build example applications.
 - openssl to generate certs if you want to enable HTTPs
 
 
 # Running
 Generally all the steps are exaplained in cicd.sh scripts.  
-The more advanced scenario how SWIR could be applied to facilitate seamless communication of applications based on different technical stacks [docker/solution-example](docker/solution-example).  
+The more advanced scenario how SWIR could be applied to facilitate seamless communication of applications based on different technical stacks [docker/solution-example](docker/solution-example) and [docker/solution-example-aws](docker/solution-example-aws) .  
 The performance harness that is used to measure/compare SWIR against other solutions is in [docker/performance-framework](docker/performance-framework)  
 
 

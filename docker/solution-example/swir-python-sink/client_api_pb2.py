@@ -18,7 +18,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='swir',
   syntax='proto3',
   serialized_options=b'\n\022rs.swir.api.clientB\022SwirClientApiProtoP\001',
-  serialized_pb=b'\n\x10\x63lient_api.proto\x12\x04swir\"H\n\x0ePublishRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\"9\n\x0fPublishResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"9\n\x10SubscribeRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\"<\n\x11SubscribeResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x0f\n\x07payload\x18\x02 \x01(\x0c\x32\xcd\x01\n\tClientApi\x12\x38\n\x07Publish\x12\x14.swir.PublishRequest\x1a\x15.swir.PublishResponse\"\x00\x12\x44\n\x0fPublishBiStream\x12\x14.swir.PublishRequest\x1a\x15.swir.PublishResponse\"\x00(\x01\x30\x01\x12@\n\tSubscribe\x12\x16.swir.SubscribeRequest\x1a\x17.swir.SubscribeResponse\"\x00\x30\x01\x42*\n\x12rs.swir.api.clientB\x12SwirClientApiProtoP\x01\x62\x06proto3'
+  serialized_pb=b'\n\x10\x63lient_api.proto\x12\x04swir\"H\n\x0ePublishRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07payload\x18\x03 \x01(\x0c\"9\n\x0fPublishResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"9\n\x10SubscribeRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\"<\n\x11SubscribeResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x0f\n\x07payload\x18\x02 \x01(\x0c\"[\n\x0cStoreRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\x0f\n\x07payload\x18\x04 \x01(\x0c\"[\n\rStoreResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\x0e\n\x06status\x18\x04 \x01(\t\"M\n\x0fRetrieveRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\"o\n\x10RetrieveResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\x0e\n\x06status\x18\x04 \x01(\t\x12\x0f\n\x07payload\x18\x05 \x01(\x0c\"K\n\rDeleteRequest\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\"m\n\x0e\x44\x65leteResponse\x12\x16\n\x0e\x63orrelation_id\x18\x01 \x01(\t\x12\x15\n\rdatabase_name\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\x0e\n\x06status\x18\x04 \x01(\t\x12\x0f\n\x07payload\x18\x05 \x01(\x0c\x32\xcd\x01\n\tPubSubApi\x12\x38\n\x07Publish\x12\x14.swir.PublishRequest\x1a\x15.swir.PublishResponse\"\x00\x12\x44\n\x0fPublishBiStream\x12\x14.swir.PublishRequest\x1a\x15.swir.PublishResponse\"\x00(\x01\x30\x01\x12@\n\tSubscribe\x12\x16.swir.SubscribeRequest\x1a\x17.swir.SubscribeResponse\"\x00\x30\x01\x32\xb8\x01\n\x0ePersistenceApi\x12\x32\n\x05Store\x12\x12.swir.StoreRequest\x1a\x13.swir.StoreResponse\"\x00\x12;\n\x08Retrieve\x12\x15.swir.RetrieveRequest\x1a\x16.swir.RetrieveResponse\"\x00\x12\x35\n\x06\x44\x65lete\x12\x13.swir.DeleteRequest\x1a\x14.swir.DeleteResponse\"\x00\x42*\n\x12rs.swir.api.clientB\x12SwirClientApiProtoP\x01\x62\x06proto3'
 )
 
 
@@ -182,10 +182,328 @@ _SUBSCRIBERESPONSE = _descriptor.Descriptor(
   serialized_end=278,
 )
 
+
+_STOREREQUEST = _descriptor.Descriptor(
+  name='StoreRequest',
+  full_name='swir.StoreRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.StoreRequest.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.StoreRequest.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.StoreRequest.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='payload', full_name='swir.StoreRequest.payload', index=3,
+      number=4, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=280,
+  serialized_end=371,
+)
+
+
+_STORERESPONSE = _descriptor.Descriptor(
+  name='StoreResponse',
+  full_name='swir.StoreResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.StoreResponse.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.StoreResponse.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.StoreResponse.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='status', full_name='swir.StoreResponse.status', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=373,
+  serialized_end=464,
+)
+
+
+_RETRIEVEREQUEST = _descriptor.Descriptor(
+  name='RetrieveRequest',
+  full_name='swir.RetrieveRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.RetrieveRequest.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.RetrieveRequest.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.RetrieveRequest.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=466,
+  serialized_end=543,
+)
+
+
+_RETRIEVERESPONSE = _descriptor.Descriptor(
+  name='RetrieveResponse',
+  full_name='swir.RetrieveResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.RetrieveResponse.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.RetrieveResponse.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.RetrieveResponse.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='status', full_name='swir.RetrieveResponse.status', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='payload', full_name='swir.RetrieveResponse.payload', index=4,
+      number=5, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=545,
+  serialized_end=656,
+)
+
+
+_DELETEREQUEST = _descriptor.Descriptor(
+  name='DeleteRequest',
+  full_name='swir.DeleteRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.DeleteRequest.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.DeleteRequest.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.DeleteRequest.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=658,
+  serialized_end=733,
+)
+
+
+_DELETERESPONSE = _descriptor.Descriptor(
+  name='DeleteResponse',
+  full_name='swir.DeleteResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='correlation_id', full_name='swir.DeleteResponse.correlation_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='database_name', full_name='swir.DeleteResponse.database_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='key', full_name='swir.DeleteResponse.key', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='status', full_name='swir.DeleteResponse.status', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='payload', full_name='swir.DeleteResponse.payload', index=4,
+      number=5, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=735,
+  serialized_end=844,
+)
+
 DESCRIPTOR.message_types_by_name['PublishRequest'] = _PUBLISHREQUEST
 DESCRIPTOR.message_types_by_name['PublishResponse'] = _PUBLISHRESPONSE
 DESCRIPTOR.message_types_by_name['SubscribeRequest'] = _SUBSCRIBEREQUEST
 DESCRIPTOR.message_types_by_name['SubscribeResponse'] = _SUBSCRIBERESPONSE
+DESCRIPTOR.message_types_by_name['StoreRequest'] = _STOREREQUEST
+DESCRIPTOR.message_types_by_name['StoreResponse'] = _STORERESPONSE
+DESCRIPTOR.message_types_by_name['RetrieveRequest'] = _RETRIEVEREQUEST
+DESCRIPTOR.message_types_by_name['RetrieveResponse'] = _RETRIEVERESPONSE
+DESCRIPTOR.message_types_by_name['DeleteRequest'] = _DELETEREQUEST
+DESCRIPTOR.message_types_by_name['DeleteResponse'] = _DELETERESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 PublishRequest = _reflection.GeneratedProtocolMessageType('PublishRequest', (_message.Message,), {
@@ -216,21 +534,63 @@ SubscribeResponse = _reflection.GeneratedProtocolMessageType('SubscribeResponse'
   })
 _sym_db.RegisterMessage(SubscribeResponse)
 
+StoreRequest = _reflection.GeneratedProtocolMessageType('StoreRequest', (_message.Message,), {
+  'DESCRIPTOR' : _STOREREQUEST,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.StoreRequest)
+  })
+_sym_db.RegisterMessage(StoreRequest)
+
+StoreResponse = _reflection.GeneratedProtocolMessageType('StoreResponse', (_message.Message,), {
+  'DESCRIPTOR' : _STORERESPONSE,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.StoreResponse)
+  })
+_sym_db.RegisterMessage(StoreResponse)
+
+RetrieveRequest = _reflection.GeneratedProtocolMessageType('RetrieveRequest', (_message.Message,), {
+  'DESCRIPTOR' : _RETRIEVEREQUEST,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.RetrieveRequest)
+  })
+_sym_db.RegisterMessage(RetrieveRequest)
+
+RetrieveResponse = _reflection.GeneratedProtocolMessageType('RetrieveResponse', (_message.Message,), {
+  'DESCRIPTOR' : _RETRIEVERESPONSE,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.RetrieveResponse)
+  })
+_sym_db.RegisterMessage(RetrieveResponse)
+
+DeleteRequest = _reflection.GeneratedProtocolMessageType('DeleteRequest', (_message.Message,), {
+  'DESCRIPTOR' : _DELETEREQUEST,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.DeleteRequest)
+  })
+_sym_db.RegisterMessage(DeleteRequest)
+
+DeleteResponse = _reflection.GeneratedProtocolMessageType('DeleteResponse', (_message.Message,), {
+  'DESCRIPTOR' : _DELETERESPONSE,
+  '__module__' : 'client_api_pb2'
+  # @@protoc_insertion_point(class_scope:swir.DeleteResponse)
+  })
+_sym_db.RegisterMessage(DeleteResponse)
+
 
 DESCRIPTOR._options = None
 
-_CLIENTAPI = _descriptor.ServiceDescriptor(
-  name='ClientApi',
-  full_name='swir.ClientApi',
+_PUBSUBAPI = _descriptor.ServiceDescriptor(
+  name='PubSubApi',
+  full_name='swir.PubSubApi',
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=281,
-  serialized_end=486,
+  serialized_start=847,
+  serialized_end=1052,
   methods=[
   _descriptor.MethodDescriptor(
     name='Publish',
-    full_name='swir.ClientApi.Publish',
+    full_name='swir.PubSubApi.Publish',
     index=0,
     containing_service=None,
     input_type=_PUBLISHREQUEST,
@@ -239,7 +599,7 @@ _CLIENTAPI = _descriptor.ServiceDescriptor(
   ),
   _descriptor.MethodDescriptor(
     name='PublishBiStream',
-    full_name='swir.ClientApi.PublishBiStream',
+    full_name='swir.PubSubApi.PublishBiStream',
     index=1,
     containing_service=None,
     input_type=_PUBLISHREQUEST,
@@ -248,7 +608,7 @@ _CLIENTAPI = _descriptor.ServiceDescriptor(
   ),
   _descriptor.MethodDescriptor(
     name='Subscribe',
-    full_name='swir.ClientApi.Subscribe',
+    full_name='swir.PubSubApi.Subscribe',
     index=2,
     containing_service=None,
     input_type=_SUBSCRIBEREQUEST,
@@ -256,8 +616,50 @@ _CLIENTAPI = _descriptor.ServiceDescriptor(
     serialized_options=None,
   ),
 ])
-_sym_db.RegisterServiceDescriptor(_CLIENTAPI)
+_sym_db.RegisterServiceDescriptor(_PUBSUBAPI)
 
-DESCRIPTOR.services_by_name['ClientApi'] = _CLIENTAPI
+DESCRIPTOR.services_by_name['PubSubApi'] = _PUBSUBAPI
+
+
+_PERSISTENCEAPI = _descriptor.ServiceDescriptor(
+  name='PersistenceApi',
+  full_name='swir.PersistenceApi',
+  file=DESCRIPTOR,
+  index=1,
+  serialized_options=None,
+  serialized_start=1055,
+  serialized_end=1239,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Store',
+    full_name='swir.PersistenceApi.Store',
+    index=0,
+    containing_service=None,
+    input_type=_STOREREQUEST,
+    output_type=_STORERESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Retrieve',
+    full_name='swir.PersistenceApi.Retrieve',
+    index=1,
+    containing_service=None,
+    input_type=_RETRIEVEREQUEST,
+    output_type=_RETRIEVERESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Delete',
+    full_name='swir.PersistenceApi.Delete',
+    index=2,
+    containing_service=None,
+    input_type=_DELETEREQUEST,
+    output_type=_DELETERESPONSE,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_PERSISTENCEAPI)
+
+DESCRIPTOR.services_by_name['PersistenceApi'] = _PERSISTENCEAPI
 
 # @@protoc_insertion_point(module_scope)
