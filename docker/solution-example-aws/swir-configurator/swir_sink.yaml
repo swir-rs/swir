@@ -5,7 +5,7 @@ client_grpc_port: 50051
 client_tls_private_key: "/swir.CA.pem"
 client_tls_certificate: "/demoCA/cacert.pem"
 #client_executable: "client.jar"
-channels:
+pubsub:
   kafka: []
   nats: []
   aws_kinesis:

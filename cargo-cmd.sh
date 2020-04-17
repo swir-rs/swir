@@ -1,6 +1,6 @@
 source secure.sh
-export RUST_LOG=INFO,rusoto_core=INFO,swir=DEBUG,aws_lock_client=INFO
+export RUST_LOG=info,rusoto_core=info,swir=trace,mdns_responder=warn,rusoto_dynamodb=info
 export RUST_BACKTRACE=full
-export SWIR_CONFIG_FILE=./swir_aws.yaml
+export SWIR_CONFIG_FILE=./swir.yaml
 cargo run 
 

@@ -9,9 +9,9 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use tokio::sync::mpsc;
-
-use crate::utils::structs::{BackendStatusCodes, ClientSubscribeRequest, CustomerInterfaceType, Job, MessagingResult, PublishRequest, RestToMessagingContext,RestToPersistenceContext,StoreRequest, RetrieveRequest, PersistenceJobType,PersistenceResult,DeleteRequest};
-use crate::utils::structs::{MessagingToRestContext, SubscribeRequest};
+use serde::{Deserialize};
+use std::str::FromStr;
+use crate::utils::structs::*;
 
 
 
@@ -22,6 +22,13 @@ enum PersistenceOperationType{
     Delete    
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ServiceInvokeRequestHttp {
+    pub method: String,
+    pub request_target: String,
+    pub headers: std::collections::HashMap<String,String>,
+    pub payload: String	
+}
 
 
 static X_CORRRELATION_ID_HEADER_NAME:& str = "x-correlation-id";
@@ -71,7 +78,7 @@ fn find_channel_by_database_name<'a>(
     from_client_to_persistence_sender.get(database_name)
 }
 
-fn find_to_client_sender<'a>(client_topic: &'a str,to_client_sender: &'a HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Option<&'a mpsc::Sender<MessagingToRestContext>>{
+fn find_to_client_sender<'a>(client_topic: &'a str,to_client_sender: &'a HashMap<String, mpsc::Sender<BackendToRestContext>>)->Option<&'a mpsc::Sender<BackendToRestContext>>{
     to_client_sender.get(client_topic)
 	
 }
@@ -96,13 +103,17 @@ fn set_http_response(backend_status: BackendStatusCodes, response: &mut Response
         BackendStatusCodes::Ok(msg) => {
             *response.status_mut() = StatusCode::OK;
             *response.body_mut() = Body::from(msg);
-        }
+        },
         BackendStatusCodes::Error(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::from(msg);
-        }
+        },
         BackendStatusCodes::NoTopic(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            *response.body_mut() = Body::from(msg);
+        },
+	BackendStatusCodes::NoService(msg) => {
+            *response.status_mut() = StatusCode::NOT_FOUND;
             *response.body_mut() = Body::from(msg);
         }
     }
@@ -118,7 +129,7 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Response<Body>{
+async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<BackendToRestContext>>)->Response<Body>{
     let wb = String::from_utf8_lossy(&whole_body);
     if is_subscribe{
 	info!("Subscribe {} ",wb);
@@ -139,7 +150,82 @@ async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correla
     }
     
 }
+
+async fn service_invocation_processor(correlation_id: String, path: String,  req: Request<Body> , from_client_to_si_sender: mpsc::Sender<RestToSIContext>)->Response<Body>{
+    let mut response = Response::new(Body::empty());
+
+
+    let service_name = path["/serviceinvocation/invoke/".len()..].to_string();
+    info!("service_invocation_processor: {} {:?}",correlation_id, service_name);
+   
     
+    let whole_body = get_whole_body(req).await;
+    let wb = String::from_utf8_lossy(&whole_body);
+    debug!("Body {}",wb);
+    let maybe_json = serde_json::from_slice(&whole_body);
+    
+    let response = if let Ok(json) = maybe_json{
+	let client_req:ServiceInvokeRequestHttp = json;
+
+	let req = if let Ok(bytes) = base64::decode(&client_req.payload){
+	    let method = if let Ok(method)  = HttpMethod::from_str(&client_req.method){
+		method
+	    }else{
+		*response.status_mut() = StatusCode::BAD_REQUEST;
+		return response
+	    };
+	    ServiceInvokeRequest{
+		method, 
+		request_target: client_req.request_target.to_owned(),
+		headers: client_req.headers.to_owned(),
+		payload: bytes	    
+	    }
+	}else{
+	    *response.status_mut() = StatusCode::BAD_REQUEST;
+	    return response
+	};
+	
+	let job = SIJobType::PublicInvokeHttp{
+	    correlation_id:correlation_id.clone(),
+	    service_name:service_name.clone(),	    
+	    req
+	};
+	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
+
+	let ctx =RestToSIContext{
+	    job,
+	    sender:local_sender	    
+	};
+	let mut sender = from_client_to_si_sender;
+	
+	let res = sender.try_send(ctx);
+	if let Err(e) = res{
+            warn!("Channel is dead {:?}", e);
+            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            *response.body_mut() = Body::empty();
+	}else{    
+	    debug!("Waiting for response");
+	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+	    debug!("Got result {:?}", response_from_service);
+	    if let Ok(res) = response_from_service {
+		set_http_response(res.status, &mut response);
+		if !res.payload.is_empty() {
+		    *response.body_mut() = Body::from(res.payload);
+		}
+	    } else {
+		*response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+		*response.body_mut() = Body::empty();
+	    }
+	}
+	response			
+    }else{	
+	debug!("Invalid Json {:?}",maybe_json.unwrap_err());
+	*response.status_mut() = StatusCode::NOT_ACCEPTABLE;
+	response
+    };
+    info!("service_invocation_processor: {} {:?} end",correlation_id, service_name);
+    response
+}
 
 async fn persistence_processor(op_type:PersistenceOperationType, correlation_id: String,  headers:&HeaderMap<HeaderValue>,  req: Request<Body> , from_client_to_persistence_sender: &HashMap<String, mpsc::Sender<RestToPersistenceContext>>)->Response<Body>{
     let mut response = Response::new(Body::empty());
@@ -225,7 +311,7 @@ async fn persistence_processor(op_type:PersistenceOperationType, correlation_id:
     response
 }
 
-async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeRequest,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<MessagingToRestContext>>)->Response<Body>{
+async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeRequest,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<BackendToRestContext>>)->Response<Body>{
 
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
@@ -286,7 +372,7 @@ async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeReque
     response
 }
 
-pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,to_client_sender_for_rest:HashMap<String, mpsc::Sender<MessagingToRestContext>>,from_client_to_persistence_sender:HashMap<String, mpsc::Sender<RestToPersistenceContext>>) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,to_client_sender_for_rest:HashMap<String, mpsc::Sender<BackendToRestContext>>,from_client_to_persistence_sender:HashMap<String, mpsc::Sender<RestToPersistenceContext>>, from_client_to_si_sender:mpsc::Sender<RestToSIContext>) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -382,6 +468,14 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             return Ok(response);
 
 	},
+	(&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
+	    if validate_content_type(&headers).is_none() {
+                return Ok(response);
+            }	 
+	    let response = service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await;
+            return Ok(response);
+
+	},
 // The 404 Not Found route...
 	_ => {
 	    warn!("Don't know what to do {} {}",&req.method(), &req.uri());
@@ -392,50 +486,72 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
     }
 }
 
-async fn send_request(client: Client<HttpConnector<GaiResolver>>, payload: MessagingToRestContext) {
-    let uri = payload.uri;
+async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendToRestContext) {
+    let req_params = ctx.request_params;
+    let uri = req_params.uri;
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
+    
 
-    let p = payload.payload.clone();
+
     let req = Request::builder()
         .method("POST")
         .uri(uri)
         .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
 //	.header(hyper::header::HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()), HeaderValue::from_string(payload."application/octet-stream"))
-        .body(Body::from(payload.payload))
+        .body(Body::from(req_params.payload))
         .expect("request builder");
 
-    //    let sender = payload.sender.clone();
-    //    let err_sender = payload.sender.clone();
 
-    let p = String::from_utf8_lossy(&p);
-    info!("Making request for {}", p);
-    let resp = client.request(req).await;
-    let _res = resp
-        .map(move |res| {
-            info!("Status POST to the client: {} {} ", res.status(), p);
-            //                let mut status = "All good".to_string();
-            if res.status() != hyper::StatusCode::OK {
-                warn!("Error from the client {}", res.status());
-                //                    status = "Invalid response from the client".to_string();
-            }
-            //                if let Err(e) = sender.send(MessagingResult { status: u32::from(res.status().as_u16()), result: status }) {
-            //                    warn!("Problem with an internal communication {:?}", e);
-            //                }
-            //                res.into_body().concat2()
-            res.into_body()
-        })
-        .map(|_| {})
-        .map_err(move |err| {
-            eprintln!("Error {}", err);
-            //                    if let Err(e) = err_sender.send(MessagingResult { status: 1, result: "Something is wrong".to_string() }) {
-            //                        warn!("Problem with an internal communication {:?}", e);
-            //                    }
-        });
+    // let p = String::from_utf8_lossy(&p);
+    // info!("Making request for {}", p);
+
+    if let Some(sender) = ctx.sender{
+	let maybe_response = client.request(req).await;
+	let res = if let Ok(response) = maybe_response{
+	    let status = response.status().as_u16();
+	    let rr = if let Ok(body) = hyper::body::to_bytes(response).await{	    
+		RESTRequestResult {
+		    correlation_id: ctx.correlation_id,
+		    status: ClientCallStatusCodes::Ok("Cool".to_string()),
+		    response_params: RESTResponseParams{
+			payload: body.to_vec(),
+			status,
+			..Default::default()			    			    
+		    }		    
+		}	
+	    }else{
+		RESTRequestResult {
+		    correlation_id: ctx.correlation_id,
+		    status: ClientCallStatusCodes::Error("Something wrong with body".to_string()),
+		    response_params: RESTResponseParams{			
+			status,
+			..Default::default()			    			    
+		    }		    
+		}			
+	    };
+	    rr	    	    
+	}else{
+	    RESTRequestResult {
+		correlation_id: ctx.correlation_id,
+		status: ClientCallStatusCodes::Error(format!("Got error {:?}",maybe_response)),
+		response_params: RESTResponseParams{
+		    ..Default::default()			    			    
+		}		    
+	    }	    	    
+	};
+	if let Err(e) = sender.send(res) {
+	    warn!("Problem with an internal communication {:?}", e);
+	}
+    }else{
+	let maybe_response = client.request(req).await;
+	debug!("Got response {:?}",maybe_response);
+    }
+    
+    
 }
 
-pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>) {
+pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
     let client = hyper::Client::builder().build_http();
     info!("Client done");
     let mut rx = rx.lock().await;

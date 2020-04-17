@@ -1,6 +1,6 @@
 [package]
 name = "swir"
-version = "0.2.5"
+version = "0.3.0"
 authors = ["Dawid Nowak <nowakd@gmail.com>"]
 repository = "https://github.com/swir-rs/swir"
 readme = "README.md"
@@ -19,13 +19,13 @@ futures-util = "=0.3"
 futures-executor = "=0.3"
 
 log = "0.4"
-env_logger = "*"
+env_logger = "0.7"
 color-backtrace="*"
-rand = "*"
+rand = "0.7"
 base64 = "*"
-
+multimap="0.8"
 cfg-if = { version = "=0.1.10" }
-
+custom_error= "1.7"
 tokio = { version = "=0.2", features = ["full","sync"]}
 tokio-tls = "0.3"
 tokio-rustls = "0.13"
@@ -36,6 +36,8 @@ http = "0.2"   #hyper = { path = "../hyper" , features = ["runtime","stream"]}
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
+serde_bytes = { version = "0.11"}
+
 
 
 rdkafka = { version="0.23" } #rdkafka = { version="0.23.1", path = "../rust-rdkafka" }
@@ -56,7 +58,10 @@ prost = "0.6"
 prost-derive = "0.6"
 tonic = {version="0.1", optional=false} #tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
 config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" } #config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
+
 redis = { version="0.15",features = ["cluster"]}
+
+mdns-responder={version="0.2", path = "../rust-mdns"}
 
 [build-dependencies]
 tonic-build = { version="0.1" } #tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }

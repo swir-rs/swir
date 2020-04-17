@@ -2,10 +2,11 @@ client_ip: "127.0.0.1"
 client_http_port: 8080
 client_https_port: 8443
 client_grpc_port: 50051
+internal_grpc_port: 50052
 client_tls_private_key: "swir.CA.pem"
 client_tls_certificate: "demoCA/cacert.pem"
 #client_executable: "client.jar"
-channels:
+pubsub:
   kafka:
     - brokers:
         - "127.0.0.1:9092"
@@ -30,6 +31,7 @@ channels:
          client_topic: "ProduceToAppB"
 
   aws_kinesis: []
+  
 stores:  
   redis:
     - nodes: ["redis://127.0.0.1:6379/"]
@@ -38,13 +40,24 @@ stores:
           client_name: "client_store1"
         - table_name: "my_db_store2"
           client_name: "client_store2"
-  dynamodb:
-    - region: "eu-west-1"
-      tables:
-        - table_name: "my_db_store3"
-          client_name: "client_store3"
-        - table_name: "my_db_store4"
-          client_name: "client_store4"
+  dynamodb: []
   
+            
+services:
+  resolve_domains: ["_tcp._service_1._swir.local"]
+  announce_services:
+    - service_id: service_2
+      domain: _tcp._service_2._swir.local
+      name: blah
+      port: 8081
+      host: blah.sddk.com
+  
+
+
+
+
     
-        
+
+    
+    
+    

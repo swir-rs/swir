@@ -13,13 +13,13 @@ use tonic::{Response, Status};
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use base64;
+use std::str::FromStr;
 
 use crate::utils::structs::CustomerInterfaceType::GRPC;
-use crate::utils::structs::{EndpointDesc, Job, MessagingResult, MessagingToRestContext, RestToMessagingContext};
-use crate::utils::structs::{PersistenceJobType, PersistenceResult, RestToPersistenceContext};
+use crate::utils::structs::*;
 
 pub mod swir_grpc_api {
-    tonic::include_proto!("swir");
+    tonic::include_proto!("swir_public");
 }
 
 
@@ -83,13 +83,25 @@ impl fmt::Display for swir_grpc_api::DeleteRequest{
     }
 }
 
+impl fmt::Display for swir_grpc_api::InvokeRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InvokeRequest {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
+    }
+}
+
+impl fmt::Display for swir_grpc_api::InvokeResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InvokeResponse {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
+    }
+}
+
 
 
 #[derive(Debug)]
 pub struct SwirPubSubApi {
     missed_messages: Arc<Mutex<Box<VecDeque<swir_grpc_api::SubscribeResponse>>>>,
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
+    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::BackendToRestContext>>>,
 }
 
 impl SwirPubSubApi {
@@ -99,7 +111,7 @@ impl SwirPubSubApi {
 
     pub fn new(
         from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-        to_client_receiver: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
+        to_client_receiver: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
     ) -> SwirPubSubApi {
         let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));
         SwirPubSubApi {
@@ -275,7 +287,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 	info!("Subscribe {}", request);
         let topic = request.topic;
 	let correlation_id = request.correlation_id;	
-	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(1000);
+	let (to_client_tx,mut to_client_rx) = mpsc::channel::<BackendToRestContext>(1000);
 	let mut small_rng = SmallRng::from_entropy();
 	let mut array: [u8; 32]=[0;32];
 	small_rng.fill(&mut array);
@@ -308,8 +320,8 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
         let (mut tx, rx) = mpsc::channel(1000);
         tokio::spawn(async move {
 	    let mut msgs:i32  = 0;
-	    while let Some(messaging_context) = to_client_rx.recv().await{
-		let s = swir_grpc_api::SubscribeResponse { correlation_id:correlation_id.clone(), payload: messaging_context.payload };
+	    while let Some(ctx) = to_client_rx.recv().await{
+		let s = swir_grpc_api::SubscribeResponse { correlation_id:correlation_id.clone(), payload: ctx.request_params.payload };
 		msgs+=1;
 		debug!("Sending message {}",s);
 		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
@@ -336,7 +348,6 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 
 #[derive(Debug)]
 pub struct SwirPersistenceApi {
-    missed_messages: Arc<Mutex<Box<VecDeque<swir_grpc_api::SubscribeResponse>>>>,
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>
 }
 
@@ -348,9 +359,7 @@ impl SwirPersistenceApi {
     pub fn new(
         from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     ) -> SwirPersistenceApi {
-        let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));
         SwirPersistenceApi {
-            missed_messages,
             from_client_to_backend_channel_sender
         }
     }
@@ -503,5 +512,74 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
 	    Err(tonic::Status::invalid_argument(format!("Invalid client database name {}",request.database_name)))           
         }
     }
+}
 
+#[derive(Debug)]
+pub struct SwirServiceInvocationApi {
+    pub from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
+}
+
+impl SwirServiceInvocationApi {
+    
+    pub fn new(from_client_to_si_sender: mpsc::Sender<RestToSIContext>) -> Self {
+        SwirServiceInvocationApi {
+            from_client_to_si_sender
+        }
+    }
+}
+
+#[tonic::async_trait]
+impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {    
+    async fn invoke(&self, request: tonic::Request<swir_grpc_api::InvokeRequest>) -> Result<tonic::Response<swir_grpc_api::InvokeResponse>, tonic::Status>{
+	let req = request.into_inner();
+	let correlation_id = req.correlation_id.clone();
+	let service_name = req.service_name.clone();
+        info!("Invoke {}", req);
+	let method = if let Ok(method)  = HttpMethod::from_str(&req.method){
+	    method
+	}else{
+	    return Err(tonic::Status::invalid_argument("Invalid method"))
+	};
+	
+
+	let job = SIJobType::PublicInvokeGrpc{
+	    correlation_id: req.correlation_id.to_owned(),
+	    service_name: req.service_name.to_owned(),
+	    req: ServiceInvokeRequest{
+		method,
+		request_target: req.request_target.to_owned(),
+		headers: req.headers.to_owned(),
+		payload: req.payload.to_owned()
+	    }
+	};
+
+	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
+
+	let ctx =RestToSIContext{
+	    job,
+	    sender:local_sender	    
+	};
+	let mut sender = self.from_client_to_si_sender.clone();
+	let res = sender.try_send(ctx);
+	if let Err(e) = res{
+            warn!("Channel is dead {:?}", e);
+	    Err(tonic::Status::internal("Internal error"))
+	}else{    
+	    debug!("Waiting for response");
+	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+	    debug!("Got result {:?}", response_from_service);
+	    if let Ok(res) = response_from_service {
+		Ok(tonic::Response::new(swir_grpc_api::InvokeResponse{
+		    correlation_id,
+		    service_name,
+		    payload: res.payload.to_owned(),
+		    ..Default::default()
+		    
+		})
+		)
+	    } else {
+		Err(tonic::Status::internal("Internal error : canceled"))
+	    }
+	}   
+    }				
 }

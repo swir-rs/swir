@@ -5,7 +5,7 @@ use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-
+use custom_error::custom_error;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize,Ord,PartialOrd)]
 
@@ -14,15 +14,7 @@ pub enum CustomerInterfaceType {
     GRPC,
 }
 
-impl CustomerInterfaceType {
-    //    pub fn from_str(s: &str) -> Result<CustomerInterfaceType, ()> {
-    //        match s {
-    //            "REST" => Ok(CustomerInterfaceType::REST),
-    //            "GRPC" => Ok(CustomerInterfaceType::GRPC),
-    //            _ => Err(()),
-    //        }
-    //    }
-}
+
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -122,13 +114,15 @@ pub struct ClientSubscribeRequest {
     pub(crate) client_topic: String,
 }
 
+
+
 #[derive(Clone,Debug)]
 pub struct SubscribeRequest {
     pub(crate) endpoint: EndpointDesc,
     pub(crate) correlation_id: String,
     pub(crate) client_topic: String,
     pub(crate) client_interface_type: CustomerInterfaceType,
-    pub(crate) tx: Box<mpsc::Sender<MessagingToRestContext>>
+    pub(crate) tx: Box<mpsc::Sender<BackendToRestContext>>
 }
 
 impl Eq for SubscribeRequest {
@@ -190,6 +184,13 @@ pub enum BackendStatusCodes {
     Ok(String),
     Error(String),
     NoTopic(String),
+    NoService(String),
+}
+
+#[derive(Debug)]
+pub enum ClientCallStatusCodes {
+    Ok(String),
+    Error(String),
 }
 
 impl fmt::Display for BackendStatusCodes {
@@ -198,6 +199,8 @@ impl fmt::Display for BackendStatusCodes {
             BackendStatusCodes::Ok(msg) => write!(f, "BackendStatusCodes::Ok {}", msg),
             BackendStatusCodes::Error(msg) => write!(f, "BackendStatusCodes::ERR {}", msg),
             BackendStatusCodes::NoTopic(msg) => write!(f, "BackendStatusCodes::NoTopic {}", msg),
+	    BackendStatusCodes::NoService(msg) => write!(f, "BackendStatusCodes::NoService {}", msg),
+	    
         }
     }
 }
@@ -209,7 +212,15 @@ pub struct MessagingResult {
 }
 
 
+
+
 pub struct PersistenceResult {
+    pub(crate) correlation_id: String,
+    pub(crate) status: BackendStatusCodes,
+    pub(crate) payload: Vec<u8>
+}
+
+pub struct SIResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
     pub(crate) payload: Vec<u8>
@@ -224,6 +235,12 @@ impl fmt::Display for PersistenceResult {
 impl fmt::Debug for PersistenceResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
 	write!(f, "PersistenceResult {{ correlation_id: {}, status :  {}}}", &self.correlation_id, &self.status)
+    }
+}
+
+impl fmt::Debug for SIResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+	write!(f, "SIResult {{ correlation_id: {}, status :  {}}}", &self.correlation_id, &self.status)
     }
 }
 
@@ -245,6 +262,107 @@ pub enum PersistenceJobType {
 }
 
 
+
+#[derive(Debug)]
+pub struct ServiceInvokeRequest {
+    pub method: HttpMethod,
+    pub request_target: String,
+    pub headers: std::collections::HashMap<String,String>,
+    pub payload: Vec<u8>	
+}
+
+pub struct ServiceInvokeResponse {
+    pub method: HttpMethod,
+    pub request_target: String,
+    pub headers: std::collections::HashMap<String,String>,
+    pub payload: Vec<u8>	
+}
+
+#[derive(Debug,Deserialize)]
+pub enum HttpMethod{
+    POST,
+    GET,
+    DELETE,
+    PUT
+}
+
+impl Default for HttpMethod{
+    fn default()->Self{
+	HttpMethod::POST
+    }
+}
+
+use std::str::FromStr;
+
+custom_error!{pub HTTPMethodConversionError
+    InvalidMethod = "Invalid HTTP method"
+}
+
+impl FromStr for HttpMethod{
+    type Err = HTTPMethodConversionError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+	match s{
+	    "POST" => Ok(HttpMethod::POST),
+	    "GET" => Ok(HttpMethod::GET),
+	    "DELETE" => Ok(HttpMethod::DELETE),
+	    "PUT" => Ok(HttpMethod::PUT),
+	    _ => Err(HTTPMethodConversionError::InvalidMethod)
+	}
+    }
+}
+
+impl fmt::Display for HttpMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug,Default)]
+pub struct RESTRequestParams{
+    pub payload: Vec<u8>,
+    pub uri: String,
+    pub headers: std::collections::HashMap<String,String>,
+    pub method: HttpMethod	
+}
+
+#[derive(Debug,Default)]
+pub struct RESTResponseParams{
+    pub payload: Vec<u8>,
+    pub headers: std::collections::HashMap<String,String>,
+    pub status: u16
+}
+
+
+#[derive(Debug)]
+pub struct RESTRequestResult {
+    pub(crate) correlation_id: String,
+    pub(crate) status: ClientCallStatusCodes,
+    pub(crate) response_params: RESTResponseParams 
+    
+}
+
+
+#[derive(Debug)]
+pub enum SIJobType {
+    PublicInvokeHttp{
+	correlation_id: String,
+	service_name: String,	
+	req: ServiceInvokeRequest
+
+    },
+    PublicInvokeGrpc{
+	correlation_id: String,
+	service_name: String,	
+	req: ServiceInvokeRequest
+    },
+    InternalInvoke{
+	correlation_id: String,
+	service_name: String,	
+	req: ServiceInvokeRequest
+    }        
+}
+
+
 #[derive(Debug)]
 pub struct CustomContext;
 
@@ -255,14 +373,20 @@ pub struct RestToMessagingContext {
 }
 
 #[derive(Debug)]
-pub struct MessagingToRestContext {
-    pub sender: Sender<MessagingResult>,
-    pub payload: Vec<u8>,
-    pub uri: String,
+pub struct BackendToRestContext {
+    pub correlation_id : String,
+    pub sender: Option<Sender<RESTRequestResult>>,
+    pub request_params: RESTRequestParams,        
 }
 
 #[derive(Debug)]
 pub struct RestToPersistenceContext {
     pub job: PersistenceJobType,
     pub sender: Sender<PersistenceResult>,
+}
+
+#[derive(Debug)]
+pub struct RestToSIContext {
+    pub job: SIJobType,
+    pub sender: Sender<SIResult>,
 }
