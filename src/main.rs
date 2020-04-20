@@ -121,7 +121,7 @@ async fn main() {
     let config = swir_config.clone();
     let receiver = simc.receiver;
     let si = tokio::spawn(async move {	
-	si_handlers::ServiceInvocationService::new().start(config.services, receiver,to_si_http_client).await;       
+	si_handlers::ServiceInvocationService::new().start(internal_grpc_port, config.services, receiver,to_si_http_client).await;       
     });
     tasks.push(si);
 

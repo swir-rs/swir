@@ -1,4 +1,4 @@
-client_ip: "127.0.0.1"
+client_ip: "0.0.0.0"
 client_http_port: 8080
 client_https_port: 8443
 client_grpc_port: 50051
@@ -44,13 +44,19 @@ stores:
   
             
 services:
-  resolve_domains: ["_tcp._service_1._swir.local"]
+  resolve_services:
+    - service_name: service_2
+      domain: swir
+      protocol: tcp
   announce_services:
-    - service_id: service_2
-      domain: _tcp._service_2._swir.local
-      name: blah
-      port: 8081
-      host: blah.sddk.com
+    - service_details:
+        service_name: service_2
+        domain: swir
+        protocol: tcp
+      instance_name: blah
+      client_url: "http://127.0.0.1:8090"
+
+
   
 
 

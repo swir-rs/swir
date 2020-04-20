@@ -207,18 +207,25 @@ pub struct MemoryChannels {
     pub si_memory_channels: SIMemoryChannel
 }
 
+
+
 #[derive(Debug, Deserialize, Clone)]
-pub struct AnnounceServiceDetails{
-    pub service_id: String,
+pub struct ServiceDetails{
+    pub service_name: String,
     pub domain: String,
-    pub name: String,
-    pub port: u16,
-    pub host: String
+    pub protocol: String
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct AnnounceServiceDetails{
+    pub service_details: ServiceDetails,
+    pub client_url: String,
+}
+
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Services{
-    pub resolve_domains: Vec<String>,
+    pub resolve_services: Vec<ServiceDetails>,
     pub announce_services: Vec<AnnounceServiceDetails>,
 }
 
