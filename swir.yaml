@@ -45,16 +45,23 @@ stores:
             
 services:
   resolve_services:
-    - service_name: service_2
+    - service_name: books
       domain: swir
       protocol: tcp
+    - service_name: magazines
+      domain: swir
+      protocol: tcp      
   announce_services:
     - service_details:
-        service_name: service_2
+        service_name: books
         domain: swir
         protocol: tcp
-      instance_name: blah
       client_url: "http://127.0.0.1:8090"
+    - service_details:
+        service_name: magazines
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"      
 
 
   

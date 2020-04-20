@@ -4,7 +4,7 @@ services:
   swir-example-configurator:
     networks:
       - swir-net
-    image: swir-example-configurator:v2
+    image: swir-example-configurator:v3
     command: ["/bin/bash","-c","cp /config/* swir_config/"]
     volumes:
       - type: volume
@@ -16,7 +16,7 @@ services:
   order-generator-sidecar:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     ports:
       - "8080"
       - "8443"
@@ -33,7 +33,7 @@ services:
   order-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -52,7 +52,7 @@ services:
   inventory-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -72,7 +72,7 @@ services:
   billing-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -93,7 +93,7 @@ services:
   shipments-sink-sidecar:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     depends_on:
       - swir-example-configurator
     ports:

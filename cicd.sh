@@ -5,7 +5,7 @@ fi
 
 
 cargo build --release --features="with_nats"
-docker build . --build-arg executable=target/release/swir --build-arg client=docker/performance-framework/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v2
+docker build . --build-arg executable=target/release/swir --build-arg client=docker/performance-framework/swir-java-client/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar --build-arg swir_config=swir_docker.yaml -t swir:v3
 
 
 #see more
