@@ -6,6 +6,7 @@ use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use custom_error::custom_error;
+use crate::swir_common;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize,Ord,PartialOrd)]
 
@@ -15,6 +16,17 @@ pub enum CustomerInterfaceType {
 }
 
 
+impl fmt::Display for swir_common::InvokeRequest{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InvokeRequest {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
+    }
+}
+
+impl fmt::Display for swir_common::InvokeResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InvokeResponse {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
+    }
+}
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -175,10 +187,6 @@ impl PartialOrd for SubscribeRequest {
     }
 }
       
-
-
-
-
 #[derive(Debug)]
 pub enum BackendStatusCodes {
     Ok(String),
@@ -211,9 +219,6 @@ pub struct MessagingResult {
     pub(crate) status: BackendStatusCodes,
 }
 
-
-
-
 pub struct PersistenceResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
@@ -223,7 +228,7 @@ pub struct PersistenceResult {
 pub struct SIResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
-    pub(crate) payload: Vec<u8>
+    pub(crate) response: Option<swir_common::InvokeResponse>
 }
 
 impl fmt::Display for PersistenceResult {
@@ -261,57 +266,26 @@ pub enum PersistenceJobType {
 
 }
 
-
-
-#[derive(Debug)]
-pub struct ServiceInvokeRequest {
-    pub method: HttpMethod,
-    pub request_target: String,
-    pub headers: std::collections::HashMap<String,String>,
-    pub payload: Vec<u8>	
-}
-
-pub struct ServiceInvokeResponse {
-    pub method: HttpMethod,
-    pub request_target: String,
-    pub headers: std::collections::HashMap<String,String>,
-    pub payload: Vec<u8>	
-}
-
-#[derive(Debug,Deserialize)]
-pub enum HttpMethod{
-    POST,
-    GET,
-    DELETE,
-    PUT
-}
-
-impl Default for HttpMethod{
-    fn default()->Self{
-	HttpMethod::POST
-    }
-}
-
 use std::str::FromStr;
 
 custom_error!{pub HTTPMethodConversionError
     InvalidMethod = "Invalid HTTP method"
 }
 
-impl FromStr for HttpMethod{
+ impl FromStr for swir_common::HttpMethod{
     type Err = HTTPMethodConversionError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
 	match s{
-	    "POST" => Ok(HttpMethod::POST),
-	    "GET" => Ok(HttpMethod::GET),
-	    "DELETE" => Ok(HttpMethod::DELETE),
-	    "PUT" => Ok(HttpMethod::PUT),
+	    "POST" => Ok(swir_common::HttpMethod::Post),
+	    "GET" => Ok(swir_common::HttpMethod::Get),
+	    "DELETE" => Ok(swir_common::HttpMethod::Delete),
+	    "PUT" => Ok(swir_common::HttpMethod::Put),
 	    _ => Err(HTTPMethodConversionError::InvalidMethod)
 	}
     }
 }
 
-impl fmt::Display for HttpMethod {
+impl fmt::Display for swir_common::HttpMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -322,7 +296,7 @@ pub struct RESTRequestParams{
     pub payload: Vec<u8>,
     pub uri: String,
     pub headers: std::collections::HashMap<String,String>,
-    pub method: HttpMethod	
+    pub method: String
 }
 
 #[derive(Debug,Default)]
@@ -345,20 +319,13 @@ pub struct RESTRequestResult {
 #[derive(Debug)]
 pub enum SIJobType {
     PublicInvokeHttp{
-	correlation_id: String,
-	service_name: String,	
-	req: ServiceInvokeRequest
-
+	req: swir_common::InvokeRequest
     },
     PublicInvokeGrpc{
-	correlation_id: String,
-	service_name: String,	
-	req: ServiceInvokeRequest
+	req: swir_common::InvokeRequest
     },
     InternalInvoke{
-	correlation_id: String,
-	service_name: String,	
-	req: ServiceInvokeRequest
+	req: swir_common::InvokeRequest
     }        
 }
 

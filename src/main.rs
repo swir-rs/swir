@@ -7,12 +7,33 @@ extern crate lazy_static;
 
 extern crate custom_error;
 
+
+
+mod persistence_handlers;
+mod frontend_handlers;
+mod messaging_handlers;
+mod utils;
+mod si_handlers;
+
+pub mod swir_grpc_internal_api {
+    tonic::include_proto!("swir_internal");
+}
+pub mod swir_common {
+    tonic::include_proto!("swir_common");
+}
+
+pub mod swir_grpc_api {
+    tonic::include_proto!("swir_public");
+}
+
+
 use std::{
     sync::Arc,
 };
 
 use hyper::service::{make_service_fn, service_fn};
 use frontend_handlers::http_handler::{client_handler,handler};
+use frontend_handlers::{grpc_handler,grpc_internal_handler};
 
 use utils::pki_utils::{load_certs, load_private_key};
 use hyper::{
@@ -24,14 +45,6 @@ use tokio_rustls::TlsAcceptor;
 use tokio::net::TcpListener;
 
 use crate::utils::config::MemoryChannels;
-use frontend_handlers::grpc_handler;
-use frontend_handlers::grpc_internal_handler;
-
-mod persistence_handlers;
-mod frontend_handlers;
-mod messaging_handlers;
-mod utils;
-mod si_handlers;
 
 
 
@@ -182,11 +195,11 @@ async fn main() {
 	let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
 	let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
 
-	let pub_sub_svc = grpc_handler::swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
-	let persistence_svc = grpc_handler::swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
+	let pub_sub_svc = swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
+	let persistence_svc = swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
 
 	let service_invocation_handler = grpc_handler::SwirServiceInvocationApi::new(client_sender_for_public);
-	let service_invocation_svc  = grpc_handler::swir_grpc_api::service_invocation_api_server::ServiceInvocationApiServer::new(service_invocation_handler);
+	let service_invocation_svc  = swir_grpc_api::service_invocation_api_server::ServiceInvocationApiServer::new(service_invocation_handler);
 
 	
 	let grpc = tonic::transport::Server::builder()
@@ -206,7 +219,7 @@ async fn main() {
     let grpc_internal_interface = tokio::spawn(async move {
 
 	let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
-	let service_invocation_svc  = grpc_internal_handler::swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
+	let service_invocation_svc  = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
 
 	
 	let grpc = tonic::transport::Server::builder()

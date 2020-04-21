@@ -13,15 +13,13 @@ use tonic::{Response, Status};
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use base64;
-use std::str::FromStr;
+
 
 use crate::utils::structs::CustomerInterfaceType::GRPC;
 use crate::utils::structs::*;
 
-pub mod swir_grpc_api {
-    tonic::include_proto!("swir_public");
-}
-
+use crate::swir_grpc_api;
+use crate::swir_common;
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -80,18 +78,6 @@ impl fmt::Display for swir_grpc_api::DeleteResponse{
 impl fmt::Display for swir_grpc_api::DeleteRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DeleteRequest {{ correlation_id:{}, key: {} }}", &self.correlation_id, &self.key)
-    }
-}
-
-impl fmt::Display for swir_grpc_api::InvokeRequest{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "InvokeRequest {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
-    }
-}
-
-impl fmt::Display for swir_grpc_api::InvokeResponse{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "InvokeResponse {{ correlation_id:{}, service_name: {} }}", &self.correlation_id, &self.service_name)
     }
 }
 
@@ -530,29 +516,16 @@ impl SwirServiceInvocationApi {
 
 #[tonic::async_trait]
 impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {    
-    async fn invoke(&self, request: tonic::Request<swir_grpc_api::InvokeRequest>) -> Result<tonic::Response<swir_grpc_api::InvokeResponse>, tonic::Status>{
+    async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status>{
 	let req = request.into_inner();
 	let correlation_id = req.correlation_id.clone();
 	let service_name = req.service_name.clone();
         info!("Invoke {}", req);
-	let method = if let Ok(method)  = HttpMethod::from_str(&req.method){
-	    method
-	}else{
-	    return Err(tonic::Status::invalid_argument("Invalid method"))
+	
+	let job = SIJobType::PublicInvokeGrpc{
+	    req,
 	};
 	
-
-	let job = SIJobType::PublicInvokeGrpc{
-	    correlation_id: req.correlation_id.to_owned(),
-	    service_name: req.service_name.to_owned(),
-	    req: ServiceInvokeRequest{
-		method,
-		request_target: req.request_target.to_owned(),
-		headers: req.headers.to_owned(),
-		payload: req.payload.to_owned()
-	    }
-	};
-
 	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
 
 	let ctx =RestToSIContext{
@@ -565,18 +538,24 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
             warn!("Channel is dead {:?}", e);
 	    Err(tonic::Status::internal("Internal error"))
 	}else{    
-	    debug!("Waiting for response");
 	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
-	    debug!("Got result {:?}", response_from_service);
+	    debug!("Got result from internal {:?}", response_from_service);
 	    if let Ok(res) = response_from_service {
-		Ok(tonic::Response::new(swir_grpc_api::InvokeResponse{
-		    correlation_id,
-		    service_name,
-		    payload: res.payload.to_owned(),
-		    ..Default::default()
-		    
-		})
-		)
+		if let Some(si_response) = res.response{
+		    Ok(tonic::Response::new(si_response))		    
+		}else{
+		    Ok(tonic::Response::new(
+			swir_common::InvokeResponse{
+			    correlation_id,
+			    service_name,
+			    result: Some(swir_common::InvokeResult{
+				status: swir_common::InvokeStatus::Error as i32,
+				msg : res.status.to_string()
+			    }),
+			    ..Default::default()
+			}
+		    ))
+		}
 	    } else {
 		Err(tonic::Status::internal("Internal error : canceled"))
 	    }

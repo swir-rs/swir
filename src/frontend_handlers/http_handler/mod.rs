@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use serde::{Deserialize};
 use std::str::FromStr;
 use crate::utils::structs::*;
-
+use crate::swir_common;
 
 
 #[derive(Debug)]
@@ -168,14 +168,16 @@ async fn service_invocation_processor(correlation_id: String, path: String,  req
 	let client_req:ServiceInvokeRequestHttp = json;
 
 	let req = if let Ok(bytes) = base64::decode(&client_req.payload){
-	    let method = if let Ok(method)  = HttpMethod::from_str(&client_req.method){
+	    let method = if let Ok(method)  = swir_common::HttpMethod::from_str(&client_req.method){
 		method
 	    }else{
 		*response.status_mut() = StatusCode::BAD_REQUEST;
 		return response
 	    };
-	    ServiceInvokeRequest{
-		method, 
+	    swir_common::InvokeRequest{
+		method: method as i32,
+		correlation_id: correlation_id.clone(),
+		service_name: service_name.clone(),
 		request_target: client_req.request_target.to_owned(),
 		headers: client_req.headers.to_owned(),
 		payload: bytes	    
@@ -186,8 +188,6 @@ async fn service_invocation_processor(correlation_id: String, path: String,  req
 	};
 	
 	let job = SIJobType::PublicInvokeHttp{
-	    correlation_id:correlation_id.clone(),
-	    service_name:service_name.clone(),	    
 	    req
 	};
 	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
@@ -208,10 +208,10 @@ async fn service_invocation_processor(correlation_id: String, path: String,  req
 	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
 	    debug!("Got result {:?}", response_from_service);
 	    if let Ok(res) = response_from_service {
-		set_http_response(res.status, &mut response);
-		if !res.payload.is_empty() {
-		    *response.body_mut() = Body::from(res.payload);
-		}
+		set_http_response(res.status, &mut response);		
+		if let Some(si_response) = res.response{		    
+		    *response.body_mut() = Body::from(format!("{}",si_response));
+		};
 	    } else {
 		*response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
 		*response.body_mut() = Body::empty();
