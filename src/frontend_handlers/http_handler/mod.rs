@@ -489,22 +489,43 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendToRestContext) {
     let req_params = ctx.request_params;
     let uri = req_params.uri;
-    //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
-    let uri = uri.parse::<hyper::Uri>().unwrap();
+    let upper = req_params.method.to_uppercase();
+    let method = upper.as_bytes();    
     
+    //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
+    let uri = uri.parse::<hyper::Uri>().unwrap();    
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri);
 
-
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(hyper::header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"))
-//	.header(hyper::header::HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()), HeaderValue::from_string(payload."application/octet-stream"))
-        .body(Body::from(req_params.payload))
+    for (k,v) in req_params.headers.iter(){
+	let maybe_header = hyper::header::HeaderName::from_bytes(k.as_bytes());
+	let maybe_value = hyper::header::HeaderValue::from_bytes(v.as_bytes());
+	if let (Ok(header), Ok(value)) = (maybe_header, maybe_value){	    
+	    builder = builder.header(header,value);
+	}else{
+	    let msg = format!("Invalid header {}",k).to_string();
+	    debug!("{}",msg);
+	    let res = RESTRequestResult {
+		correlation_id: ctx.correlation_id,
+		status: ClientCallStatusCodes::Error(format!("Invalid header {}",k).to_string()),
+		response_params: RESTResponseParams{
+		    ..Default::default()			    			    
+		}		    
+	    };
+	    if let Some(sender) = ctx.sender{
+		if let Err(e) = sender.send(res) {
+		    warn!("Problem with an internal communication {:?}", e);
+		}
+	    }
+	    return;
+	}	    
+    }
+    let req = builder.body(Body::from(req_params.payload))
         .expect("request builder");
 
-
-    // let p = String::from_utf8_lossy(&p);
-    // info!("Making request for {}", p);
+//    let p = String::from_utf8_lossy(req.as_bytes());
+    info!("Making request for {:?}",req);
 
     if let Some(sender) = ctx.sender{
 	let maybe_response = client.request(req).await;

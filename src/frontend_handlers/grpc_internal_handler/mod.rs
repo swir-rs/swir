@@ -24,12 +24,18 @@ impl SwirServiceInvocationDiscoveryApi {
     }
 }
 
+
+
 #[tonic::async_trait]
 impl swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApi for SwirServiceInvocationDiscoveryApi {    
     async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status>{
 	
 	let req = request.into_inner();
 	debug!("invoke internal : {}",req);
+
+	if !validate_method(req.method){
+	    return Err(tonic::Status::invalid_argument("Unsupported method"));
+	}
 	
 	let job = SIJobType::InternalInvoke{
 	    req

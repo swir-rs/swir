@@ -283,6 +283,10 @@ custom_error!{pub HTTPMethodConversionError
 	    _ => Err(HTTPMethodConversionError::InvalidMethod)
 	}
     }
+ }
+
+pub fn validate_method(method: i32)->bool{
+    swir_common::HttpMethod::from_i32(method).is_some()
 }
 
 impl fmt::Display for swir_common::HttpMethod {

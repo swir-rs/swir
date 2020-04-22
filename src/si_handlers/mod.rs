@@ -65,10 +65,9 @@ async fn invoke_handler(grpc_clients:Arc<Mutex<MultiMap<String, GrpcClient>>>, s
 	
     debug!("public_invoke_handler: correlation {} {}",&correlation_id,&service_name);
     let mut grpc_clients = grpc_clients.lock().await;
-    if let Some(client) = grpc_clients.get_mut(&req.service_name){
-	
+    if let Some(client) = grpc_clients.get_mut(&req.service_name){	
 	let resp = client.invoke(req).await;
-	debug!("public_invoke_handler: got response on internal {:?}",resp);
+	trace!("public_invoke_handler: got response on internal {:?}",resp);
 	if let Ok(result) = resp{
 	    let result = result.into_inner();
 	    let _res = sender.send(SIResult{
@@ -199,14 +198,14 @@ impl ServiceInvocationService{
 			let service_name = req.service_name.clone();
 			let client_endpoint = client_endpoint_mapping.iter().filter(|s| s.service_details.service_name==service_name).map(|s| s.client_url.clone()).nth(0);
 			if let Some(endpoint) = client_endpoint{
-
+			    let method = swir_common::HttpMethod::from_i32(req.method).unwrap();
 			    let mrc = BackendToRestContext {
 				correlation_id: correlation_id.clone(),
 				sender: Some(s),
 				request_params: RESTRequestParams{
 				    payload: req.payload,
 				    headers: req.headers,
-				    method: req.method.to_string(),
+				    method: method.to_string(),
 				    uri: format!("{}{}",endpoint, req.request_target)
 				}
 			    };

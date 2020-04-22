@@ -514,12 +514,18 @@ impl SwirServiceInvocationApi {
     }
 }
 
+
+
 #[tonic::async_trait]
 impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {    
     async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status>{
 	let req = request.into_inner();
 	let correlation_id = req.correlation_id.clone();
-	let service_name = req.service_name.clone();
+	let service_name = req.service_name.clone();	
+	if !validate_method(req.method){
+	    return Err(tonic::Status::invalid_argument("Unsupported method"));
+	}
+	    
         info!("Invoke {}", req);
 	
 	let job = SIJobType::PublicInvokeGrpc{

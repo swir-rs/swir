@@ -9,15 +9,37 @@ import logging
 from io import BytesIO
 
 class S(BaseHTTPRequestHandler):
-    def _set_response(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
 
     def do_GET(self):
-        logging.info("GET ,Path: %s Headers: %s", str(self.path), str(self.headers))
-        self._set_response()
-        self.wfile.write("GET request for {}".format(self.path).encode('utf-8'))
+        content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
+        post_data = self.rfile.read(content_length) # <--- Gets the data itself
+        logging.info("GET, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
+        self.send_response(200)
+        self.end_headers()
+        response = BytesIO()
+        response.write(post_data)
+        self.wfile.write(response.getvalue())
+
+    def do_DELETE(self):
+        content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
+        post_data = self.rfile.read(content_length) # <--- Gets the data itself
+        logging.info("DELETE, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
+        self.send_response(200)
+        self.end_headers()
+        response = BytesIO()
+        response.write(post_data)
+        self.wfile.write(response.getvalue())
+
+    def do_PUT(self):
+        content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
+        post_data = self.rfile.read(content_length) # <--- Gets the data itself
+        logging.info("PUT, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
+        self.send_response(200)
+        self.end_headers()
+        response = BytesIO()
+        response.write(post_data)
+        self.wfile.write(response.getvalue())                
+
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length']) # <--- Gets the size of data

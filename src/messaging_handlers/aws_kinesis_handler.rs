@@ -57,6 +57,7 @@ async fn send_request(subscriptions:  &mut Vec<SubscribeRequest>, p: Vec<u8> ) {
 	    sender: None,
 	    request_params: RESTRequestParams{
 		payload: p.to_vec(),
+		method: "POST".to_string(),
 		uri: subscription.endpoint.url.clone(),
 		..Default::default()
 	    }
