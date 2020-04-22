@@ -28,8 +28,8 @@ public class GrpcClient {
     private static final Logger logger = LoggerFactory.getLogger(GrpcClient.class.getName());
 
     private final ManagedChannel channel;
-    private final ClientApiGrpc.ClientApiBlockingStub blockingStub;
-    private final ClientApiGrpc.ClientApiStub apiStub;
+    private final PubSubApiGrpc.PubSubApiBlockingStub blockingStub;
+    private final PubSubApiGrpc.PubSubApiStub apiStub;
     private static final Random random = new Random();
 
     /**
@@ -48,8 +48,8 @@ public class GrpcClient {
      */
     GrpcClient(ManagedChannel channel) {
         this.channel = channel;
-        blockingStub = ClientApiGrpc.newBlockingStub(channel);
-        apiStub = ClientApiGrpc.newStub(channel);
+        blockingStub = PubSubApiGrpc.newBlockingStub(channel);
+        apiStub = PubSubApiGrpc.newStub(channel);
     }
 
     public void shutdown() throws InterruptedException {
@@ -240,7 +240,7 @@ public class GrpcClient {
     }
 
 
-    io.grpc.stub.StreamObserver<rs.swir.api.client.PublishRequest> biStreamMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String consumer, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+    io.grpc.stub.StreamObserver<rs.swir.api.client.PublishRequest> biStreamMessagesToSidecar(PubSubApiGrpc.PubSubApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String consumer, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
         var responses = new AtomicInteger(0);
 
         try {
@@ -345,7 +345,7 @@ public class GrpcClient {
 //        }
 //    }
 
-    void unaryMessagesToSidecar(ClientApiGrpc.ClientApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String subscriber, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
+    void unaryMessagesToSidecar(PubSubApiGrpc.PubSubApiStub apiStub, int k, int offset, ObjectMapper om, String producer, String subscriber, AtomicInteger sentCount, AtomicLong totalSendTime, Semaphore semaphore) {
         logger.debug(String.format("Executing run %d ", k));
         long start = System.nanoTime();
         try {
@@ -364,7 +364,7 @@ public class GrpcClient {
 
     }
 
-    void sendMessageToSidecar(ClientApiGrpc.ClientApiBlockingStub blockingStub, int c, ObjectMapper om, String producer,String subscriber, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
+    void sendMessageToSidecar(PubSubApiGrpc.PubSubApiBlockingStub blockingStub, int c, ObjectMapper om, String producer,String subscriber, AtomicInteger sentCount) throws JsonProcessingException, ExecutionException, InterruptedException {
         byte[] bytes = new byte[64];
         random.nextBytes(bytes);;
         var p = new Payload().setProducer(producer).setConsumer(subscriber).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));

@@ -1,5 +1,5 @@
 FROM ubuntu:19.10
-RUN apt-get update && apt-get upgrade -y && apt-get install libssl-dev libssl1.1 -y
+RUN apt-get update && apt-get upgrade -y && apt-get install ca-certificates libssl-dev libssl1.1 -y
 COPY demoCA /demoCA
 COPY swir.CA.pem /swir.CA.pem
 ARG executable

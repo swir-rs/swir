@@ -67,15 +67,14 @@ docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
 docker-compose -f docker-compose-infr.yml -p docker up -d
 
 # Create necessary topics for Kafka
-
 sleep 5
-
 
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic processor1_kafka_blue --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic processor3_kafka_red --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic sink1_kafka_green --partitions 2 --replication-factor 1
 
 docker-compose -f docker-compose-example-sidecars.yaml -p app up -d
+sleep 2
 docker-compose -f docker-compose-example-applications.yaml -p app up -d
 
 
