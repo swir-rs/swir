@@ -16,18 +16,21 @@ stores:
 
 services:
   resolver:
-    resolver_type: MDNS
-    
-  resolve_services:
-    - service_name: books
-      domain: swir
-      protocol: tcp
-    - service_name: magazines
-      domain: swir
-      protocol: tcp      
-  announce_services: []
-
+    resolver_type: DynamoDb
+    resolver_config:
+      region : eu-west-1
+      table: swir-service-discovery
+  resolve_services: []
+  announce_services:
+    - service_details:
+        service_name: books
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"
+      
       
 
+
+      
 
 

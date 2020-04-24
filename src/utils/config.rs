@@ -222,9 +222,26 @@ pub struct AnnounceServiceDetails{
     pub client_url: String,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct ResolvedServiceDetails{
+    pub addr: std::net::SocketAddr
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub enum ResolverType{
+    MDNS,
+    DynamoDb,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Resolver{
+    pub resolver_type: ResolverType,
+    pub resolver_config: Option<HashMap<String,String>>,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Services{
+    pub resolver: Resolver,
     pub resolve_services: Vec<ServiceDetails>,
     pub announce_services: Vec<AnnounceServiceDetails>,
 }
@@ -241,7 +258,7 @@ pub struct Swir {
     pub client_executable: Option<String>,
     pub pubsub: PubSub,
     pub stores: Stores,
-    pub services: Services
+    pub services: Option<Services>
 }
 
 impl Swir {

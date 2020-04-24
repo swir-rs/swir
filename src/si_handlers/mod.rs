@@ -1,32 +1,18 @@
-use crate::utils::config::{Services,AnnounceServiceDetails,ServiceDetails};
+use crate::utils::config::{Services};
 use crate::utils::structs::*;
 use tokio::sync::{mpsc,Mutex};
 use std::sync::Arc;
 use multimap::MultiMap;
 use futures::channel::oneshot;
-use rand::{rngs, Rng, SeedableRng};
-use rand::distributions::{Alphanumeric};
 use crate::swir_common;
 use crate::swir_grpc_internal_api;
+use crate::service_discovery::ServiceDiscovery;
+
+
 
 type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<tonic::transport::Channel>;
 
 
-
-
-fn create_domain(svc: &ServiceDetails) -> String{
-    return format!("_{}._{}._{}.local",svc.protocol,svc.service_name,svc.domain);
-}
-
-fn generate_instance_name()->String{
-    rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).take(16).collect()
-}
-
-fn get_service_domain_and_name(svc: &AnnounceServiceDetails) -> (String, String){    
-    let domain = create_domain(&svc.service_details);
-    let name = generate_instance_name();
-    (name, domain)        
-}
 
 fn map_client_to_backend_status_calls(ccsc:ClientCallStatusCodes)->(BackendStatusCodes,swir_common::InvokeResult){
     match ccsc{
@@ -34,6 +20,7 @@ fn map_client_to_backend_status_calls(ccsc:ClientCallStatusCodes)->(BackendStatu
 	ClientCallStatusCodes::Error(msg)=>(BackendStatusCodes::Error(msg.clone()),swir_common::InvokeResult{status: swir_common::InvokeStatus::Error as i32, msg})
     }
 }
+
 
 
 fn parse_service_name(service: &String )-> Option<(String,String)> {   
@@ -95,59 +82,37 @@ async fn invoke_handler(grpc_clients:Arc<Mutex<MultiMap<String, GrpcClient>>>, s
 
 
 pub struct ServiceInvocationService{
-    grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>,
+    grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>    
 }
 
 
 
 impl ServiceInvocationService{
-
     pub fn new()->Self{
 	ServiceInvocationService{
 	    grpc_clients: Arc::new(Mutex::new(MultiMap::<String, GrpcClient>::new())),	    
 	}
     }
-
        
-    pub async fn start(&self, internal_port: u16, services: Services,mut receiver: mpsc::Receiver<RestToSIContext>,http_sender: mpsc::Sender<BackendToRestContext>) {
-
-	
+    pub async fn start<T: ServiceDiscovery>(&self, services: Services,resolver: &T, mut receiver: mpsc::Receiver<RestToSIContext>,http_sender: mpsc::Sender<BackendToRestContext>) {	
 	let services_to_resolve = services.resolve_services.clone();
 	let services_to_announce = services.announce_services.clone();
 
 	let (sender,mut resolve_receiver) = tokio::sync::mpsc::channel(10);
-	let responder = Arc::new(Mutex::new(mdns_responder::Responder::new().unwrap()));
 	
-	let resp = responder.clone();
-	let mut tasks = vec![];
-	let h1 = tokio::spawn(
-	    async move{
-		let services_to_announce = services_to_announce.clone();
-		let responder = resp.lock().await;
-		let tasks = responder.start();
-		for svc in services_to_announce.iter(){
-		    let (mdns_name, mdns_domain) = get_service_domain_and_name(&svc);		  		    
-		    debug!("resolver: announcing service {} {}",mdns_name,mdns_domain);
-		    let _svc = responder.register(
-			mdns_domain.to_owned(),
-			mdns_name.to_owned(),
-			internal_port,
-			&["path=/"],
-		    ).await;		
-		}
 		
-		for svc in services_to_resolve.iter(){
-		    let domain = create_domain(&svc);
-		    debug!("resolver: resolving domain {}",domain);
-		    responder.resolve(domain.to_owned(),sender.clone()).await;
-		}
-		futures::future::join_all(tasks).await;
-	    }
-	);
-	tasks.push(h1);
-
+	let services_to_announce = services_to_announce.clone();			
+	for svc in services_to_announce.iter(){	    
+	    let _svc = resolver.announce(&svc).await;		
+	}
 	
+	for svc in services_to_resolve.iter(){
+	    resolver.resolve(svc,sender.clone()).await;
+	}
+    
+
 	let grpc_clients = self.grpc_clients.clone();
+	let mut tasks = vec![];
 	let h2 = tokio::spawn(
 	    async move {
 		while let Some((service_name,socket_addr)) = resolve_receiver.recv().await{
@@ -167,6 +132,7 @@ impl ServiceInvocationService{
 			};
 		    }
 		}
+		warn!("Channel closed");
 	    });
 	
 	tasks.push(h2);
@@ -260,9 +226,7 @@ impl ServiceInvocationService{
 	    );		     			
 	};
 	
-	let resp = responder.lock().await;
-	resp.shutdown().await;    
-	
+
 	futures::future::join_all(tasks).await;    
     }
 }

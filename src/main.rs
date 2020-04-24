@@ -7,13 +7,12 @@ extern crate lazy_static;
 
 extern crate custom_error;
 
-
-
 mod persistence_handlers;
 mod frontend_handlers;
 mod messaging_handlers;
 mod utils;
 mod si_handlers;
+mod service_discovery;
 
 pub mod swir_grpc_internal_api {
     tonic::include_proto!("swir_internal");
@@ -44,7 +43,8 @@ use futures_util::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 use tokio::net::TcpListener;
 
-use crate::utils::config::MemoryChannels;
+
+use crate::utils::config::*;
 
 
 
@@ -52,7 +52,7 @@ use crate::utils::config::MemoryChannels;
 async fn main() {
     color_backtrace::install();
     env_logger::builder().format_timestamp_nanos().init();
-    let swir_config = utils::config::Swir::new();
+    let swir_config = Swir::new();
 
     let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);
     let mmc = mc.messaging_memory_channels;
@@ -133,8 +133,34 @@ async fn main() {
 
     let config = swir_config.clone();
     let receiver = simc.receiver;
-    let si = tokio::spawn(async move {	
-	si_handlers::ServiceInvocationService::new().start(internal_grpc_port, config.services, receiver,to_si_http_client).await;       
+    
+    let si = tokio::spawn(async move {
+	if let Some(services) = config.services{	    
+	    match services.resolver.resolver_type{
+		ResolverType::MDNS => {		
+		    if let Ok(resolver) = service_discovery::MDNSServiceDiscovery::new(internal_grpc_port){
+			si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver,to_si_http_client).await;
+		    }else{
+			warn!("Problem with resolver");
+		    };
+		},		
+		ResolverType::DynamoDb=>{
+		    if let Some(resolver_config) = &services.resolver.resolver_config{
+			let region = resolver_config.get("region");
+			let table = resolver_config.get("table");
+			if let (Some(r),Some(t)) = (region,table){			
+			    if let Ok(resolver) = service_discovery::DynamoDBServiceDiscovery::new(r.to_string(),t.to_string(),internal_grpc_port){
+				si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver,to_si_http_client).await;
+			    }else{
+				warn!("Problem with resolver");
+			    };											       
+		    }else{
+			    warn!("Problem with resolver: Invalid resolver config");			
+			}
+		    }
+		}
+	    }
+	}	
     });
     tasks.push(si);
 
@@ -220,7 +246,6 @@ async fn main() {
 
 	let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
 	let service_invocation_svc  = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
-
 	
 	let grpc = tonic::transport::Server::builder()
 	    .add_service(service_invocation_svc)

@@ -16,8 +16,10 @@ stores:
 
 services:
   resolver:
-    resolver_type: MDNS
-    
+    resolver_type: DynamoDb
+    resolver_config:
+      region : eu-west-1
+      table: swir-service-discovery  
   resolve_services:
     - service_name: books
       domain: swir

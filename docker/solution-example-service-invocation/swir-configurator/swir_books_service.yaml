@@ -14,7 +14,9 @@ stores:
   redis: []
   dynamodb: []
 
-services: 
+services:
+  resolver:
+    resolver_type: MDNS
   resolve_services: []
   announce_services:
     - service_details:

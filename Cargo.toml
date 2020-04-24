@@ -33,11 +33,12 @@ rustls = "0.17"
 async-stream = "0.2"
 hyper = "0.13"
 http = "0.2"   #hyper = { path = "../hyper" , features = ["runtime","stream"]}
-
+hostname= "0.3"
+get_if_addrs = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_bytes = { version = "0.11"}
-
+currenttimemillis = {version ="*", git = "https://github.com/swir-rs/currenttimemillis-rs"}
 
 
 rdkafka = { version="0.23" } #rdkafka = { version="0.23.1", path = "../rust-rdkafka" }
