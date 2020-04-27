@@ -390,7 +390,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
     debug!("Correlation id {}", correlation_id);
     
     match (req.method(), req.uri().path()) {
-        (&Method::POST, "/publish") => {
+        (&Method::POST, "/pubsub/publish") => {
             let whole_body = get_whole_body(req).await;
             let wb = whole_body.clone();
             let wb = String::from_utf8_lossy(&wb);
@@ -435,7 +435,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             Ok(response)
         }
 
-        (&Method::POST, "/subscribe") => {
+        (&Method::POST, "/pubsub/subscribe") => {
 	    if validate_content_type(&headers).is_none() {
                 return Ok(response);
             }	 
@@ -444,7 +444,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 	    Ok(response)
 	},
 	
-	(&Method::POST, "/unsubscribe") => {
+	(&Method::POST, "/pubsub/unsubscribe") => {
 	    if validate_content_type(&headers).is_none() {
                 return Ok(response);
             }	 
