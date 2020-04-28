@@ -1,0 +1,30 @@
+cluster: ''  # The short name or full Amazon Resource Name (ARN) of the cluster on which to run your service.
+serviceName: '' # [REQUIRED] The name of your service.
+taskDefinition: '' # The family and revision (family.
+loadBalancers: [] 
+serviceRegistries: [] # The details of the service discovery registries to assign to this service.
+
+desiredCount: 1 # The number of instantiations of the specified task definition to place and keep running on your cluster.
+clientToken: '' # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.
+
+capacityProviderStrategy: # The capacity provider strategy to use for the service.
+- capacityProvider: ''  # [REQUIRED] The short name or full Amazon Resource Name (ARN) of the capacity provider.
+  weight: 0 # The weight value designates the relative percentage of the total number of tasks launched that should use the specified capacity provider.
+  base: 0 # The base value designates how many tasks, at a minimum, to run on the specified capacity provider.
+role: '' # The name or full Amazon Resource Name (ARN) of the IAM role that allows Amazon ECS to make calls to your load balancer on your behalf.
+deploymentConfiguration: # Optional deployment parameters that control how many tasks run during the deployment and the ordering of stopping and starting tasks.
+  maximumPercent: 200  # If a service is using the rolling update (ECS) deployment type, the maximum percent parameter represents an upper limit on the number of tasks in a service that are allowed in the RUNNING or PENDING state during a deployment, as a percentage of the desired number of tasks (rounded down to the nearest integer), and while any container instances are in the DRAINING state if the service contains tasks using the EC2 launch type.
+  minimumHealthyPercent: 100 # If a service is using the rolling update (ECS) deployment type, the minimum healthy percent represents a lower limit on the number of tasks in a service that must remain in the RUNNING state during a deployment, as a percentage of the desired number of tasks (rounded up to the nearest integer), and while any container instances are in the DRAINING state if the service contains tasks using the EC2 launch type.
+placementConstraints: [] # An array of placement constraint objects to use for tasks in your service.
+placementStrategy: # The placement strategy objects to use for tasks in your service.
+- type: spread  # The type of placement strategy. Valid values are: random, spread, binpack.
+  field: 'attribute:ecs.availability-zone' # The field to apply the placement strategy against.
+- type: spread  # The type of placement strategy. Valid values are: random, spread, binpack.
+  field: 'instanceId' # The field to apply the placement strategy against.  
+
+schedulingStrategy: REPLICA  # The scheduling strategy to use for the service. Valid values are: REPLICA, DAEMON.
+deploymentController: # The deployment controller to use for the service.
+  type: ECS  # [REQUIRED] The deployment controller type to use. Valid values are: ECS, CODE_DEPLOY, EXTERNAL.
+tags: [] # The metadata that you apply to the service to help you categorize and organize them.
+enableECSManagedTags: false # Specifies whether to enable Amazon ECS managed tags for the tasks within the service.
+propagateTags: SERVICE # Specifies whether to propagate the tags from the task definition or the service to the tasks in the service. Valid values are: TASK_DEFINITION, SERVICE.

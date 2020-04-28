@@ -1,0 +1,11 @@
+name: 'swir-demo-capacity-provider'  # [REQUIRED] The name of the capacity provider.
+autoScalingGroupProvider: # [REQUIRED] The details of the Auto Scaling group for the capacity provider.
+  autoScalingGroupArn: ''  # [REQUIRED] The Amazon Resource Name (ARN) that identifies the Auto Scaling group.
+  managedScaling: # The managed scaling settings for the Auto Scaling group capacity provider.
+    status: ENABLED  # Whether or not to enable managed scaling for the capacity provider. Valid values are: ENABLED, DISABLED.
+    targetCapacity: 100 # The target capacity value for the capacity provider.
+    minimumScalingStepSize: 1 # The minimum number of container instances that Amazon ECS will scale in or scale out at one time.
+    maximumScalingStepSize: 10000 # The maximum number of container instances that Amazon ECS will scale in or scale out at one time.
+  managedTerminationProtection: DISABLED # The managed termination protection setting to use for the Auto Scaling group capacity provider. Valid values are: ENABLED, DISABLED.
+
+

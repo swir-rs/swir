@@ -61,7 +61,7 @@ impl RedisStore{
 			let status = if r2 == "OK" {
 			    BackendStatusCodes::Ok("REDIS is good".to_string())
 			}else{
-			    BackendStatusCodes::Ok(format!("Problem when storing key: {:?}",r2).to_string())
+			    BackendStatusCodes::Ok(format!("Problem when storing key: {}",r2).to_string())
 			};
 			
 			PersistenceResult{
@@ -201,7 +201,7 @@ impl Store for RedisStore {
     async fn configure_store(&self){
 	info!("Configuring Redis store {:?} ", self);
         let f1 = async { self.event_handler().await };
-        let _res = f1.await;
+        f1.await;
 	
     }
 }

@@ -1,6 +1,6 @@
 use futures::future::join_all;
 use async_trait::async_trait;
-use crate::utils::config::{Channels, MessagingMemoryChannels};
+use crate::utils::config::{PubSub, MessagingMemoryChannels};
 
 mod client_handler;
 mod kafka_handler;
@@ -14,7 +14,7 @@ trait Broker {
     async fn configure_broker(&self);
 }
 
-pub async fn configure_broker(messaging: Channels, mc: MessagingMemoryChannels) {
+pub async fn configure_broker(messaging: PubSub, mc: MessagingMemoryChannels) {
     let mut futures = vec![];
    
     for (i,kafka) in messaging.kafka.into_iter().enumerate() {

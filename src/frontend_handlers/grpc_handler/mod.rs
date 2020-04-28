@@ -14,14 +14,12 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use base64;
 
+
 use crate::utils::structs::CustomerInterfaceType::GRPC;
-use crate::utils::structs::{EndpointDesc, Job, MessagingResult, MessagingToRestContext, RestToMessagingContext};
-use crate::utils::structs::{PersistenceJobType, PersistenceResult, RestToPersistenceContext};
+use crate::utils::structs::*;
 
-pub mod swir_grpc_api {
-    tonic::include_proto!("swir");
-}
-
+use crate::swir_grpc_api;
+use crate::swir_common;
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -89,7 +87,7 @@ impl fmt::Display for swir_grpc_api::DeleteRequest{
 pub struct SwirPubSubApi {
     missed_messages: Arc<Mutex<Box<VecDeque<swir_grpc_api::SubscribeResponse>>>>,
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::MessagingToRestContext>>>,
+    pub to_client_receiver: Arc<Mutex<mpsc::Receiver<crate::utils::structs::BackendToRestContext>>>,
 }
 
 impl SwirPubSubApi {
@@ -99,7 +97,7 @@ impl SwirPubSubApi {
 
     pub fn new(
         from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-        to_client_receiver: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
+        to_client_receiver: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
     ) -> SwirPubSubApi {
         let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));
         SwirPubSubApi {
@@ -275,7 +273,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 	info!("Subscribe {}", request);
         let topic = request.topic;
 	let correlation_id = request.correlation_id;	
-	let (to_client_tx,mut to_client_rx) = mpsc::channel::<MessagingToRestContext>(1000);
+	let (to_client_tx,mut to_client_rx) = mpsc::channel::<BackendToRestContext>(1000);
 	let mut small_rng = SmallRng::from_entropy();
 	let mut array: [u8; 32]=[0;32];
 	small_rng.fill(&mut array);
@@ -308,8 +306,8 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
         let (mut tx, rx) = mpsc::channel(1000);
         tokio::spawn(async move {
 	    let mut msgs:i32  = 0;
-	    while let Some(messaging_context) = to_client_rx.recv().await{
-		let s = swir_grpc_api::SubscribeResponse { correlation_id:correlation_id.clone(), payload: messaging_context.payload };
+	    while let Some(ctx) = to_client_rx.recv().await{
+		let s = swir_grpc_api::SubscribeResponse { correlation_id:correlation_id.clone(), payload: ctx.request_params.payload };
 		msgs+=1;
 		debug!("Sending message {}",s);
 		let r = tx.send(Ok(s.clone())).await; //.expect("I should not panic as I should not be here!");
@@ -336,7 +334,6 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 
 #[derive(Debug)]
 pub struct SwirPersistenceApi {
-    missed_messages: Arc<Mutex<Box<VecDeque<swir_grpc_api::SubscribeResponse>>>>,
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>
 }
 
@@ -348,9 +345,7 @@ impl SwirPersistenceApi {
     pub fn new(
         from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     ) -> SwirPersistenceApi {
-        let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));
         SwirPersistenceApi {
-            missed_messages,
             from_client_to_backend_channel_sender
         }
     }
@@ -503,5 +498,74 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
 	    Err(tonic::Status::invalid_argument(format!("Invalid client database name {}",request.database_name)))           
         }
     }
+}
 
+#[derive(Debug)]
+pub struct SwirServiceInvocationApi {
+    pub from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
+}
+
+impl SwirServiceInvocationApi {
+    
+    pub fn new(from_client_to_si_sender: mpsc::Sender<RestToSIContext>) -> Self {
+        SwirServiceInvocationApi {
+            from_client_to_si_sender
+        }
+    }
+}
+
+
+
+#[tonic::async_trait]
+impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {    
+    async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status>{
+	let req = request.into_inner();
+	let correlation_id = req.correlation_id.clone();
+	let service_name = req.service_name.clone();	
+	if !validate_method(req.method){
+	    return Err(tonic::Status::invalid_argument("Unsupported method"));
+	}
+	    
+        info!("Invoke {}", req);
+	
+	let job = SIJobType::PublicInvokeGrpc{
+	    req,
+	};
+	
+	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
+
+	let ctx =RestToSIContext{
+	    job,
+	    sender:local_sender	    
+	};
+	let mut sender = self.from_client_to_si_sender.clone();
+	let res = sender.try_send(ctx);
+	if let Err(e) = res{
+            warn!("Channel is dead {:?}", e);
+	    Err(tonic::Status::internal("Internal error"))
+	}else{    
+	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+
+	    if let Ok(res) = response_from_service {
+		debug!("Got result from internal {}", res);
+		if let Some(si_response) = res.response{
+		    Ok(tonic::Response::new(si_response))		    
+		}else{
+		    Ok(tonic::Response::new(
+			swir_common::InvokeResponse{
+			    correlation_id,
+			    service_name,
+			    result: Some(swir_common::InvokeResult{
+				status: swir_common::InvokeStatus::Error as i32,
+				msg : res.status.to_string()
+			    }),
+			    ..Default::default()
+			}
+		    ))
+		}
+	    } else {
+		Err(tonic::Status::internal("Internal error : canceled"))
+	    }
+	}   
+    }				
 }

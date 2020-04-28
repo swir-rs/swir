@@ -223,7 +223,7 @@ public class TestController {
 
         logger.info("sending request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/publish")
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/pubsub/publish")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 
@@ -242,7 +242,7 @@ public class TestController {
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",clientTopic,"X-Correlation-ID", UUID.randomUUID().toString());
         headers.add("topic", clientTopic);
         var request = new HttpEntity<>(om.writeValueAsString(p), headers);
-        restTemplate.postForEntity(sidecarUrl+"/publish",request,String.class);
+        restTemplate.postForEntity(sidecarUrl+"/pubsub/publish",request,String.class);
         sentCount.incrementAndGet();
 
     }
@@ -263,7 +263,7 @@ public class TestController {
         var p = new ClientSubscribeRequest().setClientTopic(topic).setEndpoint(new EndpointDescription().setUrl(clientUrl).setClientId(clientId));
         logger.info("subscribe request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/json","topic",topic,"X-Correlation-ID", correlationId);
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/subscribe")
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/pubsub/subscribe")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 
@@ -276,7 +276,7 @@ public class TestController {
         var p = new ClientSubscribeRequest().setClientTopic(topic).setEndpoint(new EndpointDescription().setUrl(clientUrl).setClientId(clientId));
         logger.info("unsubscribe request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/json","topic",topic,"X-Correlation-ID", correlationId);
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/unsubscribe")
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/pubsub/unsubscribe")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 

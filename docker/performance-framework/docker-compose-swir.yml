@@ -3,7 +3,7 @@ services:
   swir:
     networks:
       - swir-net
-    image: swir:v2
+    image: swir:v3
     ports:
       - "8080:8080"
       - "8443:8443"
@@ -25,7 +25,7 @@ services:
   swir-kafka-sink1:
     networks:
       - swir-net
-    image: swir-kafka-sink:v2
+    image: swir-kafka-sink:v3
     environment:
       - bootstrap_servers=kafka:9094
       - sink_consumer_topic=Request
@@ -37,7 +37,7 @@ services:
   swir-kafka-sink2:
     networks:
       - swir-net
-    image: swir-kafka-sink:v2
+    image: swir-kafka-sink:v3
     environment:
       - bootstrap_servers=kafka:9094
       - sink_consumer_topic=Request2
@@ -49,7 +49,7 @@ services:
   swir-grpc-sink:
     networks:
       - swir-net
-    image: swir-grpc-sink:v2
+    image: swir-grpc-sink:v3
     ports:
       - "50052:50052"
     environment:
@@ -60,7 +60,7 @@ services:
   swir-kafka-sink-nosidecar:
     networks:
       - swir-net
-    image: swir-kafka-sink:v2
+    image: swir-kafka-sink:v3
     environment:
       - bootstrap_servers=kafka:9094
       - sink_consumer_topic=RequestNoSidecar
@@ -72,7 +72,7 @@ services:
   swir-nats-sink:
     networks:
       - swir-net
-    image: swir-nats-sink:v2
+    image: swir-nats-sink:v3
     environment:
       - bootstrap_servers=nats://nats:4222
     depends_on:
@@ -80,7 +80,7 @@ services:
   swir-java-client:
     networks:
       - swir-net
-    image: swir-java-client:v2
+    image: swir-java-client:v3
     environment:
       - sidecar_url=h2://swir:8080/publish
       - bootstrap_servers=kafka:9094

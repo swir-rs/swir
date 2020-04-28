@@ -1,0 +1,79 @@
+version: '3.7'
+# Sidecars layer. All sidecars are already deployed.
+services:
+  swir-example-si-configurator:
+    networks:
+      - swir-si
+    image: swir-example-si-configurator:v3
+    command: ["/bin/bash","-c","cp /config/* swir_config/"]
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+# step 1 
+# Java gRCP
+  orchestator_sidecar:
+    networks:
+      - swir-si
+    image: swir:v3
+    depends_on:
+      - swir-example-si-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+      - "50052"
+    environment:
+      - swir_config_file=/swir_config/swir_source.yaml
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+# step 2     
+# python REST 
+  books_sidecar:
+    networks:
+      - swir-si
+    image: swir:v3
+    depends_on:
+      - swir-example-si-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+      - "50052"
+    environment:
+      - swir_config_file=/swir_config/swir_books_service.yaml
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+
+# python REST 
+  magazinges_sidecar:
+    networks:
+      - swir-si
+    image: swir:v3
+    depends_on:
+      - swir-example-si-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+      - "50052"
+    environment:
+      - swir_config_file=/swir_config/swir_magazine_service.yaml
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+        
+volumes:
+  swir_config:
+networks:
+  swir-si:
+

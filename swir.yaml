@@ -1,50 +1,88 @@
-client_ip: "127.0.0.1"
+client_ip: "0.0.0.0"
 client_http_port: 8080
 client_https_port: 8443
 client_grpc_port: 50051
+internal_grpc_port: 50052
 client_tls_private_key: "swir.CA.pem"
 client_tls_certificate: "demoCA/cacert.pem"
 #client_executable: "client.jar"
-channels:
-  kafka:
-    - brokers:
-        - "127.0.0.1:9092"
-        - "127.0.0.1:9094"
-      consumer_topics:
-        - consumer_topic: "Response"
-          consumer_group: "swir"
-          client_topic: "SubscribeToAppA"
-      producer_topics:
-        - producer_topic: "Request"
-          client_topic: "ProduceToAppA"
+pubsub:
+  kafka: []
+    # - brokers:
+    #     - "127.0.0.1:9092"
+    #     - "127.0.0.1:9094"
+    #   consumer_topics:
+    #     - consumer_topic: "Response"
+    #       consumer_group: "swir"
+    #       client_topic: "SubscribeToAppA"
+    #   producer_topics:
+    #     - producer_topic: "Request"
+    #       client_topic: "ProduceToAppA"
 
-  nats:
-    - brokers:
-        - "nats://127.0.0.1:4222"
-      consumer_topics:
-        - consumer_topic: "Response"
-          consumer_group: "swir"
-          client_topic: "SubscribeToAppB"
-      producer_topics:
-       - producer_topic: "Request"
-         client_topic: "ProduceToAppB"
+  nats: []
+    # - brokers:
+    #     - "nats://127.0.0.1:4222"
+    #   consumer_topics:
+    #     - consumer_topic: "Response"
+    #       consumer_group: "swir"
+    #       client_topic: "SubscribeToAppB"
+    #   producer_topics:
+    #    - producer_topic: "Request"
+    #      client_topic: "ProduceToAppB"
 
   aws_kinesis: []
-stores:  
-  redis:
-    - nodes: ["redis://127.0.0.1:6379/"]
-      tables:
-        - table_name: "my_db_store1"
-          client_name: "client_store1"
-        - table_name: "my_db_store2"
-          client_name: "client_store2"
-  dynamodb:
-    - region: "eu-west-1"
-      tables:
-        - table_name: "my_db_store3"
-          client_name: "client_store3"
-        - table_name: "my_db_store4"
-          client_name: "client_store4"
   
+stores:  
+  redis: []
+    # - nodes: ["redis://127.0.0.1:6379/"]
+    #   tables:
+    #     - table_name: "my_db_store1"
+    #       client_name: "client_store1"
+    #     - table_name: "my_db_store2"
+    #       client_name: "client_store2"
+  dynamodb: []
+  
+            
+services:
+  private_http_socket: 127.0.0.1:7777
+  resolver:
+    resolver_type: MDNS
+                  
+  resolve_services:
+    - service_name: books
+      domain: swir
+      protocol: tcp
+    - service_name: "localhost:7777"
+      domain: swir
+      protocol: tcp
+    - service_name: magazines
+      domain: swir
+      protocol: tcp      
+  announce_services:
+    - service_details:
+        service_name: books
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"
+    - service_details:
+        service_name: magazines
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"
+    - service_details:
+        service_name: "localhost:7777"
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"            
+
+
+  
+
+
+
+
     
-        
+
+    
+    
+    

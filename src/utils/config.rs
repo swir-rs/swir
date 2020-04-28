@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use crate::utils::structs::{MessagingToRestContext, RestToMessagingContext,RestToPersistenceContext};
+use crate::utils::structs::{BackendToRestContext, RestToMessagingContext,RestToPersistenceContext,RestToSIContext};
 
 #[derive(Hash,PartialEq,Eq)]
 pub enum StoreType {
@@ -165,7 +165,7 @@ impl ClientToBackendDatabaseResolver for DynamoDb{
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct Channels {
+pub struct PubSub {
     pub kafka: Vec<Kafka>,
     pub nats: Vec<Nats>,
     pub aws_kinesis: Vec<AwsKinesis>,
@@ -185,13 +185,14 @@ pub struct MemoryChannelEndpoint<T1,T2> {
 }
 
 pub struct MessagingMemoryChannels {
-    pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,MessagingToRestContext>>,
-    pub nats_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,MessagingToRestContext>>,
-    pub aws_kinesis_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,MessagingToRestContext>>,
-    pub to_client_sender_for_rest: HashMap<String,mpsc::Sender<MessagingToRestContext>>,
-    pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
-    pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<MessagingToRestContext>>>,
-    pub from_client_to_messaging_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>
+    pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,BackendToRestContext>>,
+    pub nats_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,BackendToRestContext>>,
+    pub aws_kinesis_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext,BackendToRestContext>>,
+    pub to_client_sender_for_rest: HashMap<String,mpsc::Sender<BackendToRestContext>>,
+    pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
+    pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
+    pub from_client_to_messaging_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    pub to_si_http_client: mpsc::Sender<BackendToRestContext>
 }
 
 
@@ -203,7 +204,47 @@ pub struct PersistenceMemoryChannels {
 pub struct MemoryChannels {
     pub messaging_memory_channels: MessagingMemoryChannels,
     pub persistence_memory_channels: PersistenceMemoryChannels,
+    pub si_memory_channels: SIMemoryChannel
+}
 
+
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ServiceDetails{
+    pub service_name: String,
+    pub domain: String,
+    pub protocol: String
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AnnounceServiceDetails{
+    pub service_details: ServiceDetails,
+    pub client_url: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ResolvedServiceDetails{
+    pub addr: std::net::SocketAddr
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub enum ResolverType{
+    MDNS,
+    DynamoDb,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Resolver{
+    pub resolver_type: ResolverType,
+    pub resolver_config: Option<HashMap<String,String>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Services{
+    pub private_http_socket: Option<std::net::SocketAddr>,
+    pub resolver: Resolver,
+    pub resolve_services: Vec<ServiceDetails>,
+    pub announce_services: Vec<AnnounceServiceDetails>,
 }
 
 #[derive(Debug, Deserialize,Clone)]
@@ -212,11 +253,13 @@ pub struct Swir {
     pub client_http_port: u16,
     pub client_https_port: u16,
     pub client_grpc_port: u16,
+    pub internal_grpc_port: u16,
     pub client_tls_private_key: String,
     pub client_tls_certificate: String,
     pub client_executable: Option<String>,
-    pub channels: Channels,
+    pub pubsub: PubSub,
     pub stores: Stores,
+    pub services: Option<Services>
 }
 
 impl Swir {
@@ -277,18 +320,20 @@ impl Swir {
 
 fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
     let mut to_client_sender_for_rest_map = HashMap::new();
-    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
-    let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<MessagingToRestContext>, mpsc::Receiver<MessagingToRestContext>) = mpsc::channel(20000);
+    let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
+    let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
 
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));    
     let to_client_sender_for_grpc = to_client_sender_for_grpc;
     let to_client_receiver_for_grpc = Arc::new(Mutex::new(to_client_receiver_for_grpc));
+    let to_client_sender_for_si = to_client_sender_for_rest.clone();
     let box_to_client_sender_for_rest = to_client_sender_for_rest;
+
     
     let mut kafka_memory_channels = vec![];
     let mut from_client_to_messaging_sender = HashMap::new();    
 
-    for kafka_channels in config.channels.kafka.iter() {
+    for kafka_channels in config.pubsub.kafka.iter() {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
@@ -308,7 +353,7 @@ fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
     }
 
     let mut aws_kinesis_memory_channels = vec![];
-    for aws_kinesis_channels in config.channels.aws_kinesis.iter() {
+    for aws_kinesis_channels in config.pubsub.aws_kinesis.iter() {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
            from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
@@ -331,7 +376,7 @@ fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
     let mut nats_memory_channels = vec![];
     #[cfg(feature = "with_nats")]
     {
-        for nats_channels in config.channels.nats.iter() {
+        for nats_channels in config.pubsub.nats.iter() {
             let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
 
 
@@ -351,17 +396,16 @@ fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
             }
         }
     }
-    let mc = MessagingMemoryChannels {
+    MessagingMemoryChannels {
         kafka_memory_channels,
         nats_memory_channels,
 	aws_kinesis_memory_channels,
 	to_client_sender_for_rest:to_client_sender_for_rest_map,
         to_client_receiver_for_rest,
         to_client_receiver_for_grpc,
-        from_client_to_messaging_sender
-    };
-
-    mc
+        from_client_to_messaging_sender,
+	to_si_http_client:to_client_sender_for_si	   
+    }
 }
 
 
@@ -402,9 +446,27 @@ fn create_persistence_channels(config: &Swir)->PersistenceMemoryChannels{
     
 }
 
+pub struct SIMemoryChannel{
+    pub client_sender: mpsc::Sender<RestToSIContext>,
+    pub internal_sender: mpsc::Sender<RestToSIContext>,
+    pub receiver:  mpsc::Receiver<RestToSIContext>,    
+}
+
+
+fn create_service_invocation_channels(_config: &Swir)->SIMemoryChannel{
+	let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToSIContext>, mpsc::Receiver<RestToSIContext>) = mpsc::channel(10);
+	SIMemoryChannel{
+	    client_sender: from_client_sender.clone(),
+	    internal_sender: from_client_sender,
+	    receiver: from_client_receiver		
+	}	
+}
+        
+
 pub fn create_memory_channels(config: &Swir) -> MemoryChannels {
     MemoryChannels{
 	messaging_memory_channels:create_messaging_channels(config),
-	persistence_memory_channels:create_persistence_channels(config)
+	persistence_memory_channels:create_persistence_channels(config),
+	si_memory_channels: create_service_invocation_channels(config)
     }
 }

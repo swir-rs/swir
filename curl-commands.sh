@@ -31,3 +31,13 @@ curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/js
 curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -H "x-database-key: dfkdkfjdkjf" -H "x-database-name: my_db_store1" -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/retrieve
 
 
+
+curl -v -d '{"key1":"value1", "key2":"value2"}' -H "Content-Type: application/json" -H "topic: ProduceToAppA" -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://dawid-gigner-3rd.local:8080/publish
+
+
+curl -v -d '{"method":"POST", "request_target":"/blah/id?value=dfkhdfhkj", "headers":{"Content-type":"Application-json","identity":"bummer"}, "payload":"aGVyZSBiZSBkcmFnb25zLi4uIGxpa2UgZHJhZ29uIGJhbGwK"}' -H "Content-Type: application/json"  -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/serviceinvocation/invoke/service_1
+
+{"ooo":"bllll","dfjhdkjfk":"dskfjkdjf","dfjkdjfkd":"kfjkdjfkdjk"}
+
+curl -v -i -d '{"method":"POST", "request_target":"/blah/id?value=dfkhdfhkj", "headers":{"Content-type":"Application-json","identity":"bummer"}, "payload":"dflk:sdfjkfj"}"}' -H "Content-Type: application/json"  -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/serviceinvocation/invoke/service_1
+

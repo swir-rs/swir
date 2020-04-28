@@ -80,7 +80,7 @@ public class GrpcServer   {
     }
 
 
-    private static class GrpcServerService extends ClientApiGrpc.ClientApiImplBase{
+    private static class GrpcServerService extends PubSubApiGrpc.PubSubApiImplBase{
 
         private BlockingQueue queue = new ArrayBlockingQueue<GrpcEvent>(1000, true);
 

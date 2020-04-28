@@ -62,7 +62,7 @@ public class ProcessorController {
     void sendMessageViaSidecarFlux(byte[] payload, String correlationId) {
         logger.debug("sending request {}", new String(payload));
         final Map<String, String> headersMap = Map.of("content-type","application/octet-stream","topic",producerTopic,"X-Correlation-ID", correlationId);
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/publish")
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/pubsub/publish")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(payload));
         var resp = request.exchange().delaySubscription(Duration.ofMillis(2)).subscribe();
@@ -74,7 +74,7 @@ public class ProcessorController {
         var p = new ClientSubscribeRequest().setClientTopic(topic).setEndpoint(new EndpointDescription().setUrl(clientUrl).setClientId(clientId));
         logger.info("subscribe request {}",p);
         final Map<String, String> headersMap = Map.of("content-type","application/json","topic",topic,"X-Correlation-ID", correlationId);
-        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/subscribe")
+        final WebClient.RequestHeadersSpec<?> request = client.post().uri(sidecarUrl+"/pubsub/subscribe")
                 .headers(httpHeaders -> httpHeaders.setAll(headersMap))
                 .body(BodyInserters.fromValue(om.writeValueAsBytes(p)));
 

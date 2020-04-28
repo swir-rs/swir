@@ -13,12 +13,14 @@
 // limitations under the License.
 
 syntax = "proto3";
+import "common_structs.proto";
+
 
 option java_multiple_files = true;
 option java_package = "rs.swir.api.client";
 option java_outer_classname = "SwirClientApiProto";
 
-package swir;
+package swir_public;
 
 // The definition of API exposed by Sidecar.
 service PubSubApi {
@@ -36,8 +38,13 @@ service PersistenceApi {
     rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
     }  
     rpc Delete (DeleteRequest) returns (DeleteResponse) {
+    }  
+}
+
+service ServiceInvocationApi {
+    rpc Invoke (swir_common.InvokeRequest) returns (swir_common.InvokeResponse) {
     }
-  
+
 }
 
 // Publish message structure.
@@ -82,6 +89,8 @@ message StoreResponse {
   string status = 4;
 }
 
+
+
 message RetrieveRequest {
   string correlation_id=1;
   string database_name=2;
@@ -109,3 +118,34 @@ message DeleteResponse {
   string status = 4;
   bytes payload = 5;
 }
+
+
+
+// message InvokeRequest {
+//   string correlation_id=1;
+//   string service_name=2;
+//   string method = 3;
+//   string request_target = 4;
+//   map<string, string> headers = 5;
+//   bytes payload = 6;
+// }
+
+// enum InvokeStatus {
+//   Ok = 0;
+//   Error = 1;
+// }
+
+// message InvokeResult {
+//   InvokeStatus status =1;
+//   string msg = 2;
+// }
+  
+// message InvokeResponse {
+//   string correlation_id=1;
+//   string service_name=2;
+//   InvokeResult result=3;
+//   map<string, string> headers = 5;
+//   bytes payload = 6;  
+// }
+
+

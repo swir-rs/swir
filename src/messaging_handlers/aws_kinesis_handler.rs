@@ -50,12 +50,17 @@ async fn send_request(subscriptions:  &mut Vec<SubscribeRequest>, p: Vec<u8> ) {
     debug!("Processing message {} {:?}", subscriptions.len(),msg);
     
     for subscription in subscriptions.iter_mut(){
-	let (s, _r) = futures::channel::oneshot::channel();
+
 	debug!("Processing subscription {}", subscription);
-	let mrc = MessagingToRestContext {
-	    sender: s,
-	    payload: p.to_vec(),
-	    uri: subscription.endpoint.url.clone(),
+	let mrc = BackendToRestContext {
+	    correlation_id: subscription.to_string(),
+	    sender: None,
+	    request_params: RESTRequestParams{
+		payload: p.to_vec(),
+		method: "POST".to_string(),
+		uri: subscription.endpoint.url.clone(),
+		..Default::default()
+	    }
         };
 	match subscription.tx.send(mrc).await{
 	    Ok(_) => {
