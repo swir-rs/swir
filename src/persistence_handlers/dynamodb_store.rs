@@ -104,7 +104,7 @@ impl DynamoDbStore{
 			PersistenceResult{
 			    correlation_id: sr.correlation_id,
 			    status: BackendStatusCodes::Ok("DynamoDb is good".to_string()),
-			    payload: payload
+			    payload
 			}
 		    },
 		    Err(e)=>{
@@ -319,7 +319,7 @@ impl Store for DynamoDbStore {
     async fn configure_store(&self){		
 	info!("Configuring DynamoDB store {:?} ", self);
         let f1 = async { self.event_handler().await };
-        let _res = f1.await;
+        f1.await;
     }
 }
 

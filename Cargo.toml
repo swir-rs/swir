@@ -62,7 +62,9 @@ config = { version="*", features = ["with_env_vars"],  git = "https://github.com
 
 redis = { version="0.15",features = ["cluster"]}
 
-mdns-responder={version="0.2", path = "../rust-mdns"}
+#mdns-responder={version="0.2", path = "../rust-mdns"}
+mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
+
 
 [build-dependencies]
 tonic-build = { version="0.1" } #tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }

@@ -1,3 +1,4 @@
+
 pub mod si_http_handler;
 
 use crate::utils::config::{Services};
@@ -25,7 +26,7 @@ fn map_client_to_backend_status_calls(ccsc:ClientCallStatusCodes)->(BackendStatu
 
 
 
-fn parse_service_name(service: &String )-> Option<(String,String)> {   
+fn parse_service_name(service: &str )-> Option<(String,String)> {   
     let ind = service.find('.');
     if let Some(i) = ind{
 	let service_type = String::from(&service[(i+1)..]);
@@ -105,7 +106,7 @@ impl ServiceInvocationService{
 		
 	let services_to_announce = services_to_announce.clone();			
 	for svc in services_to_announce.iter(){	    
-	    let _svc = resolver.announce(&svc).await;		
+	    resolver.announce(&svc).await;		
 	}
 	
 	for svc in services_to_resolve.iter(){
@@ -164,7 +165,7 @@ impl ServiceInvocationService{
 			let (s, r) = futures::channel::oneshot::channel();
 			let correlation_id = req.correlation_id;
 			let service_name = req.service_name.clone();
-			let client_endpoint = client_endpoint_mapping.iter().filter(|s| s.service_details.service_name==service_name).map(|s| s.client_url.clone()).nth(0);
+			let client_endpoint = client_endpoint_mapping.iter().filter(|s| s.service_details.service_name==service_name).map(|s| s.client_url.clone()).next();
 			if let Some(endpoint) = client_endpoint{
 			    let method = swir_common::HttpMethod::from_i32(req.method).unwrap();
 			    let mrc = BackendToRestContext {
@@ -186,14 +187,12 @@ impl ServiceInvocationService{
 					status: BackendStatusCodes::Error("Internal ereror".to_string()),
 					response: None
 				    });						
-			    }else{
-				
-				if let Ok(response_from_client) = r.await{
-				    let (status, result) = map_client_to_backend_status_calls(response_from_client.status);
-				    let _res = ctx.sender.send(					
-					SIResult{
-					    correlation_id:correlation_id.clone(),
-					    status,
+			    }else if let Ok(response_from_client) = r.await{
+				let (status, result) = map_client_to_backend_status_calls(response_from_client.status);
+				let _res = ctx.sender.send(					
+				    SIResult{
+					correlation_id:correlation_id.clone(),
+					status,
 					    response : Some(swir_common::InvokeResponse{
 						correlation_id,
 						service_name,
@@ -201,18 +200,17 @@ impl ServiceInvocationService{
 						payload: response_from_client.response_params.payload.to_owned(),
 						status_code: response_from_client.response_params.status_code as i32,
 						headers: response_from_client.response_params.headers,
-						..Default::default()						    
 					    })
-					});
-				}else{
-				    let _res = ctx.sender.send(
-					SIResult{
-					    correlation_id,
-					    status: BackendStatusCodes::Error("Internal ereror".to_string()),
-					    response: None
-					});			   		
-				}			    			  			    
-			    }
+				    });
+			    }else{
+				let _res = ctx.sender.send(
+				    SIResult{
+					correlation_id,
+					status: BackendStatusCodes::Error("Internal ereror".to_string()),
+					response: None
+				    });			   		
+			    }			    			  			    
+			    
 			}else{
 			    let msg = format!("Can't find client url for service name {}",service_name);
 			    warn!("{}",msg);

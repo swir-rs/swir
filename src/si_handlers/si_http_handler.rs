@@ -186,22 +186,22 @@ async fn service_invocation_processor(req: Request<Body> , from_client_to_si_sen
 pub async fn handler(req: Request<Body>,  from_client_to_si_sender:mpsc::Sender<RestToSIContext>) -> Result<Response<Body>, hyper::Error> {        
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;          
-    match req.method() {
-        &Method::POST => {
+    match *req.method() {
+        Method::POST => {
 	    let response = service_invocation_processor(req, from_client_to_si_sender).await;
 	    Ok(response)
         },
 
-	&Method::PUT => {
+	Method::PUT => {
 	    let response = service_invocation_processor(req, from_client_to_si_sender).await;
 	    Ok(response)
          },
-	&Method::DELETE => {
+	Method::DELETE => {
 	    let response = service_invocation_processor(req, from_client_to_si_sender).await;
 	    Ok(response)
         },
 	
-	&Method::GET => {
+	Method::GET => {
 	    let response = service_invocation_processor(req, from_client_to_si_sender).await;
 	    Ok(response)
         },

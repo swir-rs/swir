@@ -256,7 +256,7 @@ async fn persistence_processor(op_type:PersistenceOperationType, correlation_id:
 	    };
     
 	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Store(sr.clone()),
+		job: PersistenceJobType::Store(sr),
 		sender: local_tx,
 	    };
 	    sender.try_send(job)
@@ -269,7 +269,7 @@ async fn persistence_processor(op_type:PersistenceOperationType, correlation_id:
 	    };
     
 	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Retrieve(rr.clone()),
+		job: PersistenceJobType::Retrieve(rr),
 		sender: local_tx,
 	    };
 	    sender.try_send(job)
@@ -282,7 +282,7 @@ async fn persistence_processor(op_type:PersistenceOperationType, correlation_id:
 	    };
     
 	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Delete(rr.clone()),
+		job: PersistenceJobType::Delete(rr),
 		sender: local_tx,
 	    };
 	    sender.try_send(job)
@@ -460,12 +460,12 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
 	
 	(&Method::POST, "/persistence/retrieve") => {
 	    let response = persistence_processor(PersistenceOperationType::Retrieve, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
-            return Ok(response);
+            Ok(response)
 
 	},
 	(&Method::POST, "/persistence/delete") => {
 	    let response = persistence_processor(PersistenceOperationType::Delete, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
-            return Ok(response);
+            Ok(response)
 
 	},
 	(&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
@@ -473,7 +473,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
                 return Ok(response);
             }	 
 	    let response = service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await;
-            return Ok(response);
+            Ok(response)
 
 	},
 // The 404 Not Found route...
@@ -503,17 +503,18 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 	let maybe_value = hyper::header::HeaderValue::from_bytes(v.as_bytes());
 	if let (Ok(header), Ok(value)) = (maybe_header, maybe_value){	    
 	    builder = builder.header(header,value);
-	}else{
-	    let msg = format!("Invalid header {}",k).to_string();
-	    debug!("{}",msg);
-	    let res = RESTRequestResult {
-		correlation_id: ctx.correlation_id,
-		status: ClientCallStatusCodes::Error(format!("Invalid header {}",k).to_string()),
-		response_params: RESTResponseParams{
-		    ..Default::default()			    			    
-		}		    
-	    };
+	}else{	    
 	    if let Some(sender) = ctx.sender{
+		let msg = format!("Invalid header {}",k);
+		debug!("{}",msg);
+		let res = RESTRequestResult {
+		    correlation_id: ctx.correlation_id,
+		    status: ClientCallStatusCodes::Error(msg.to_string()),
+		    response_params: RESTResponseParams{
+			..Default::default()			    			    
+		    }		    
+		};
+		
 		if let Err(e) = sender.send(res) {
 		    warn!("Problem with an internal communication {:?}", e);
 		}
@@ -536,7 +537,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 		parsed_headers.insert(header.to_string(), String::from(value.to_str().unwrap()));
 	    }
 	    
-	    let rr = if let Ok(body) = hyper::body::to_bytes(response).await{	    
+	    if let Ok(body) = hyper::body::to_bytes(response).await{	    
 		RESTRequestResult {
 		    correlation_id: ctx.correlation_id,
 		    status: ClientCallStatusCodes::Ok("Cool".to_string()),
@@ -544,7 +545,6 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 			payload: body.to_vec(),
 			status_code,
 			headers: parsed_headers,
-			..Default::default()			    			    
 		    }		    
 		}	
 	    }else{
@@ -557,8 +557,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 			..Default::default()			    			    
 		    }		    
 		}			
-	    };
-	    rr	    	    
+	    }	    
 	}else{
 	    RESTRequestResult {
 		correlation_id: ctx.correlation_id,

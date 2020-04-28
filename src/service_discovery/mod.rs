@@ -57,10 +57,10 @@ fn get_ip_addr()->Option<IpAddr>{
 	    }	    	    	    
 	    if let Some(addr) = ip_addr{		
 		if addr < *ip {
-		    ip_addr = Some(ip.clone());	    
+		    ip_addr = Some(*ip);	    
 		}
 	    }else{
-		ip_addr = Some(ip.clone());
+		ip_addr = Some(*ip);
 	    };					    
 	};
 	ip_addr
@@ -120,14 +120,14 @@ impl DynamoDBServiceDiscovery{
 	});
 	
     }
-    async fn announce_internal(client: &DynamoDbClient, table_name: &String, announced_services: &Arc<RwLock<Vec<AnnounceServiceDetails>>>, instance_name:&String,fqdn:&String,ip:&Option<String>,port:u16){
+    async fn announce_internal(client: &DynamoDbClient, table_name: &str, announced_services: &Arc<RwLock<Vec<AnnounceServiceDetails>>>, instance_name:&str,fqdn:&str,ip:&Option<String>,port:u16){
 	for svc in announced_services.read().await.iter(){
 	    let domain = get_domain(&svc);
-	    let _svc = Self::store(&client, &table_name, &instance_name,&domain, &svc.service_details.service_name, &fqdn,ip,port).await;
+	    Self::store(&client, &table_name, &instance_name,&domain, &svc.service_details.service_name, &fqdn,ip,port).await;
 	}	
     }
 
-    async fn retrieve(client: &DynamoDbClient, table_name: &String, listeners:&ResolveListeners){
+    async fn retrieve(client: &DynamoDbClient, table_name: &str, listeners:&ResolveListeners){
 	let mut expression_attribute_values = HashMap::new();
 	expression_attribute_values.insert(":min_size".to_string(),rusoto_dynamodb::AttributeValue{
 	    n:Some("1".to_string()),
@@ -147,7 +147,7 @@ impl DynamoDBServiceDiscovery{
 	let condition_expression = String::from("attribute_exists(last_seen_at) AND attribute_exists(service_name) AND attribute_exists(ip) AND size(fqdn) > :min_size AND size(service_name) > :min_size AND size(ip) > :min_size AND last_seen_at > :cutoff_time");
 	
 	let scan_input = rusoto_dynamodb::ScanInput{
-	    table_name:table_name.clone(),
+	    table_name:table_name.to_string(),
 	    expression_attribute_values: Some(expression_attribute_values),
 	    filter_expression: Some(condition_expression),	    
 	    .. Default::default()			    			    			    			    
@@ -166,7 +166,6 @@ impl DynamoDBServiceDiscovery{
 
 	match scan_output{
 	    Ok(output)=>{
-//		debug!("output => {:?}",output);
 		if let Some(items) = output.items{
 		    let services: Vec<ServiceDesc> = items.iter().map(|hm| (hm.get("service_name"),hm.get("ip"),hm.get("port"), hm.get("domain")))
 
@@ -223,23 +222,23 @@ impl DynamoDBServiceDiscovery{
     }
 
     
-    async fn store(client: &DynamoDbClient, table_name: &String,instance_name:&String, domain:&String, service_name:&String, fqdn:&String, ip:&Option<String>,port:u16 ){
+    async fn store(client: &DynamoDbClient, table_name: &str,instance_name:&str, domain:&str, service_name:&str, fqdn:&str, ip:&Option<String>,port:u16 ){
 	let key_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(fqdn.clone()),
+	    s:Some(fqdn.to_string()),
 	    .. Default::default()			
 	};
 	let fqdn_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(fqdn.clone()),
+	    s:Some(fqdn.to_string()),
 	    .. Default::default()			
 	};
 	
 	let instance_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(instance_name.clone()),
+	    s:Some(instance_name.to_string()),
 	    .. Default::default()			
 	};
 	
 	let domain_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(domain.clone()),
+	    s:Some(domain.to_string()),
 	    .. Default::default()			
 	};
 
@@ -249,7 +248,7 @@ impl DynamoDBServiceDiscovery{
 	};
 
 	let service_name_attr = rusoto_dynamodb::AttributeValue{
-	    s:Some(service_name.clone()),
+	    s:Some(service_name.to_string()),
 	    .. Default::default()			
 	};
 
@@ -277,7 +276,7 @@ impl DynamoDBServiceDiscovery{
 	item.insert("port".to_string(), port_attr);
 	
 	let put_item_input = rusoto_dynamodb::PutItemInput{
-	    table_name: table_name.clone(),
+	    table_name: table_name.to_string(),
 	    item,
 	    return_values:Some("ALL_OLD".to_string()),
 	    .. Default::default()			    			    			    			    

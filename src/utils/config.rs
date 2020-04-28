@@ -396,7 +396,7 @@ fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
             }
         }
     }
-    let mc = MessagingMemoryChannels {
+    MessagingMemoryChannels {
         kafka_memory_channels,
         nats_memory_channels,
 	aws_kinesis_memory_channels,
@@ -405,9 +405,7 @@ fn create_messaging_channels(config: &Swir)->MessagingMemoryChannels{
         to_client_receiver_for_grpc,
         from_client_to_messaging_sender,
 	to_si_http_client:to_client_sender_for_si	   
-    };
-
-    mc
+    }
 }
 
 
