@@ -15,6 +15,7 @@ class S(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length) # <--- Gets the data itself
         logging.info("GET, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
         self.send_response(200)
+        self.send_header('x-swir-greetings','this is a custom header from the farway service behind two swirs')
         self.end_headers()
         response = BytesIO()
         response.write(post_data)
@@ -25,6 +26,7 @@ class S(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length) # <--- Gets the data itself
         logging.info("DELETE, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
         self.send_response(200)
+        self.send_header('x-swir-greetings','this is a custom header from the farway service behind two swirs')
         self.end_headers()
         response = BytesIO()
         response.write(post_data)
@@ -35,6 +37,7 @@ class S(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length) # <--- Gets the data itself
         logging.info("PUT, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
         self.send_response(200)
+        self.send_header('x-swir-greetings','this is a custom header from the farway service behind two swirs')
         self.end_headers()
         response = BytesIO()
         response.write(post_data)
@@ -46,6 +49,7 @@ class S(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length) # <--- Gets the data itself
         logging.info("POST, %s Headers:%s Body:%s", str(self.path), str(self.headers).strip().replace('\n',';'), post_data.decode('utf-8'))
         self.send_response(200)
+        self.send_header('x-swir-greetings','this is a custom header from the farway service behind two swirs')
         self.end_headers()
         response = BytesIO()
         response.write(post_data)

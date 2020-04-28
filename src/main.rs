@@ -12,6 +12,7 @@ mod frontend_handlers;
 mod messaging_handlers;
 mod utils;
 mod si_handlers;
+use si_handlers::{si_http_handler};
 mod service_discovery;
 
 pub mod swir_grpc_internal_api {
@@ -66,6 +67,7 @@ async fn main() {
     let internal_grpc_port: u16 = swir_config.internal_grpc_port;
     let client_executable = swir_config.client_executable.clone();
 
+
     let http_tls_certificate = swir_config.client_tls_certificate.clone();
     let http_tls_key = swir_config.client_tls_private_key.clone();
 
@@ -78,12 +80,14 @@ async fn main() {
     let key = load_private_key(http_tls_key).unwrap();
     
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
+    
     let to_si_http_client = mmc.to_si_http_client.clone();
     
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
 
     let client_sender_for_http = simc.client_sender.clone();
+    let client_sender_for_private_http = client_sender_for_http.clone();
     let client_sender_for_https = simc.client_sender.clone();
     let http_service = make_service_fn(move |_| {
         let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
@@ -133,9 +137,12 @@ async fn main() {
 
     let config = swir_config.clone();
     let receiver = simc.receiver;
-    
-    let si = tokio::spawn(async move {
-	if let Some(services) = config.services{	    
+
+
+    let config_si = config.services.clone();
+    let si = tokio::spawn(async move {		
+	if let Some(services) = config_si{
+
 	    match services.resolver.resolver_type{
 		ResolverType::MDNS => {		
 		    if let Ok(resolver) = service_discovery::MDNSServiceDiscovery::new(internal_grpc_port){
@@ -162,14 +169,32 @@ async fn main() {
 	    }
 	}	
     });
+    
     tasks.push(si);
+
+    let si_private_interface = tokio::spawn(async move {		
+	if let Some(services) = config.services{
+	    if let Some(private_http_socket) = services.private_http_socket{		
+	    	info!("Private invocation service enabled at {}",private_http_socket);
+	    	let http_service = make_service_fn(move |_| {
+	    	    let client_sender_for_http = client_sender_for_private_http.to_owned();
+	    	    async move {
+	    		Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| si_http_handler::handler(req,client_sender_for_http.to_owned())))
+	    	    }
+	    	});
+	    	if let Err(e) = Server::bind(&private_http_socket).serve(http_service).await{
+		    warn!("Problem starting HTTP interface {:?}",e);
+		}
+	    };
+	}	
+    });
+    
+    tasks.push(si_private_interface);
 
     let http_client_interface = tokio::spawn(async move {
 	let res = Server::bind(&client_http_addr).serve(http_service).await;
 	if let Err(e) = res{
 	    warn!("Problem starting HTTP interface {:?}",e);
-	}else{
-	    info!("HTTP Interface started ");
 	}
     });
     tasks.push(http_client_interface);

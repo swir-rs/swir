@@ -1,3 +1,5 @@
+pub mod si_http_handler;
+
 use crate::utils::config::{Services};
 use crate::utils::structs::*;
 use tokio::sync::{mpsc,Mutex};
@@ -197,6 +199,8 @@ impl ServiceInvocationService{
 						service_name,
 						result: Some(result),
 						payload: response_from_client.response_params.payload.to_owned(),
+						status_code: response_from_client.response_params.status_code as i32,
+						headers: response_from_client.response_params.headers,
 						..Default::default()						    
 					    })
 					});

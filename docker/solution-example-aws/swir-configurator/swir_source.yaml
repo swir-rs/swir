@@ -25,6 +25,3 @@ stores:
         - table_name: "swir-demo"
           client_name: "source_store"          
 
-services:  
-  resolve_services: []
-  announce_services: []

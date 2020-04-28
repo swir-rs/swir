@@ -225,6 +225,7 @@ pub struct PersistenceResult {
     pub(crate) payload: Vec<u8>
 }
 
+#[derive(Debug)]
 pub struct SIResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
@@ -243,7 +244,7 @@ impl fmt::Debug for PersistenceResult {
     }
 }
 
-impl fmt::Debug for SIResult {
+impl fmt::Display for SIResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
 	write!(f, "SIResult {{ correlation_id: {}, status :  {}}}", &self.correlation_id, &self.status)
     }
@@ -307,7 +308,7 @@ pub struct RESTRequestParams{
 pub struct RESTResponseParams{
     pub payload: Vec<u8>,
     pub headers: std::collections::HashMap<String,String>,
-    pub status: u16
+    pub status_code: u16
 }
 
 

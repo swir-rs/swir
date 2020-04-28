@@ -48,5 +48,6 @@ message InvokeResponse {
   string service_name=2;
   InvokeResult result=3;
   map<string, string> headers = 5;
-  bytes payload = 6;  
+  int32 status_code =6;
+  bytes payload = 7;  
 }

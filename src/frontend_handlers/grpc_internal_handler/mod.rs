@@ -50,12 +50,13 @@ impl swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInv
 	let mut sender = self.from_client_to_si_sender.clone();
 	let res = sender.try_send(ctx);
 	if let Err(e) = res{
-            warn!("Channel is dead {:?}", e);
+            warn!("invoke internal : Channel is dead {:?}", e);
 	    Err(tonic::Status::internal("Internal error"))
 	}else{    
 	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
-	    debug!("Got result from client {:?}", response_from_service);
+	    
 	    if let Ok(res) = response_from_service {
+		debug!("invoke internal : Got result from client {}", res);
 		if let Some(si_response) = res.response{
 		    Ok(tonic::Response::new(si_response))		    
 		}else{

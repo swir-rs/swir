@@ -545,8 +545,9 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
 	    Err(tonic::Status::internal("Internal error"))
 	}else{    
 	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
-	    debug!("Got result from internal {:?}", response_from_service);
+
 	    if let Ok(res) = response_from_service {
+		debug!("Got result from internal {}", res);
 		if let Some(si_response) = res.response{
 		    Ok(tonic::Response::new(si_response))		    
 		}else{

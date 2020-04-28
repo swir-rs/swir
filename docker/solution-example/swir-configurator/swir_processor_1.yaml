@@ -29,7 +29,5 @@ stores:
   redis: []
   dynamodb: []
 
-services:  
-  resolve_services: []
-  announce_services: []
+
 

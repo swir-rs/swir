@@ -241,6 +241,7 @@ pub struct Resolver{
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Services{
+    pub private_http_socket: Option<std::net::SocketAddr>,
     pub resolver: Resolver,
     pub resolve_services: Vec<ServiceDetails>,
     pub announce_services: Vec<AnnounceServiceDetails>,

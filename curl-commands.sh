@@ -39,5 +39,5 @@ curl -v -d '{"method":"POST", "request_target":"/blah/id?value=dfkhdfhkj", "head
 
 {"ooo":"bllll","dfjhdkjfk":"dskfjkdjf","dfjkdjfkd":"kfjkdjfkdjk"}
 
-curl -v -d '{"method":"POST", "request_target":"/blah/id?value=dfkhdfhkj", "headers":{"Content-type":"Application-json","identity":"bummer"}, "payload":"dflk:sdfjkfj"}"}' -H "Content-Type: application/json"  -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/serviceinvocation/invoke/service_1
+curl -v -i -d '{"method":"POST", "request_target":"/blah/id?value=dfkhdfhkj", "headers":{"Content-type":"Application-json","identity":"bummer"}, "payload":"dflk:sdfjkfj"}"}' -H "Content-Type: application/json"  -H "x-correlation-id:ksjdskjdksjdksjd" -X POST http://localhost:8080/serviceinvocation/invoke/service_1
 

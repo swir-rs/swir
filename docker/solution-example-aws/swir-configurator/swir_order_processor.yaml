@@ -25,6 +25,3 @@ stores:
   dynamodb: []  
 
 
-services:  
-  resolve_services: []
-  announce_services: []

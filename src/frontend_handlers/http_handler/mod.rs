@@ -530,14 +530,20 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     if let Some(sender) = ctx.sender{
 	let maybe_response = client.request(req).await;
 	let res = if let Ok(response) = maybe_response{
-	    let status = response.status().as_u16();
+	    let status_code = response.status().as_u16();
+	    let mut parsed_headers = HashMap::new();
+	    for (header,value) in response.headers().iter(){
+		parsed_headers.insert(header.to_string(), String::from(value.to_str().unwrap()));
+	    }
+	    
 	    let rr = if let Ok(body) = hyper::body::to_bytes(response).await{	    
 		RESTRequestResult {
 		    correlation_id: ctx.correlation_id,
 		    status: ClientCallStatusCodes::Ok("Cool".to_string()),
 		    response_params: RESTResponseParams{
 			payload: body.to_vec(),
-			status,
+			status_code,
+			headers: parsed_headers,
 			..Default::default()			    			    
 		    }		    
 		}	
@@ -546,7 +552,8 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 		    correlation_id: ctx.correlation_id,
 		    status: ClientCallStatusCodes::Error("Something wrong with body".to_string()),
 		    response_params: RESTResponseParams{			
-			status,
+			status_code,
+			headers: parsed_headers,
 			..Default::default()			    			    
 		    }		    
 		}			

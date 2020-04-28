@@ -28,6 +28,3 @@ stores:
           client_name: "source_store"
   dynamodb: []
       
-services:  
-  resolve_services: []
-  announce_services: []
