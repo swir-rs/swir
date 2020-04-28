@@ -28,6 +28,8 @@ The rationale of this point could be explained better with a simple stakeholder 
 - **Corporate security teams** - From the security teams perspective, the sidecar approach should be particularly appealing. Instead of having to vet many different technology stacks with many different ways of securing network connectivity or encrypting data, only a sidecar needs to be thoroughly vetted. Adherence to security principles could be governed and enforced at the enterprise level through changes to the sidecar and without impacting the schedule or functionality of the business logic. Common but complex things such as the use of encryption could be accessible to applications written in different technology stacks through a simple API call to a sidecar. In a braver scenario, a specialised sidecar could encrypt all highly sensitive fields before being written to persistent storage. Again simplifying the life for the application and security teams and helping the enterprise building a better and more secure solution.
 
 ## Usecases
+
+### PubSub
 The example presented in [docker/solution-example](docker/solution-example) shows how applications using completely different technology stacks can talk to each other seamlessly using SWIR sidecars. As shown in the diagram below, we have python/gRPC, java/Springboot and java/gRPC business logic communicating with each other over Kafka/Nats brokers.  
 The use case is broken into two layers:
 
@@ -42,12 +44,20 @@ The real power of sidecars can be appreciated when we consider migrating this ex
 ![Example solution in AWS](./graphics/example-aws-solution.png)
 
 
+### State
+SWIR can abstract your application logic from the nitty-gritty details of how and where the data is stored. SWIR presents a consistent interface and will smooth subtle differences between the engines. Example solutions described above show how SWIR can be used to store data in Redis or Amazon DynamoDB. 
 
-### Similar Frameworks
 
-SWIR has been influenced by Microsoft's [Distributed Application Runtime - Dapr](https://github.com/dapr/dapr).
+### Service Discovery and Invocation 
+Service Discovery and Invocation and yet another use case where sidecars can show their value. Here SWIR sidecars create a service mesh and provide capabilities to advertise, discover and make API calls to services behind them. In service discovery and invocation mode, SWIR serves as an abstraction layer which handles connectivity, authentication, authorisation on behalf of the application's business logic. The figure below shows the general concept where SWIR uses mDNS for advertising and discovering services. Unfortunately, mDNS does not work in AWS, so we provided a simple resolver based on AWS DynamoDB. This resolver is super straightforward and not production-ready, but it should not take much to connect it to Consul or other well-known service registries. 
 
-It is hard to compete with Microsoft's unlimited resources, but someday perhaps SWIR might achieve a parity :)
+![Service Discovery and Invocation ](./graphics/example-solution-sdi.png)
+
+For more details have a look at the examples provided in [docker/solution-example-service-invocation](docker/solution-example-service-invocation) and [docker/solution-example-aws-service-invocation](docker/solution-example-aws-service-invocation).
+
+## Top Level Architecture
+![Diagram](./graphics/swir_architecture.png)
+
 
 ## Rust
 Rust is a safe language, and side by side benchmarks show that the applications which are written in Rust achieve performance comparable with applications written in C or C++. In choosing an implementation language for a sidecar, these two factors are probably the most important. Rust language secure design guarantees that an attacker can't compromise the sidecar due to problems with memory safety. At the same time, since sidecar is responsible for most of the application's system-level functionality, it is crucial to minimise sidecar's impact on the performance. As Rust has no runtime nor garbage collector, it can run very fast and with small latency.
@@ -57,26 +67,23 @@ Rust is a safe language, and side by side benchmarks show that the applications 
 This project is just a starting point to a conversation about sidecars, particularly for solutions consisting of many event-driven components. Even then it has some interesting features mainly because of the quality of crates created and maintained by Rust community:
 SWIR:
  - has moved to asynchronous programming
- - uses [Hyper](https://hyper.rs/) to expose REST interfaces over HTTP or HTTPS
- - uses [Tonic](https://docs.rs/tonic/0.1.1/tonic/index.html) to handle gRPC calls
- - uses [rdkafka](https://github.com/fede1024/rust-rdkafka) to talk to [Kafka](https://kafka.apache.org/) brokers
- - uses [Nats](https://github.com/jedisct1/rust-nats) to talk to [NATS](https://nats.io) brokers
- - uses [rusoto](https://github.com/rusoto/rusoto) AWS SDK for Rust 
- - uses [redis-rs](https://github.com/mitsuhiko/redis-rs) Redis SDK for Rust
- - is using modified [config-rs](https://github.com/swir-rs/config-rs) so various aspects can be configured via a yaml file and environment variables can be easily injected based on an environment
- - SWIR uses conditional compilation which allows creating sidecars with just Kafka or Kafka and NATS
- - SpringBoot and gRPC Java clients and other components allowing testing it end to end
- - SWIR can start the client application (for time being only SpringBoot standalone jars)
+ - uses [Hyper](https://hyper.rs/) to expose REST interfaces over HTTP or HTTPS  
+ - uses [Tonic](https://docs.rs/tonic/0.1.1/tonic/index.html) to handle gRPC calls  
+ - uses [rdkafka](https://github.com/fede1024/rust-rdkafka) to talk to [Kafka](https://kafka.apache.org/) brokers  
+ - uses [Nats](https://github.com/jedisct1/rust-nats) to talk to [NATS](https://nats.io) brokers  
+ - uses [rusoto](https://github.com/rusoto/rusoto) AWS SDK for Rust   
+ - uses [redis-rs](https://github.com/mitsuhiko/redis-rs) Redis SDK for Rust  
+ - is using modified [config-rs](https://github.com/swir-rs/config-rs) so various aspects can be configured via a yaml file and environment variables can be easily injected based on an   environment  
+ - adapted and improved mDNS(https://github.com/swir-rs/rust-mdns) to advertise/resolve services  
+ - SWIR uses conditional compilation which allows creating sidecars with just Kafka or Kafka and NATS  
+ - HTTP and gRPC Java and Python clients and other components allowing testing it end to end  
+ - SWIR can start the client application (for time being only SpringBoot standalone jars)  
    
-
 ## Short Term Roadmap
-- gRPC service meshing at the backend
-- encryption offloading
-- Redis/Cassandra facade
-- logging
-
-## Top Level Architecture
-![Diagram](./graphics/swir_architecture.png)
+- encryption offloading  
+- maybe Cassandra facade  
+- logging and monitoring__
+- better security, TLS everywhere and proper authentication and authorisation
 
 
 # Requirements
@@ -90,5 +97,9 @@ SWIR:
 Generally all the steps are exaplained in cicd.sh scripts.  
 The more advanced scenario how SWIR could be applied to facilitate seamless communication of applications based on different technical stacks [docker/solution-example](docker/solution-example) and [docker/solution-example-aws](docker/solution-example-aws) .  
 The performance harness that is used to measure/compare SWIR against other solutions is in [docker/performance-framework](docker/performance-framework)  
+
+### Similar Frameworks
+
+SWIR has been influenced by Microsoft's [Distributed Application Runtime - Dapr](https://github.com/dapr/dapr). It is hard to compete with Microsoft's unlimited resources, but someday perhaps SWIR might achieve a parity :)
 
 
