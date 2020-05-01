@@ -3,4 +3,5 @@
 !rustycar*
 !target/debug/swir
 !target/release/swir
-!docker/performance-framework/swir-java-client/build/libs/*.jar
+!docker/performance-framework/swir.yaml
+#!docker/performance-framework/swir-java-client/build/libs/*.jar

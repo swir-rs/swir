@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::swir_common;
+use crate::utils::structs::*;
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use futures::stream::StreamExt;
@@ -8,36 +10,31 @@ use http::HeaderValue;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
-use tokio::sync::mpsc;
-use serde::{Deserialize};
+use serde::Deserialize;
 use std::str::FromStr;
-use crate::utils::structs::*;
-use crate::swir_common;
-
+use tokio::sync::mpsc;
 
 #[derive(Debug)]
-enum PersistenceOperationType{
+enum PersistenceOperationType {
     Store,
     Retrieve,
-    Delete    
+    Delete,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ServiceInvokeRequestHttp {
     pub method: String,
     pub request_target: String,
-    pub headers: std::collections::HashMap<String,String>,
-    pub payload: String	
+    pub headers: std::collections::HashMap<String, String>,
+    pub payload: String,
 }
 
+static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
+static X_DATABASE_NAME_HEADER_NAME: &str = "x-database-name";
+static X_DATABASE_KEY_HEADER_NAME: &str = "x-database-key";
+static X_TOPIC_HEADER_NAME: &str = "topic";
 
-static X_CORRRELATION_ID_HEADER_NAME:& str = "x-correlation-id";
-static X_DATABASE_NAME_HEADER_NAME:& str = "x-database-name";
-static X_DATABASE_KEY_HEADER_NAME:& str = "x-database-key";
-static X_TOPIC_HEADER_NAME:& str = "topic";
-
-
-fn extract_value_from_headers(header_name:String, headers: &HeaderMap<HeaderValue>) -> Option<String> {
+fn extract_value_from_headers(header_name: String, headers: &HeaderMap<HeaderValue>) -> Option<String> {
     let header = header::HeaderName::from_lowercase(header_name.as_bytes()).unwrap();
     let maybe_header = headers.get(header);
     if let Some(value) = maybe_header {
@@ -48,21 +45,20 @@ fn extract_value_from_headers(header_name:String, headers: &HeaderMap<HeaderValu
 }
 
 fn extract_topic_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
-    extract_value_from_headers(String::from(X_TOPIC_HEADER_NAME),headers)
+    extract_value_from_headers(String::from(X_TOPIC_HEADER_NAME), headers)
 }
 
 fn extract_correlation_id_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
-    extract_value_from_headers(String::from(X_CORRRELATION_ID_HEADER_NAME),headers)
+    extract_value_from_headers(String::from(X_CORRRELATION_ID_HEADER_NAME), headers)
 }
 
 fn extract_database_name_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
-    extract_value_from_headers(String::from(X_DATABASE_NAME_HEADER_NAME),headers)
+    extract_value_from_headers(String::from(X_DATABASE_NAME_HEADER_NAME), headers)
 }
 
 fn extract_database_key_from_headers(headers: &HeaderMap<HeaderValue>) -> Option<String> {
-    extract_value_from_headers(String::from(X_DATABASE_KEY_HEADER_NAME),headers)
+    extract_value_from_headers(String::from(X_DATABASE_KEY_HEADER_NAME), headers)
 }
-
 
 fn find_channel_by_topic<'a>(
     client_topic: &'a str,
@@ -78,16 +74,15 @@ fn find_channel_by_database_name<'a>(
     from_client_to_persistence_sender.get(database_name)
 }
 
-fn find_to_client_sender<'a>(client_topic: &'a str,to_client_sender: &'a HashMap<String, mpsc::Sender<BackendToRestContext>>)->Option<&'a mpsc::Sender<BackendToRestContext>>{
+fn find_to_client_sender<'a>(client_topic: &'a str, to_client_sender: &'a HashMap<String, mpsc::Sender<BackendToRestContext>>) -> Option<&'a mpsc::Sender<BackendToRestContext>> {
     to_client_sender.get(client_topic)
-	
 }
 
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     match headers.get(http::header::CONTENT_TYPE) {
         Some(header) => {
             if header == HeaderValue::from_static("application/json") {
-		debug!{"Found header {:?}",header}
+                debug! {"Found header {:?}",header}
                 Some(true)
             } else {
                 None
@@ -96,23 +91,22 @@ fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
         None => None,
     }
 }
-    
 
 fn set_http_response(backend_status: BackendStatusCodes, response: &mut Response<Body>) {
     match backend_status {
         BackendStatusCodes::Ok(msg) => {
             *response.status_mut() = StatusCode::OK;
             *response.body_mut() = Body::from(msg);
-        },
+        }
         BackendStatusCodes::Error(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::from(msg);
-        },
+        }
         BackendStatusCodes::NoTopic(msg) => {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::from(msg);
-        },
-	BackendStatusCodes::NoService(msg) => {
+        }
+        BackendStatusCodes::NoService(msg) => {
             *response.status_mut() = StatusCode::NOT_FOUND;
             *response.body_mut() = Body::from(msg);
         }
@@ -129,105 +123,107 @@ async fn get_whole_body(mut req: Request<Body>) -> Vec<u8> {
     whole_body
 }
 
-async fn sub_unsubscribe_handler(is_subscribe: bool, whole_body: Vec<u8>,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<BackendToRestContext>>)->Response<Body>{
+async fn sub_unsubscribe_handler(
+    is_subscribe: bool,
+    whole_body: Vec<u8>,
+    correlation_id: String,
+    from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    to_client_sender_for_rest: &HashMap<String, mpsc::Sender<BackendToRestContext>>,
+) -> Response<Body> {
     let wb = String::from_utf8_lossy(&whole_body);
-    if is_subscribe{
-	info!("Subscribe {} ",wb);
-    }else{
-	info!("Unsubscribe {} ",wb);
+    if is_subscribe {
+        info!("Subscribe {} ", wb);
+    } else {
+        info!("Unsubscribe {} ", wb);
     }
     let maybe_json = serde_json::from_slice(&whole_body);
     match maybe_json {
-        Ok(json) => {
-	    sub_unsubscribe_processor(is_subscribe, json,correlation_id,&from_client_to_backend_channel_sender,&to_client_sender_for_rest).await
-	},
-	Err(e) => {
+        Ok(json) => sub_unsubscribe_processor(is_subscribe, json, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await,
+        Err(e) => {
             warn!("Unable to parse body {:?}", e);
-	    let mut response = Response::new(Body::from(e.to_string()));
+            let mut response = Response::new(Body::from(e.to_string()));
             *response.status_mut() = StatusCode::BAD_REQUEST;
-	    response
+            response
         }
     }
-    
 }
 
-async fn service_invocation_processor(correlation_id: String, path: String,  req: Request<Body> , from_client_to_si_sender: mpsc::Sender<RestToSIContext>)->Response<Body>{
+async fn service_invocation_processor(correlation_id: String, path: String, req: Request<Body>, from_client_to_si_sender: mpsc::Sender<RestToSIContext>) -> Response<Body> {
     let mut response = Response::new(Body::empty());
 
-
     let service_name = path["/serviceinvocation/invoke/".len()..].to_string();
-    info!("service_invocation_processor: {} {:?}",correlation_id, service_name);
-   
-    
+    info!("service_invocation_processor: {} {:?}", correlation_id, service_name);
+
     let whole_body = get_whole_body(req).await;
     let wb = String::from_utf8_lossy(&whole_body);
-    debug!("Body {}",wb);
+    debug!("Body {}", wb);
     let maybe_json = serde_json::from_slice(&whole_body);
-    
-    let response = if let Ok(json) = maybe_json{
-	let client_req:ServiceInvokeRequestHttp = json;
 
-	let req = if let Ok(bytes) = base64::decode(&client_req.payload){
-	    let method = if let Ok(method)  = swir_common::HttpMethod::from_str(&client_req.method){
-		method
-	    }else{
-		*response.status_mut() = StatusCode::BAD_REQUEST;
-		return response
-	    };
-	    swir_common::InvokeRequest{
-		method: method as i32,
-		correlation_id: correlation_id.clone(),
-		service_name: service_name.clone(),
-		request_target: client_req.request_target.to_owned(),
-		headers: client_req.headers.to_owned(),
-		payload: bytes	    
-	    }
-	}else{
-	    *response.status_mut() = StatusCode::BAD_REQUEST;
-	    return response
-	};
-	
-	let job = SIJobType::PublicInvokeHttp{
-	    req
-	};
-	let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
+    let response = if let Ok(json) = maybe_json {
+        let client_req: ServiceInvokeRequestHttp = json;
 
-	let ctx =RestToSIContext{
-	    job,
-	    sender:local_sender	    
-	};
-	let mut sender = from_client_to_si_sender;
-	
-	let res = sender.try_send(ctx);
-	if let Err(e) = res{
+        let req = if let Ok(bytes) = base64::decode(&client_req.payload) {
+            let method = if let Ok(method) = swir_common::HttpMethod::from_str(&client_req.method) {
+                method
+            } else {
+                *response.status_mut() = StatusCode::BAD_REQUEST;
+                return response;
+            };
+            swir_common::InvokeRequest {
+                method: method as i32,
+                correlation_id: correlation_id.clone(),
+                service_name: service_name.clone(),
+                request_target: client_req.request_target.to_owned(),
+                headers: client_req.headers.to_owned(),
+                payload: bytes,
+            }
+        } else {
+            *response.status_mut() = StatusCode::BAD_REQUEST;
+            return response;
+        };
+
+        let job = SIJobType::PublicInvokeHttp { req };
+        let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
+
+        let ctx = RestToSIContext { job, sender: local_sender };
+        let mut sender = from_client_to_si_sender;
+
+        let res = sender.try_send(ctx);
+        if let Err(e) = res {
             warn!("Channel is dead {:?}", e);
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
-	}else{    
-	    debug!("Waiting for response");
-	    let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
-	    debug!("Got result {:?}", response_from_service);
-	    if let Ok(res) = response_from_service {
-		set_http_response(res.status, &mut response);		
-		if let Some(si_response) = res.response{		    
-		    *response.body_mut() = Body::from(format!("{}",si_response));
-		};
-	    } else {
-		*response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-		*response.body_mut() = Body::empty();
-	    }
-	}
-	response			
-    }else{	
-	debug!("Invalid Json {:?}",maybe_json.unwrap_err());
-	*response.status_mut() = StatusCode::NOT_ACCEPTABLE;
-	response
+        } else {
+            debug!("Waiting for response");
+            let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+            debug!("Got result {:?}", response_from_service);
+            if let Ok(res) = response_from_service {
+                set_http_response(res.status, &mut response);
+                if let Some(si_response) = res.response {
+                    *response.body_mut() = Body::from(format!("{}", si_response));
+                };
+            } else {
+                *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                *response.body_mut() = Body::empty();
+            }
+        }
+        response
+    } else {
+        debug!("Invalid Json {:?}", maybe_json.unwrap_err());
+        *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
+        response
     };
-    info!("service_invocation_processor: {} {:?} end",correlation_id, service_name);
+    info!("service_invocation_processor: {} {:?} end", correlation_id, service_name);
     response
 }
 
-async fn persistence_processor(op_type:PersistenceOperationType, correlation_id: String,  headers:&HeaderMap<HeaderValue>,  req: Request<Body> , from_client_to_persistence_sender: &HashMap<String, mpsc::Sender<RestToPersistenceContext>>)->Response<Body>{
+async fn persistence_processor(
+    op_type: PersistenceOperationType,
+    correlation_id: String,
+    headers: &HeaderMap<HeaderValue>,
+    req: Request<Body>,
+    from_client_to_persistence_sender: &HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
+) -> Response<Body> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
     let database_name = extract_database_name_from_headers(headers).unwrap();
@@ -241,154 +237,163 @@ async fn persistence_processor(op_type:PersistenceOperationType, correlation_id:
     } else {
         set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
         return response;
-    };       
-    
-    let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
-    
-    
-    let res = match op_type{
-	PersistenceOperationType::Store=>{
-	    let sr = StoreRequest {
-		correlation_id,
-		payload: whole_body,
-		table_name: database_name.clone(),
-		key:key.clone()		   
-	    };
-    
-	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Store(sr),
-		sender: local_tx,
-	    };
-	    sender.try_send(job)
-	},
-	PersistenceOperationType::Retrieve=>{
-	    let rr = RetrieveRequest {
-		correlation_id,
-		table_name: database_name.clone(),
-		key:key.clone()
-	    };
-    
-	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Retrieve(rr),
-		sender: local_tx,
-	    };
-	    sender.try_send(job)
-	},
-	PersistenceOperationType::Delete=>{
-	    let rr = DeleteRequest {
-		correlation_id,
-		table_name: database_name.clone(),
-		key:key.clone()
-	    };
-    
-	    let job = RestToPersistenceContext {
-		job: PersistenceJobType::Delete(rr),
-		sender: local_tx,
-	    };
-	    sender.try_send(job)
-	}
     };
 
-    if let Err(e) = res{
+    let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
+
+    let res = match op_type {
+        PersistenceOperationType::Store => {
+            let sr = StoreRequest {
+                correlation_id,
+                payload: whole_body,
+                table_name: database_name.clone(),
+                key: key.clone(),
+            };
+
+            let job = RestToPersistenceContext {
+                job: PersistenceJobType::Store(sr),
+                sender: local_tx,
+            };
+            sender.try_send(job)
+        }
+        PersistenceOperationType::Retrieve => {
+            let rr = RetrieveRequest {
+                correlation_id,
+                table_name: database_name.clone(),
+                key: key.clone(),
+            };
+
+            let job = RestToPersistenceContext {
+                job: PersistenceJobType::Retrieve(rr),
+                sender: local_tx,
+            };
+            sender.try_send(job)
+        }
+        PersistenceOperationType::Delete => {
+            let rr = DeleteRequest {
+                correlation_id,
+                table_name: database_name.clone(),
+                key: key.clone(),
+            };
+
+            let job = RestToPersistenceContext {
+                job: PersistenceJobType::Delete(rr),
+                sender: local_tx,
+            };
+            sender.try_send(job)
+        }
+    };
+
+    if let Err(e) = res {
         warn!("Channel is dead {:?}", e);
         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         *response.body_mut() = Body::empty();
-    }else{    
-	debug!("Waiting for store");
-	let response_from_store: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
-	debug!("Got result {:?}", response_from_store);
-	if let Ok(res) = response_from_store {
+    } else {
+        debug!("Waiting for store");
+        let response_from_store: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
+        debug!("Got result {:?}", response_from_store);
+        if let Ok(res) = response_from_store {
             set_http_response(res.status, &mut response);
-	    if !res.payload.is_empty() {
-		*response.body_mut() = Body::from(res.payload);
-	    }
-	} else {
+            if !res.payload.is_empty() {
+                *response.body_mut() = Body::from(res.payload);
+            }
+        } else {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
-	}
-	info!("{:?} end {} {}", op_type, database_name, key);
+        }
+        info!("{:?} end {} {}", op_type, database_name, key);
     }
     response
 }
 
-async fn sub_unsubscribe_processor(is_subscribe: bool, csr: ClientSubscribeRequest,correlation_id:String, from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender_for_rest:&HashMap<String, mpsc::Sender<BackendToRestContext>>)->Response<Body>{
-
+async fn sub_unsubscribe_processor(
+    is_subscribe: bool,
+    csr: ClientSubscribeRequest,
+    correlation_id: String,
+    from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    to_client_sender_for_rest: &HashMap<String, mpsc::Sender<BackendToRestContext>>,
+) -> Response<Body> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
-    
+
     let json: ClientSubscribeRequest = csr;
     let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-    let client_topic =  json.client_topic.clone();
-    
-    if let Some(to_client_sender) = find_to_client_sender(&client_topic,&to_client_sender_for_rest){
-	let endpoint = json.endpoint.clone();			
-	let sb = SubscribeRequest {
-	    correlation_id,
+    let client_topic = json.client_topic.clone();
+
+    if let Some(to_client_sender) = find_to_client_sender(&client_topic, &to_client_sender_for_rest) {
+        let endpoint = json.endpoint.clone();
+        let sb = SubscribeRequest {
+            correlation_id,
             client_interface_type: CustomerInterfaceType::REST,
             client_topic: json.client_topic.clone(),
             endpoint,
-	    tx:Box::new(to_client_sender.clone())
-	};
-	
-	let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
-	
-	let mut sender = if let Some(channel) = maybe_channel {
+            tx: Box::new(to_client_sender.clone()),
+        };
+
+        let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
+
+        let mut sender = if let Some(channel) = maybe_channel {
             channel.clone()
-	} else {
+        } else {
             set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
-	    return response;
-	};
-	let job = if is_subscribe {
-	    RestToMessagingContext {
-		job: Job::Subscribe(sb),
-		sender: local_tx,
-	    }
-	}else{
-	    RestToMessagingContext {
-		job: Job::Unsubscribe(sb),
-		sender: local_tx,
-	    }
-	};
-	
-	debug!("Waiting for broker");
-	if let Err(e) = sender.try_send(job) {
+            return response;
+        };
+        let job = if is_subscribe {
+            RestToMessagingContext {
+                job: Job::Subscribe(sb),
+                sender: local_tx,
+            }
+        } else {
+            RestToMessagingContext {
+                job: Job::Unsubscribe(sb),
+                sender: local_tx,
+            }
+        };
+
+        debug!("Waiting for broker");
+        if let Err(e) = sender.try_send(job) {
             warn!("Channel is dead {:?}", e);
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
+        }
 
-	}
-
-	let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
-	debug!("Got result {:?}", response_from_broker);
-	if let Ok(res) = response_from_broker {
+        let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+        debug!("Got result {:?}", response_from_broker);
+        if let Ok(res) = response_from_broker {
             set_http_response(res.status, &mut response);
-	} else {
+        } else {
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
-	}	
-    }else{
-	set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);			
+        }
+    } else {
+        set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
     }
     response
 }
 
-pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,to_client_sender_for_rest:HashMap<String, mpsc::Sender<BackendToRestContext>>,from_client_to_persistence_sender:HashMap<String, mpsc::Sender<RestToPersistenceContext>>, from_client_to_si_sender:mpsc::Sender<RestToSIContext>) -> Result<Response<Body>, hyper::Error> {
+pub async fn handler(
+    req: Request<Body>,
+    from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+    to_client_sender_for_rest: HashMap<String, mpsc::Sender<BackendToRestContext>>,
+    from_client_to_persistence_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
+    from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
+) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
     let headers = req.headers().clone();
     debug!("Headers {:?}", headers);
 
-    let correlation_id = if let Some(correlation_id) = extract_correlation_id_from_headers(&headers){
-	correlation_id
-    }else{
-	*response.status_mut() = StatusCode::BAD_REQUEST;
+    let correlation_id = if let Some(correlation_id) = extract_correlation_id_from_headers(&headers) {
+        correlation_id
+    } else {
+        *response.status_mut() = StatusCode::BAD_REQUEST;
         *response.body_mut() = Body::empty();
         return Ok(response);
     };
-	
+
     debug!("Correlation id {}", correlation_id);
-    
+
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/pubsub/publish") => {
             let whole_body = get_whole_body(req).await;
@@ -405,7 +410,7 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
             };
 
             let p = PublishRequest {
-		correlation_id,
+                correlation_id,
                 payload: whole_body,
                 client_topic,
             };
@@ -436,53 +441,50 @@ pub async fn handler(req: Request<Body>, from_client_to_backend_channel_sender: 
         }
 
         (&Method::POST, "/pubsub/subscribe") => {
-	    if validate_content_type(&headers).is_none() {
+            if validate_content_type(&headers).is_none() {
                 return Ok(response);
-            }	 
+            }
             let whole_body = get_whole_body(req).await;
-	    response = sub_unsubscribe_handler(true, whole_body,correlation_id,&from_client_to_backend_channel_sender,&to_client_sender_for_rest).await;
-	    Ok(response)
-	},
-	
-	(&Method::POST, "/pubsub/unsubscribe") => {
-	    if validate_content_type(&headers).is_none() {
+            response = sub_unsubscribe_handler(true, whole_body, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await;
+            Ok(response)
+        }
+
+        (&Method::POST, "/pubsub/unsubscribe") => {
+            if validate_content_type(&headers).is_none() {
                 return Ok(response);
-            }	 
+            }
             let whole_body = get_whole_body(req).await;
-	    response = sub_unsubscribe_handler(false, whole_body,correlation_id,&from_client_to_backend_channel_sender,&to_client_sender_for_rest).await;
-	    Ok(response)
-	}
-
-	(&Method::POST, "/persistence/store") => {	  
-	    let response = persistence_processor(PersistenceOperationType::Store, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+            response = sub_unsubscribe_handler(false, whole_body, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await;
             Ok(response)
-	},
-	
-	(&Method::POST, "/persistence/retrieve") => {
-	    let response = persistence_processor(PersistenceOperationType::Retrieve, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
-            Ok(response)
+        }
 
-	},
-	(&Method::POST, "/persistence/delete") => {
-	    let response = persistence_processor(PersistenceOperationType::Delete, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+        (&Method::POST, "/persistence/store") => {
+            let response = persistence_processor(PersistenceOperationType::Store, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
             Ok(response)
+        }
 
-	},
-	(&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
-	    if validate_content_type(&headers).is_none() {
+        (&Method::POST, "/persistence/retrieve") => {
+            let response = persistence_processor(PersistenceOperationType::Retrieve, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+            Ok(response)
+        }
+        (&Method::POST, "/persistence/delete") => {
+            let response = persistence_processor(PersistenceOperationType::Delete, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
+            Ok(response)
+        }
+        (&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
+            if validate_content_type(&headers).is_none() {
                 return Ok(response);
-            }	 
-	    let response = service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await;
+            }
+            let response = service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await;
             Ok(response)
-
-	},
-// The 404 Not Found route...
-	_ => {
-	    warn!("Don't know what to do {} {}",&req.method(), &req.uri());
-	    let mut not_found = Response::default();
-	    *not_found.status_mut() = StatusCode::NOT_FOUND;
-	    Ok(not_found)
-	}
+        }
+        // The 404 Not Found route...
+        _ => {
+            warn!("Don't know what to do {} {}", &req.method(), &req.uri());
+            let mut not_found = Response::default();
+            *not_found.status_mut() = StatusCode::NOT_FOUND;
+            Ok(not_found)
+        }
     }
 }
 
@@ -490,92 +492,83 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     let req_params = ctx.request_params;
     let uri = req_params.uri;
     let upper = req_params.method.to_uppercase();
-    let method = upper.as_bytes();    
-    
+    let method = upper.as_bytes();
+
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
-    let uri = uri.parse::<hyper::Uri>().unwrap();    
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri);
+    let uri = uri.parse::<hyper::Uri>().unwrap();
+    let mut builder = Request::builder().method(method).uri(uri);
 
-    for (k,v) in req_params.headers.iter(){
-	let maybe_header = hyper::header::HeaderName::from_bytes(k.as_bytes());
-	let maybe_value = hyper::header::HeaderValue::from_bytes(v.as_bytes());
-	if let (Ok(header), Ok(value)) = (maybe_header, maybe_value){	    
-	    builder = builder.header(header,value);
-	}else{	    
-	    if let Some(sender) = ctx.sender{
-		let msg = format!("Invalid header {}",k);
-		debug!("{}",msg);
-		let res = RESTRequestResult {
-		    correlation_id: ctx.correlation_id,
-		    status: ClientCallStatusCodes::Error(msg.to_string()),
-		    response_params: RESTResponseParams{
-			..Default::default()			    			    
-		    }		    
-		};
-		
-		if let Err(e) = sender.send(res) {
-		    warn!("Problem with an internal communication {:?}", e);
-		}
-	    }
-	    return;
-	}	    
+    for (k, v) in req_params.headers.iter() {
+        let maybe_header = hyper::header::HeaderName::from_bytes(k.as_bytes());
+        let maybe_value = hyper::header::HeaderValue::from_bytes(v.as_bytes());
+        if let (Ok(header), Ok(value)) = (maybe_header, maybe_value) {
+            builder = builder.header(header, value);
+        } else {
+            if let Some(sender) = ctx.sender {
+                let msg = format!("Invalid header {}", k);
+                debug!("{}", msg);
+                let res = RESTRequestResult {
+                    correlation_id: ctx.correlation_id,
+                    status: ClientCallStatusCodes::Error(msg.to_string()),
+                    response_params: RESTResponseParams { ..Default::default() },
+                };
+
+                if let Err(e) = sender.send(res) {
+                    warn!("Problem with an internal communication {:?}", e);
+                }
+            }
+            return;
+        }
     }
-    let req = builder.body(Body::from(req_params.payload))
-        .expect("request builder");
+    let req = builder.body(Body::from(req_params.payload)).expect("request builder");
 
-//    let p = String::from_utf8_lossy(req.as_bytes());
-    info!("Making request for {:?}",req);
+    //    let p = String::from_utf8_lossy(req.as_bytes());
+    info!("Making request for {:?}", req);
 
-    if let Some(sender) = ctx.sender{
-	let maybe_response = client.request(req).await;
-	let res = if let Ok(response) = maybe_response{
-	    let status_code = response.status().as_u16();
-	    let mut parsed_headers = HashMap::new();
-	    for (header,value) in response.headers().iter(){
-		parsed_headers.insert(header.to_string(), String::from(value.to_str().unwrap()));
-	    }
-	    
-	    if let Ok(body) = hyper::body::to_bytes(response).await{	    
-		RESTRequestResult {
-		    correlation_id: ctx.correlation_id,
-		    status: ClientCallStatusCodes::Ok("Cool".to_string()),
-		    response_params: RESTResponseParams{
-			payload: body.to_vec(),
-			status_code,
-			headers: parsed_headers,
-		    }		    
-		}	
-	    }else{
-		RESTRequestResult {
-		    correlation_id: ctx.correlation_id,
-		    status: ClientCallStatusCodes::Error("Something wrong with body".to_string()),
-		    response_params: RESTResponseParams{			
-			status_code,
-			headers: parsed_headers,
-			..Default::default()			    			    
-		    }		    
-		}			
-	    }	    
-	}else{
-	    RESTRequestResult {
-		correlation_id: ctx.correlation_id,
-		status: ClientCallStatusCodes::Error(format!("Got error {:?}",maybe_response)),
-		response_params: RESTResponseParams{
-		    ..Default::default()			    			    
-		}		    
-	    }	    	    
-	};
-	if let Err(e) = sender.send(res) {
-	    warn!("Problem with an internal communication {:?}", e);
-	}
-    }else{
-	let maybe_response = client.request(req).await;
-	debug!("Got response {:?}",maybe_response);
+    if let Some(sender) = ctx.sender {
+        let maybe_response = client.request(req).await;
+        let res = if let Ok(response) = maybe_response {
+            let status_code = response.status().as_u16();
+            let mut parsed_headers = HashMap::new();
+            for (header, value) in response.headers().iter() {
+                parsed_headers.insert(header.to_string(), String::from(value.to_str().unwrap()));
+            }
+
+            if let Ok(body) = hyper::body::to_bytes(response).await {
+                RESTRequestResult {
+                    correlation_id: ctx.correlation_id,
+                    status: ClientCallStatusCodes::Ok("Cool".to_string()),
+                    response_params: RESTResponseParams {
+                        payload: body.to_vec(),
+                        status_code,
+                        headers: parsed_headers,
+                    },
+                }
+            } else {
+                RESTRequestResult {
+                    correlation_id: ctx.correlation_id,
+                    status: ClientCallStatusCodes::Error("Something wrong with body".to_string()),
+                    response_params: RESTResponseParams {
+                        status_code,
+                        headers: parsed_headers,
+                        ..Default::default()
+                    },
+                }
+            }
+        } else {
+            RESTRequestResult {
+                correlation_id: ctx.correlation_id,
+                status: ClientCallStatusCodes::Error(format!("Got error {:?}", maybe_response)),
+                response_params: RESTResponseParams { ..Default::default() },
+            }
+        };
+        if let Err(e) = sender.send(res) {
+            warn!("Problem with an internal communication {:?}", e);
+        }
+    } else {
+        let maybe_response = client.request(req).await;
+        debug!("Got response {:?}", maybe_response);
     }
-    
-    
 }
 
 pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
