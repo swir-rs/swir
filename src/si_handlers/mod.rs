@@ -6,11 +6,18 @@ use crate::swir_grpc_internal_api;
 use crate::utils::config::Services;
 use crate::utils::structs::*;
 use futures::channel::oneshot;
-use multimap::MultiMap;
+//use multimap::MultiMap;
+
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
+use tokio::time::timeout;
+use std::collections::{VecDeque,HashMap};
+use tonic::transport::{Channel,Endpoint,EndpointManager};
+
+
 
 type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<tonic::transport::Channel>;
+type GrpcClients = HashMap<String, ClientHolder<String>>;
 
 fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendStatusCodes, swir_common::InvokeResult) {
     match ccsc {
@@ -31,26 +38,35 @@ fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendSt
     }
 }
 
-async fn invoke_handler(grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>, sender: oneshot::Sender<SIResult>, req: swir_common::InvokeRequest) {
+async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::Sender<SIResult>, req: swir_common::InvokeRequest) {
     let correlation_id = req.correlation_id.clone();
     let service_name = req.service_name.clone();
 
     debug!("public_invoke_handler: correlation {} {}", &correlation_id, &service_name);
     let mut grpc_clients = grpc_clients.lock().await;
-    if let Some(client) = grpc_clients.get_mut(&req.service_name) {
-        let resp = client.invoke(req).await;
-        trace!("public_invoke_handler: got response on internal {:?}", resp);
-        if let Ok(result) = resp {
-            let result = result.into_inner();
-            let _res = sender.send(SIResult {
+    if let Some(client_holder) = grpc_clients.get_mut(&req.service_name) {	
+        let resp = client_holder.client.invoke(req);
+	let maybe_timeout =timeout(tokio::time::Duration::from_secs(2), resp).await;
+        trace!("public_invoke_handler: got response on internal {:?}", maybe_timeout);
+        if let Ok(grpc_result) = maybe_timeout {
+	    if let Ok(invoke_result) = grpc_result{
+		let result = invoke_result.into_inner();
+		let _res = sender.send(SIResult {
                 correlation_id,
                 status: BackendStatusCodes::Ok("Service call ok".to_string()),
                 response: Some(result),
-            });
+		});
+	    }else{
+		let _res = sender.send(SIResult {
+                    correlation_id,
+                    status: BackendStatusCodes::Error(grpc_result.unwrap_err().to_string()),
+                    response: None,
+		});		
+	    }
         } else {
             let _res = sender.send(SIResult {
                 correlation_id,
-                status: BackendStatusCodes::Error(resp.unwrap_err().to_string()),
+                status: BackendStatusCodes::Error(maybe_timeout.unwrap_err().to_string()),
                 response: None,
             });
         }
@@ -63,14 +79,93 @@ async fn invoke_handler(grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>, 
     }
 }
 
+
+struct ClientHolder<T:PartialEq>{
+    key: T,
+    client: Box<GrpcClient>,
+    endpoint_manager: SimpleEndpointManager
+}
+
+impl<T:PartialEq> PartialEq for ClientHolder<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }    
+}
+
+impl<T:Eq> Eq for ClientHolder<T> {}
+
+#[derive(Clone)]
+struct SimpleEndpointManager{
+    key_counter: usize,
+    managed_endpoints: Box<HashMap<String, usize>>,
+    to_add: Arc<Mutex<VecDeque<(usize, Endpoint)>>>,
+    to_remove: Arc<Mutex<VecDeque<usize>>>,
+
+}
+
+
+impl SimpleEndpointManager{
+    fn new()->Self{
+	SimpleEndpointManager{
+	    key_counter: 1,
+	    managed_endpoints: Box::new(HashMap::new()),
+	    to_add: Arc::new(Mutex::new(VecDeque::new())),
+	    to_remove: Arc::new(Mutex::new(VecDeque::new())),
+	}
+    }
+    
+    async fn add(&mut self,uri:&str, endpoint:Endpoint){
+	let key = if let None= self.managed_endpoints.get(uri){	    
+	    self.key_counter+=1;
+	    self.managed_endpoints.insert(uri.to_string(),self.key_counter);
+	    self.key_counter
+	}else{
+	    debug!("Already exists {}",uri);
+	    return
+	};
+	let mut to_add = self.to_add.lock().await;
+	to_add.push_back((key,endpoint));	 
+    }
+    
+    async fn remove(&mut self, uri:&str){
+	if let Some(key) = self.managed_endpoints.remove(uri){
+ 	    let mut to_remove = self.to_remove.lock().await;
+	    to_remove.push_back(key);	
+	}
+    }
+}
+
+
+impl EndpointManager for SimpleEndpointManager{
+    fn to_add(&self)->Option<(usize,Endpoint)>{
+	match self.to_add.try_lock(){
+	    Ok(mut to_add) => to_add.pop_front(),
+	    Err(e) => {
+		println!("error {:?}",e);
+		None
+	    }
+	}
+		
+    }
+
+    fn to_remove(& self)->Option<usize>{
+	match self.to_remove.try_lock(){
+	    Ok(mut to_remove) => to_remove.pop_front(),
+	    Err(_) => None
+	}
+
+    }
+}
+
+    
 pub struct ServiceInvocationService {
-    grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>,
+    grpc_clients: Arc<Mutex<GrpcClients>>,
 }
 
 impl ServiceInvocationService {
     pub fn new() -> Self {
         ServiceInvocationService {
-            grpc_clients: Arc::new(Mutex::new(MultiMap::<String, GrpcClient>::new())),
+            grpc_clients: Arc::new(Mutex::new(GrpcClients::new())),
         }
     }
 
@@ -94,7 +189,6 @@ impl ServiceInvocationService {
         let h2 = tokio::spawn(async move {
             while let Some(resolved_addr) = resolve_receiver.recv().await {
                 let socket_addr = &resolved_addr.socket_addr;
-                let domain = &resolved_addr.domain;
                 let service_name = &resolved_addr.service_name;
                 let fqdn = &resolved_addr.fqdn;
                 let port = &resolved_addr.port;
@@ -108,16 +202,32 @@ impl ServiceInvocationService {
                 };
 
                 let mut grpc_clients = grpc_clients.lock().await;
-                if !grpc_clients.contains_key(service_name) {
-                    match GrpcClient::connect(uri.clone()).await {
-                        Ok(client) => {
-                            grpc_clients.insert(service_name.clone(), client);
-                        }
-                        Err(e) => {
-                            warn!("Can't connect to {} {:?} with {:?}", domain, uri, e);
-                        }
-                    }
-                };
+		if let Ok(endpoint) = Endpoint::from_shared(uri.to_string()){
+		    let endpoint = endpoint.timeout(std::time::Duration::from_millis(500));		
+		    match grpc_clients.get_mut(service_name){
+			Some(svc_holder) => {
+			    let holder = &mut svc_holder.endpoint_manager;
+			    holder.add(&uri,endpoint).await;
+			},
+			None => {
+			    let manager = SimpleEndpointManager::new();
+			    let mut endpoint_manager = Box::new(manager.clone());
+			    endpoint_manager.add(&uri,endpoint).await;
+			    let channel = Channel::balance_with_manager(endpoint_manager.clone());
+			    let client = GrpcClient::new(channel);
+			    grpc_clients.insert(service_name.clone(), ClientHolder{
+				key:uri,
+				client:Box::new(client),
+				endpoint_manager:manager
+			    });
+			}
+		    }
+		}else{
+		    warn!("invalid uri {}",&uri);
+		    continue;
+		};
+		
+
             }
             warn!("Channel closed");
         });
