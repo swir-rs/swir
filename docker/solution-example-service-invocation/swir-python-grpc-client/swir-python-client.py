@@ -46,23 +46,28 @@ def run():
     logger.info("Sidecar is %s" % sidecar)
     logger.info("Service names is %s" % str(service_names))
     with grpc.insecure_channel(sidecar) as channel:
-        service_invocation_api_stub = client_api_pb2_grpc.ServiceInvocationApiStub(channel)        
+        service_invocation_api_stub = client_api_pb2_grpc.ServiceInvocationApiStub(channel)
+        k=0
         while True:
             for service_name in service_names:                
                 corr_id = str(uuid.uuid4())
-                payload = randomword(50).encode()
-                service_id = randomword(10).encode()
-                logger.info("Sending %s %s %s" %(service_name, corr_id, payload));
+                k=k+1
+                payload = service_name+"--"+str(k)+"--"+randomword(50)
+                payload = payload.encode()
+                
                 for i in range(4):
+                    logger.info("Sending %s %s %s %s" %(str(i),service_name, corr_id, payload));
                     headers = {'Content-type':'application/json'}
                     headers['x-client-corr-id']=str(uuid.uuid4())
-                    headers['Host']='192.168.2.45:8090'
+                    headers['Host']='service_name.swir.rs:8090'
                     response = service_invocation_api_stub.Invoke(common_structs_pb2.InvokeRequest(correlation_id=corr_id,method=i,service_name=service_name,headers=headers,request_target="/"+service_name+"?"+service_name+"Id=1223434",payload=payload))
-                if response.result.status == common_structs_pb2.InvokeStatus.Error:
-                    logger.warning("Received %s %s %s " %(service_name, response.correlation_id, str(response.result).replace('\n',' ')))
-                else:
-                    logger.info("Received %s %s %s %s " %(service_name, response.correlation_id, str(response.result).replace('\n',' '),str(response.payload)))
-                time.sleep(5)                                                                        
+                    if response.result.status == common_structs_pb2.InvokeStatus.Error:
+                        logger.warning("Received %s %s %s %s " %(str(i), service_name, response.correlation_id, str(response.result).replace('\n',' ')))
+                    else:
+                        logger.info("Received %s %s %s %s %s " %(str(i), service_name, response.correlation_id, str(response.result).replace('\n',' '),str(response.payload)))
+                    time.sleep(1)
+                time.sleep(2)                    
+                    
             
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)

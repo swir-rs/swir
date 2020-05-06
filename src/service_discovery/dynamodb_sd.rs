@@ -204,7 +204,7 @@ impl DynamoDBServiceDiscovery {
                         let domain = &svc_desc.domain;
                         let ip = svc_desc.ip.parse::<IpAddr>().unwrap();
                         let port = svc_desc.port.parse::<u16>().unwrap();
-                        let sock = SocketAddr::from((ip, port));
+                        let _sock = SocketAddr::from((ip, port));
                         let fqdn = &svc_desc.fqdn;
 
                         if let Some(channels) = listeners.get_vec_mut(svc_name) {

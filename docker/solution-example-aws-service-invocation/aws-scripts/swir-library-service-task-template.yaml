@@ -39,7 +39,7 @@ containerDefinitions: # [REQUIRED] A list of container definitions in JSON forma
       awslogs-stream-prefix: ecs
 
 
-- name: 'swir-example-java-source'  # The name of a container.
+- name: 'swir-example-source'  # The name of a container.
   image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-example-si-python-grpc-client:v3'
   memory: 500 # The amount (in MiB) of memory to present to the container.
   portMappings: [] # The list of port mappings for the container.
