@@ -42,8 +42,7 @@ use tokio_rustls::TlsAcceptor;
 use crate::utils::config::*;
 
 #[tokio::main(core_threads = 8)]
-async fn main() {
-    color_backtrace::install();
+async fn main() {    
     env_logger::builder().format_timestamp_nanos().init();
     let swir_config = Swir::new();
 

@@ -11,8 +11,9 @@ use futures::channel::oneshot;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
-use std::collections::{VecDeque,HashMap};
-use tonic::transport::{Channel,Endpoint,EndpointManager};
+use std::collections::HashMap;
+use tonic::transport::{Channel,Endpoint};
+use tower::discover::Change;
 
 
 
@@ -83,7 +84,7 @@ async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::
 struct ClientHolder<T:PartialEq>{
     key: T,
     client: Box<GrpcClient>,
-    endpoint_manager: SimpleEndpointManager
+    endpoint_manager: SimpleEndpointManager<usize>
 }
 
 impl<T:PartialEq> PartialEq for ClientHolder<T> {
@@ -95,65 +96,39 @@ impl<T:PartialEq> PartialEq for ClientHolder<T> {
 impl<T:Eq> Eq for ClientHolder<T> {}
 
 #[derive(Clone)]
-struct SimpleEndpointManager{
-    key_counter: usize,
-    managed_endpoints: Box<HashMap<String, usize>>,
-    to_add: Arc<Mutex<VecDeque<(usize, Endpoint)>>>,
-    to_remove: Arc<Mutex<VecDeque<usize>>>,
-
+struct SimpleEndpointManager<K:Copy+std::ops::AddAssign+std::convert::From<u16>>{
+    key_counter: K,
+    managed_endpoints: Box<HashMap<String, K>>,
+    rx:tokio::sync::mpsc::Sender<Change<K,Endpoint>>	
 }
 
 
-impl SimpleEndpointManager{
-    fn new()->Self{
+impl<K:Copy+std::ops::AddAssign+std::convert::From<u16>> SimpleEndpointManager<K>{
+    fn new(rx:tokio::sync::mpsc::Sender<Change<K,Endpoint>>)->Self{
 	SimpleEndpointManager{
-	    key_counter: 1,
+	    key_counter: K::from(1u16),
 	    managed_endpoints: Box::new(HashMap::new()),
-	    to_add: Arc::new(Mutex::new(VecDeque::new())),
-	    to_remove: Arc::new(Mutex::new(VecDeque::new())),
+	    rx
 	}
     }
     
     async fn add(&mut self,uri:&str, endpoint:Endpoint){
-	let key = if let None= self.managed_endpoints.get(uri){	    
-	    self.key_counter+=1;
-	    self.managed_endpoints.insert(uri.to_string(),self.key_counter);
-	    self.key_counter
+	if let None= self.managed_endpoints.get(uri){	    
+	    self.key_counter+=K::from(1u16);
+	    if let Ok(_) =  self.rx.send(Change::Insert(self.key_counter,endpoint)).await{
+		self.managed_endpoints.insert(uri.to_string(),self.key_counter);
+	    }
+	    
 	}else{
 	    debug!("Already exists {}",uri);
 	    return
 	};
-	let mut to_add = self.to_add.lock().await;
-	to_add.push_back((key,endpoint));	 
     }
     
     async fn remove(&mut self, uri:&str){
 	if let Some(key) = self.managed_endpoints.remove(uri){
- 	    let mut to_remove = self.to_remove.lock().await;
-	    to_remove.push_back(key);	
+	    let _res = self.rx.send(Change::Remove(key)).await;
 	}
-    }
-}
-
-
-impl EndpointManager for SimpleEndpointManager{
-    fn to_add(&self)->Option<(usize,Endpoint)>{
-	match self.to_add.try_lock(){
-	    Ok(mut to_add) => to_add.pop_front(),
-	    Err(e) => {
-		println!("error {:?}",e);
-		None
-	    }
-	}
-		
-    }
-
-    fn to_remove(& self)->Option<usize>{
-	match self.to_remove.try_lock(){
-	    Ok(mut to_remove) => to_remove.pop_front(),
-	    Err(_) => None
-	}
-
     }
 }
 
@@ -210,10 +185,12 @@ impl ServiceInvocationService {
 			    holder.add(&uri,endpoint).await;
 			},
 			None => {
-			    let manager = SimpleEndpointManager::new();
+			    let (rx, tx):(tokio::sync::mpsc::Sender<Change<usize,Endpoint>>, tokio::sync::mpsc::Receiver<Change<usize,Endpoint>>) = tokio::sync::mpsc::channel(10);
+
+			    let manager = SimpleEndpointManager::new(rx);
 			    let mut endpoint_manager = Box::new(manager.clone());
 			    endpoint_manager.add(&uri,endpoint).await;
-			    let channel = Channel::balance_with_manager(endpoint_manager.clone());
+			    let channel = Channel::balance_channel(tx);
 			    let client = GrpcClient::new(channel);
 			    grpc_clients.insert(service_name.clone(), ClientHolder{
 				key:uri,
