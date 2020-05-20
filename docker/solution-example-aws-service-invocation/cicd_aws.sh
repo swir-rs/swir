@@ -16,7 +16,7 @@ cd docker/solution-example-aws-service-invocation
 
 source ../../secure.sh
 
-cd ./swir-configurator
+cd ../solution-example-service-invocation/swir-configurator
 printf "\n**********************\n"
 printf "\nConfigurator \n"
 docker build --tag swir-example-aws-si-configurator:v3 .

@@ -1,5 +1,4 @@
 //#![Deny(warnings)]
-
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -51,20 +50,20 @@ async fn main() {
     let pmc = mc.persistence_memory_channels;
     let simc = mc.si_memory_channels;
 
-    let client_ip = swir_config.client_ip.clone();
-    let client_https_port: u16 = swir_config.client_https_port;
-    let client_http_port: u16 = swir_config.client_http_port;
-    let client_grpc_port: u16 = swir_config.client_grpc_port;
+    let ip = swir_config.ip.clone();
+    let https_port: u16 = swir_config.https_port;
+    let http_port: u16 = swir_config.http_port;
+    let grpc_port: u16 = swir_config.grpc_port;
     let internal_grpc_port: u16 = swir_config.internal_grpc_port;
     let client_executable = swir_config.client_executable.clone();
 
-    let http_tls_certificate = swir_config.client_tls_certificate.clone();
-    let http_tls_key = swir_config.client_tls_private_key.clone();
+    let http_tls_certificate = swir_config.tls_certificate.clone();
+    let http_tls_key = swir_config.tls_private_key.clone();
 
-    let client_https_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_https_port);
-    let client_http_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_http_port);
-    let client_grpc_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), client_grpc_port);
-    let internal_grpc_addr = std::net::SocketAddr::new(client_ip.parse().unwrap(), internal_grpc_port);
+    let https_addr = std::net::SocketAddr::new(ip.parse().unwrap(), https_port);
+    let http_addr = std::net::SocketAddr::new(ip.parse().unwrap(), http_port);
+    let grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), grpc_port);
+    let internal_grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), internal_grpc_port);
     let certs = load_certs(http_tls_certificate).unwrap();
     // Load private key.
     let key = load_private_key(http_tls_key).unwrap();
@@ -175,9 +174,9 @@ async fn main() {
     });
 
     tasks.push(si);
-
+    let maybe_si_pi_config = config.services.clone();
     let si_private_interface = tokio::spawn(async move {
-        if let Some(services) = config.services {
+        if let Some(services) = maybe_si_pi_config {
             if let Some(private_http_socket) = services.private_http_socket {
                 info!("Private invocation service enabled at {}", private_http_socket);
                 let http_service = make_service_fn(move |_| {
@@ -194,7 +193,7 @@ async fn main() {
     tasks.push(si_private_interface);
 
     let http_client_interface = tokio::spawn(async move {
-        let res = Server::bind(&client_http_addr).serve(http_service).await;
+        let res = Server::bind(&http_addr).serve(http_service).await;
         if let Err(e) = res {
             warn!("Problem starting HTTP interface {:?}", e);
         }
@@ -206,7 +205,7 @@ async fn main() {
         config.set_single_cert(certs, key).expect("invalid key or certificate");
         let tls_acceptor = TlsAcceptor::from(Arc::new(config));
         let _arc_acceptor = Arc::new(tls_acceptor);
-        let mut listener = TcpListener::bind(&client_https_addr).await.unwrap();
+        let mut listener = TcpListener::bind(&https_addr).await.unwrap();
         let incoming = listener.incoming();
 
         let incoming = hyper::server::accept::from_stream(incoming.filter_map(|socket| async {
@@ -252,26 +251,38 @@ async fn main() {
             .add_service(pub_sub_svc)
             .add_service(persistence_svc)
             .add_service(service_invocation_svc)
-            .serve(client_grpc_addr);
+            .serve(grpc_addr);
 
         let res = grpc.await;
         if let Err(e) = res {
             warn!("Problem starting gRPC interface {:?}", e);
         }
     });
+    
 
     tasks.push(grpc_client_interface);
-
+    let si_config = config.services.clone();
     let grpc_internal_interface = tokio::spawn(async move {
-        let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
-        let service_invocation_svc = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
+	if let Some(services) = si_config {
+	    let tls_config = services.tls_config;
+            let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
+            let service_invocation_svc = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
+	    
+	    let cert = tokio::fs::read(tls_config.server_cert).await.unwrap();
+	    let key = tokio::fs::read(tls_config.server_key).await.unwrap();
+	    let server_identity = tonic::transport::Identity::from_pem(cert, key);	
+	    let client_ca_cert = tokio::fs::read(tls_config.client_ca_cert).await.unwrap();
+	    let client_ca_cert = tonic::transport::Certificate::from_pem(client_ca_cert);
 
-        let grpc = tonic::transport::Server::builder().add_service(service_invocation_svc).serve(internal_grpc_addr);
-
-        let res = grpc.await;
-        if let Err(e) = res {
-            warn!("Problem starting gRPC interface {:?}", e);
-        }
+	    let tls = tonic::transport::ServerTlsConfig::new().identity(server_identity).client_ca_root(client_ca_cert);
+			    
+            let grpc = tonic::transport::Server::builder().tls_config(tls).add_service(service_invocation_svc).serve(internal_grpc_addr);
+	    
+            let res = grpc.await;
+            if let Err(e) = res {
+		warn!("Problem starting gRPC interface {:?}", e);
+            }
+	}
     });
     tasks.push(grpc_internal_interface);
 

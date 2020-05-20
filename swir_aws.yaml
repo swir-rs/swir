@@ -1,9 +1,9 @@
-client_ip: "127.0.0.1"
-client_http_port: 8080
-client_https_port: 8443
-client_grpc_port: 50051
-client_tls_private_key: "swir.CA.pem"
-client_tls_certificate: "demoCA/cacert.pem"
+ip: "127.0.0.1"
+http_port: 8080
+https_port: 8443
+grpc_port: 50051
+tls_private_key: "swir.CA.pem"
+tls_certificate: "demoCA/cacert.pem"
 #client_executable: "client.jar"
 channels:
   kafka:

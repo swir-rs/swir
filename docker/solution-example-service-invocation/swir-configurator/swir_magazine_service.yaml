@@ -1,10 +1,10 @@
-client_ip: "0.0.0.0"
-client_http_port: 8080
-client_https_port: 8443
-client_grpc_port: 50051
+ip: "0.0.0.0"
+http_port: 8080
+https_port: 8443
+grpc_port: 50051
 internal_grpc_port: 50052
-client_tls_private_key: "/swir.CA.pem"
-client_tls_certificate: "/demoCA/cacert.pem"
+tls_private_key: "/swir.CA.pem"
+tls_certificate: "/demoCA/cacert.pem"
 
 pubsub:
   kafka: []
@@ -15,6 +15,14 @@ stores:
   dynamodb: []
 
 services:
+  tls_config: 
+    client_ca_cert: /certs/ca-chain.cert.pem
+    client_cert: /certs/client.internal_grpc.swir.rs.cert.pem
+    client_key: /certs/client.internal_grpc.swir.rs.key.pem
+    server_ca_cert: /certs/ca-chain.cert.pem
+    server_cert: /certs/server.internal_grpc.swir.rs.cert.pem
+    server_key: /certs/server.internal_grpc.swir.rs.key.pem
+    domain_name: demo.swir.rs
   resolver:
     resolver_type: MDNS
   resolve_services: []

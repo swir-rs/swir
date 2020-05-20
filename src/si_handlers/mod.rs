@@ -12,12 +12,12 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
 use std::collections::HashMap;
-use tonic::transport::{Channel,Endpoint};
+use tonic::transport::{Channel,Endpoint,ClientTlsConfig,Identity,Certificate};
 use tower::discover::Change;
 
 
 
-type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<tonic::transport::Channel>;
+type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<Channel>;
 type GrpcClients = HashMap<String, ClientHolder<String>>;
 
 fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendStatusCodes, swir_common::InvokeResult) {
@@ -159,6 +159,17 @@ impl ServiceInvocationService {
             resolver.resolve(svc, sender.clone()).await;
         }
 
+	let server_root_ca_cert = tokio::fs::read(services.tls_config.server_ca_cert).await.unwrap();
+	let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert.clone());
+	let client_cert =
+            tokio::fs::read(services.tls_config.client_cert.clone()).await.unwrap();
+	let client_key =
+            tokio::fs::read(services.tls_config.client_key.clone()).await.unwrap();
+	let client_identity = Identity::from_pem(client_cert, client_key);
+	let domain_name = services.tls_config.domain_name.clone();
+	
+
+
         let grpc_clients = self.grpc_clients.clone();
         let mut tasks = vec![];
         let h2 = tokio::spawn(async move {
@@ -178,6 +189,13 @@ impl ServiceInvocationService {
 
                 let mut grpc_clients = grpc_clients.lock().await;
 		if let Ok(endpoint) = Endpoint::from_shared(uri.to_string()){
+
+		    let tls = ClientTlsConfig::new()
+			.domain_name(domain_name.clone())
+			.ca_certificate(server_root_ca_cert.clone())
+			.identity(client_identity.clone());
+		    
+		    let endpoint = endpoint.tls_config(tls);
 		    let endpoint = endpoint.timeout(std::time::Duration::from_millis(500));		
 		    match grpc_clients.get_mut(service_name){
 			Some(svc_holder) => {
@@ -185,13 +203,13 @@ impl ServiceInvocationService {
 			    holder.add(&uri,endpoint).await;
 			},
 			None => {
-			    let (rx, tx):(tokio::sync::mpsc::Sender<Change<usize,Endpoint>>, tokio::sync::mpsc::Receiver<Change<usize,Endpoint>>) = tokio::sync::mpsc::channel(10);
 
-			    let manager = SimpleEndpointManager::new(rx);
+			    let (channel, tx) = Channel::balance_channel(10);
+			    let manager = SimpleEndpointManager::new(tx);
 			    let mut endpoint_manager = Box::new(manager.clone());
 			    endpoint_manager.add(&uri,endpoint).await;
-			    let channel = Channel::balance_channel(tx);
 			    let client = GrpcClient::new(channel);
+			    
 			    grpc_clients.insert(service_name.clone(), ClientHolder{
 				key:uri,
 				client:Box::new(client),
