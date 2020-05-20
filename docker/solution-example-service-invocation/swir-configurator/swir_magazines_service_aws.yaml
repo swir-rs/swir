@@ -24,18 +24,19 @@ services:
     server_key: /certs/server.internal_grpc.swir.rs.key.pem
     domain_name: demo.swir.rs
   resolver:
-    resolver_type: MDNS
-    
-  resolve_services:
-    - service_name: books
-      domain: swir
-      protocol: tcp
-    - service_name: magazines
-      domain: swir
-      protocol: tcp      
-  announce_services: []
-
+    resolver_type: DynamoDb
+    resolver_config:
+      region : eu-west-1
+      table: swir-service-discovery  
+  resolve_services: []
+  announce_services:
+    - service_details:
+        service_name: magazines
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"
+      
       
 
 
-
+      

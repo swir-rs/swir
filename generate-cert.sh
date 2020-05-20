@@ -20,7 +20,7 @@ openssl rsa -in swir.CA.key -out swir.CA.pem -outform PEM -passin file:pass.txt
 
 
 echo "Generating CA CSR"
-openssl req -verbose -new -key swir.CA.pem -out swir.client.csr -sha256 -subj "/C=IE/ST=Leinster/L=Dublin/O=ESS/OU=swir/CN=Swir CA" -passin file:pass.txt
+openssl req -verbose -new -key swir.CA.pem -out swir.client.csr -sha256 -subj "/C=IE/ST=Leinster/L=Dublin/O=Dawid Nowak/OU=Swir/CN=Swir GRPC" -passin file:pass.txt
 echo "Signing CA CSR"
 openssl ca -verbose -extensions v3_ca -keyfile swir.CA.pem -out swir.client.signed.crt -selfsign -passin file:pass.txt -md sha256 -enddate 330630235959Z -infiles swir.client.csr
 cp demoCA/newcerts/DEADBEEF.pem demoCA/cacert.pem

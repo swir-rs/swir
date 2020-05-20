@@ -6,11 +6,19 @@ use crate::swir_grpc_internal_api;
 use crate::utils::config::Services;
 use crate::utils::structs::*;
 use futures::channel::oneshot;
-use multimap::MultiMap;
+//use multimap::MultiMap;
+
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
+use tokio::time::timeout;
+use std::collections::HashMap;
+use tonic::transport::{Channel,Endpoint,ClientTlsConfig,Identity,Certificate};
+use tower::discover::Change;
 
-type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<tonic::transport::Channel>;
+
+
+type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<Channel>;
+type GrpcClients = HashMap<String, ClientHolder<String>>;
 
 fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendStatusCodes, swir_common::InvokeResult) {
     match ccsc {
@@ -31,26 +39,35 @@ fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendSt
     }
 }
 
-async fn invoke_handler(grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>, sender: oneshot::Sender<SIResult>, req: swir_common::InvokeRequest) {
+async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::Sender<SIResult>, req: swir_common::InvokeRequest) {
     let correlation_id = req.correlation_id.clone();
     let service_name = req.service_name.clone();
 
     debug!("public_invoke_handler: correlation {} {}", &correlation_id, &service_name);
     let mut grpc_clients = grpc_clients.lock().await;
-    if let Some(client) = grpc_clients.get_mut(&req.service_name) {
-        let resp = client.invoke(req).await;
-        trace!("public_invoke_handler: got response on internal {:?}", resp);
-        if let Ok(result) = resp {
-            let result = result.into_inner();
-            let _res = sender.send(SIResult {
+    if let Some(client_holder) = grpc_clients.get_mut(&req.service_name) {	
+        let resp = client_holder.client.invoke(req);
+	let maybe_timeout =timeout(tokio::time::Duration::from_secs(2), resp).await;
+        trace!("public_invoke_handler: got response on internal {:?}", maybe_timeout);
+        if let Ok(grpc_result) = maybe_timeout {
+	    if let Ok(invoke_result) = grpc_result{
+		let result = invoke_result.into_inner();
+		let _res = sender.send(SIResult {
                 correlation_id,
                 status: BackendStatusCodes::Ok("Service call ok".to_string()),
                 response: Some(result),
-            });
+		});
+	    }else{
+		let _res = sender.send(SIResult {
+                    correlation_id,
+                    status: BackendStatusCodes::Error(grpc_result.unwrap_err().to_string()),
+                    response: None,
+		});		
+	    }
         } else {
             let _res = sender.send(SIResult {
                 correlation_id,
-                status: BackendStatusCodes::Error(resp.unwrap_err().to_string()),
+                status: BackendStatusCodes::Error(maybe_timeout.unwrap_err().to_string()),
                 response: None,
             });
         }
@@ -63,14 +80,67 @@ async fn invoke_handler(grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>, 
     }
 }
 
+
+struct ClientHolder<T:PartialEq>{
+    key: T,
+    client: Box<GrpcClient>,
+    endpoint_manager: SimpleEndpointManager<usize>
+}
+
+impl<T:PartialEq> PartialEq for ClientHolder<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }    
+}
+
+impl<T:Eq> Eq for ClientHolder<T> {}
+
+#[derive(Clone)]
+struct SimpleEndpointManager<K:Copy+std::ops::AddAssign+std::convert::From<u16>>{
+    key_counter: K,
+    managed_endpoints: Box<HashMap<String, K>>,
+    rx:tokio::sync::mpsc::Sender<Change<K,Endpoint>>	
+}
+
+
+impl<K:Copy+std::ops::AddAssign+std::convert::From<u16>> SimpleEndpointManager<K>{
+    fn new(rx:tokio::sync::mpsc::Sender<Change<K,Endpoint>>)->Self{
+	SimpleEndpointManager{
+	    key_counter: K::from(1u16),
+	    managed_endpoints: Box::new(HashMap::new()),
+	    rx
+	}
+    }
+    
+    async fn add(&mut self,uri:&str, endpoint:Endpoint){
+	if let None= self.managed_endpoints.get(uri){	    
+	    self.key_counter+=K::from(1u16);
+	    if let Ok(_) =  self.rx.send(Change::Insert(self.key_counter,endpoint)).await{
+		self.managed_endpoints.insert(uri.to_string(),self.key_counter);
+	    }
+	    
+	}else{
+	    debug!("Already exists {}",uri);
+	    return
+	};
+    }
+    
+    async fn remove(&mut self, uri:&str){
+	if let Some(key) = self.managed_endpoints.remove(uri){
+	    let _res = self.rx.send(Change::Remove(key)).await;
+	}
+    }
+}
+
+    
 pub struct ServiceInvocationService {
-    grpc_clients: Arc<Mutex<MultiMap<String, GrpcClient>>>,
+    grpc_clients: Arc<Mutex<GrpcClients>>,
 }
 
 impl ServiceInvocationService {
     pub fn new() -> Self {
         ServiceInvocationService {
-            grpc_clients: Arc::new(Mutex::new(MultiMap::<String, GrpcClient>::new())),
+            grpc_clients: Arc::new(Mutex::new(GrpcClients::new())),
         }
     }
 
@@ -89,12 +159,22 @@ impl ServiceInvocationService {
             resolver.resolve(svc, sender.clone()).await;
         }
 
+	let server_root_ca_cert = tokio::fs::read(services.tls_config.server_ca_cert).await.unwrap();
+	let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert.clone());
+	let client_cert =
+            tokio::fs::read(services.tls_config.client_cert.clone()).await.unwrap();
+	let client_key =
+            tokio::fs::read(services.tls_config.client_key.clone()).await.unwrap();
+	let client_identity = Identity::from_pem(client_cert, client_key);
+	let domain_name = services.tls_config.domain_name.clone();
+	
+
+
         let grpc_clients = self.grpc_clients.clone();
         let mut tasks = vec![];
         let h2 = tokio::spawn(async move {
             while let Some(resolved_addr) = resolve_receiver.recv().await {
                 let socket_addr = &resolved_addr.socket_addr;
-                let domain = &resolved_addr.domain;
                 let service_name = &resolved_addr.service_name;
                 let fqdn = &resolved_addr.fqdn;
                 let port = &resolved_addr.port;
@@ -108,16 +188,41 @@ impl ServiceInvocationService {
                 };
 
                 let mut grpc_clients = grpc_clients.lock().await;
-                if !grpc_clients.contains_key(service_name) {
-                    match GrpcClient::connect(uri.clone()).await {
-                        Ok(client) => {
-                            grpc_clients.insert(service_name.clone(), client);
-                        }
-                        Err(e) => {
-                            warn!("Can't connect to {} {:?} with {:?}", domain, uri, e);
-                        }
-                    }
-                };
+		if let Ok(endpoint) = Endpoint::from_shared(uri.to_string()){
+
+		    let tls = ClientTlsConfig::new()
+			.domain_name(domain_name.clone())
+			.ca_certificate(server_root_ca_cert.clone())
+			.identity(client_identity.clone());
+		    
+		    let endpoint = endpoint.tls_config(tls);
+		    let endpoint = endpoint.timeout(std::time::Duration::from_millis(500));		
+		    match grpc_clients.get_mut(service_name){
+			Some(svc_holder) => {
+			    let holder = &mut svc_holder.endpoint_manager;
+			    holder.add(&uri,endpoint).await;
+			},
+			None => {
+
+			    let (channel, tx) = Channel::balance_channel(10);
+			    let manager = SimpleEndpointManager::new(tx);
+			    let mut endpoint_manager = Box::new(manager.clone());
+			    endpoint_manager.add(&uri,endpoint).await;
+			    let client = GrpcClient::new(channel);
+			    
+			    grpc_clients.insert(service_name.clone(), ClientHolder{
+				key:uri,
+				client:Box::new(client),
+				endpoint_manager:manager
+			    });
+			}
+		    }
+		}else{
+		    warn!("invalid uri {}",&uri);
+		    continue;
+		};
+		
+
             }
             warn!("Channel closed");
         });

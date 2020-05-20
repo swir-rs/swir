@@ -20,7 +20,6 @@ futures-executor = "=0.3"
 
 log = "0.4"
 env_logger = "0.7"
-color-backtrace="*"
 rand = "0.7"
 base64 = "*"
 multimap="0.8"
@@ -32,42 +31,41 @@ tokio-rustls = "0.13"
 rustls = "0.17"
 async-stream = "0.2"
 hyper = "0.13"
-http = "0.2"   #hyper = { path = "../hyper" , features = ["runtime","stream"]}
+http = "0.2"
+tower="0.3"
+http-body = "0.3"
 hostname= "0.3"
 get_if_addrs = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_bytes = { version = "0.11"}
 currenttimemillis = {version ="*", git = "https://github.com/swir-rs/currenttimemillis-rs"}
-
-
-rdkafka = { version="0.23" } #rdkafka = { version="0.23.1", path = "../rust-rdkafka" }
-rdkafka-sys = { version = "1.3", default-features = false} #rdkafka-sys = { version = "1.3.1", default-features = false,path = "../rust-rdkafka/rdkafka-sys"}
+rdkafka = { version="0.23",features = ["default"] } 
+rdkafka-sys = { version = "1.3", features = ["default"]} 
 nats = {version="*",optional=true}
-
 rusoto_kinesis={ version="0.43"}
 rusoto_dynamodb={ version="0.43"}
 rusoto_signature={ version="0.43"}
 rusoto_core={ version="0.43"}
 aws-lock-client = {version="*", git="https://github.com/swir-rs/aws-lock-client-rs"} 
-#aws-lock-client = {version="*", path="../aws-lock-client-rs"}
 regex ="*"
 lazy_static="*"
-
 async-trait="*"
 prost = "0.6"
 prost-derive = "0.6"
-tonic = {version="0.1", optional=false} #tonic = {version="0.1.1", path ="../tonic/tonic", optional=false}
-config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" } #config = { version="*", path = "../config-rs", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
-
+#tonic = {version="0.2", optional=false, features=["default","tls"] }
+tonic = {version="0.2", git ="https://github.com/hyperium/tonic", optional=false, branch = "master", features=["default","tls"] }
+#tonic = {version="0.2", path="../tonic/tonic", optional=false, features=["default","tls"] }
+config = { version="*", features = ["with_env_vars"],  git = "https://github.com/swir-rs/config-rs" }
 redis = { version="0.15",features = ["cluster"]}
 
-#mdns-responder={version="0.2", path = "../rust-mdns"}
 mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
 
-
 [build-dependencies]
-tonic-build = { version="0.1" } #tonic-build = { version="0.1.1-alpha.6", path ="../tonic/tonic-build" }
+tonic-build = "0.2"
+#tonic-build = { version="0.2", git ="https://github.com/hyperium/tonic", branch = "master"  }
+#tonic-build = { version="0.2", path="../tonic/tonic-build" }
+
 
 [features]
 with_nats = ["nats"]

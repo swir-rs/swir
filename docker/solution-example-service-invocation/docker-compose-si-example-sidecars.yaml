@@ -5,11 +5,14 @@ services:
     networks:
       - swir-si
     image: swir-example-si-configurator:v3
-    command: ["/bin/bash","-c","cp /config/* swir_config/"]
+#    command: ["/bin/bash","-c","cp /config/* swir_config/ ; cp /certificates/* certs/"]
     volumes:
       - type: volume
         source: swir_config
         target: /swir_config
+      - type: volume
+        source: certs
+        target: /certs        
 
 # step 1 
 # Java gRCP
@@ -30,6 +33,10 @@ services:
       - type: volume
         source: swir_config
         target: /swir_config
+      - type: volume
+        source: certs
+        target: /certs                
+
 
 # step 2     
 # python REST 
@@ -50,6 +57,9 @@ services:
       - type: volume
         source: swir_config
         target: /swir_config
+      - type: volume
+        source: certs
+        target: /certs        
 
 
 # python REST 
@@ -70,10 +80,14 @@ services:
       - type: volume
         source: swir_config
         target: /swir_config
+      - type: volume
+        source: certs
+        target: /certs        
 
         
 volumes:
   swir_config:
+  certs:
 networks:
   swir-si:
 

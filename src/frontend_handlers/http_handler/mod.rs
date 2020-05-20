@@ -229,8 +229,8 @@ async fn persistence_processor(
     let database_name = extract_database_name_from_headers(headers).unwrap();
     let key = extract_database_key_from_headers(headers).unwrap();
     let whole_body = get_whole_body(req).await;
+    let msg = format!("op {:?} -> {} {}",op_type, database_name, key);
 
-    info!("{:?} start {} {}", op_type, database_name, key);
     let maybe_channel = find_channel_by_database_name(&database_name, from_client_to_persistence_sender);
     let mut sender = if let Some(channel) = maybe_channel {
         channel.clone()
@@ -246,8 +246,8 @@ async fn persistence_processor(
             let sr = StoreRequest {
                 correlation_id,
                 payload: whole_body,
-                table_name: database_name.clone(),
-                key: key.clone(),
+                table_name: database_name,
+                key: key,
             };
 
             let job = RestToPersistenceContext {
@@ -259,8 +259,8 @@ async fn persistence_processor(
         PersistenceOperationType::Retrieve => {
             let rr = RetrieveRequest {
                 correlation_id,
-                table_name: database_name.clone(),
-                key: key.clone(),
+                table_name: database_name,
+                key: key,
             };
 
             let job = RestToPersistenceContext {
@@ -272,8 +272,8 @@ async fn persistence_processor(
         PersistenceOperationType::Delete => {
             let rr = DeleteRequest {
                 correlation_id,
-                table_name: database_name.clone(),
-                key: key.clone(),
+                table_name: database_name,
+                key: key,
             };
 
             let job = RestToPersistenceContext {
@@ -301,7 +301,7 @@ async fn persistence_processor(
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
         }
-        info!("{:?} end {} {}", op_type, database_name, key);
+        info!("end {}",msg);
     }
     response
 }
