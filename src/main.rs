@@ -51,22 +51,17 @@ async fn main() {
     let simc = mc.si_memory_channels;
 
     let ip = swir_config.ip.clone();
-    let https_port: u16 = swir_config.https_port;
+
+
     let http_port: u16 = swir_config.http_port;
     let grpc_port: u16 = swir_config.grpc_port;
     let internal_grpc_port: u16 = swir_config.internal_grpc_port;
     let client_executable = swir_config.client_executable.clone();
-
-    let http_tls_certificate = swir_config.tls_certificate.clone();
-    let http_tls_key = swir_config.tls_private_key.clone();
-
-    let https_addr = std::net::SocketAddr::new(ip.parse().unwrap(), https_port);
+    
     let http_addr = std::net::SocketAddr::new(ip.parse().unwrap(), http_port);
     let grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), grpc_port);
     let internal_grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), internal_grpc_port);
-    let certs = load_certs(http_tls_certificate).unwrap();
-    // Load private key.
-    let key = load_private_key(http_tls_key).unwrap();
+
 
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
 
@@ -191,45 +186,51 @@ async fn main() {
     });
 
     tasks.push(si_private_interface);
-
-    let http_client_interface = tokio::spawn(async move {
-        let res = Server::bind(&http_addr).serve(http_service).await;
-        if let Err(e) = res {
-            warn!("Problem starting HTTP interface {:?}", e);
-        }
-    });
-    tasks.push(http_client_interface);
-
-    let https_client_interface = tokio::spawn(async move {
-        let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-        config.set_single_cert(certs, key).expect("invalid key or certificate");
-        let tls_acceptor = TlsAcceptor::from(Arc::new(config));
-        let _arc_acceptor = Arc::new(tls_acceptor);
-        let mut listener = TcpListener::bind(&https_addr).await.unwrap();
-        let incoming = listener.incoming();
-
-        let incoming = hyper::server::accept::from_stream(incoming.filter_map(|socket| async {
-            match socket {
-                Ok(stream) => match _arc_acceptor.clone().accept(stream).await {
-                    Ok(val) => Some(Ok::<_, hyper::Error>(val)),
+    if let Some(tls_config) = swir_config.tls_config{
+	let http_tls_certificate = tls_config.certificate.clone();
+	let http_tls_key = tls_config.private_key.clone();
+	let certs = load_certs(http_tls_certificate).unwrap();	
+	let key = load_private_key(http_tls_key).unwrap();
+	let https_client_interface = tokio::spawn(async move {
+            let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+            config.set_single_cert(certs, key).expect("invalid key or certificate");
+            let tls_acceptor = TlsAcceptor::from(Arc::new(config));
+            let _arc_acceptor = Arc::new(tls_acceptor);
+            let mut listener = TcpListener::bind(&http_addr).await.unwrap();
+            let incoming = listener.incoming();
+	    
+            let incoming = hyper::server::accept::from_stream(incoming.filter_map(|socket| async {
+		match socket {
+                    Ok(stream) => match _arc_acceptor.clone().accept(stream).await {
+			Ok(val) => Some(Ok::<_, hyper::Error>(val)),
+			Err(e) => {
+                            println!("TLS error: {}", e);
+                            None
+			}
+                    },
                     Err(e) => {
-                        println!("TLS error: {}", e);
-                        None
+			println!("TCP socket error: {}", e);
+			None
                     }
-                },
-                Err(e) => {
-                    println!("TCP socket error: {}", e);
-                    None
-                }
-            }
+		}
         }));
-        let res = Server::builder(incoming).serve(https_service).await;
-        if let Err(e) = res {
-            warn!("Problem starting HTTPs interface {:?}", e);
-        }
-    });
+            let res = Server::builder(incoming).serve(https_service).await;
+            if let Err(e) = res {
+		warn!("Problem starting HTTPs interface {:?}", e);
+            }
+	});
+	
+	tasks.push(https_client_interface);	
+    }else{
+	let http_client_interface = tokio::spawn(async move {
+            let res = Server::bind(&http_addr).serve(http_service).await;
+            if let Err(e) = res {
+            warn!("Problem starting HTTP interface {:?}", e);
+            }
+	});
+	tasks.push(http_client_interface);
+    }
 
-    tasks.push(https_client_interface);
 
     let http_client = tokio::spawn(async move { client_handler(to_client_receiver_for_rest.clone()).await });
     tasks.push(http_client);

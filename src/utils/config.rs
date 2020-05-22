@@ -244,6 +244,12 @@ pub struct TlsConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct ServerTlsConfig {
+   pub private_key: String,   
+   pub certificate: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Services {
     pub private_http_socket: Option<std::net::SocketAddr>,
     pub resolver: Resolver,
@@ -255,12 +261,10 @@ pub struct Services {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Swir {
     pub ip: String,
-    pub http_port: u16,
-    pub https_port: u16,
+    pub http_port: u16,    
     pub grpc_port: u16,
     pub internal_grpc_port: u16,
-    pub tls_private_key: String,
-    pub tls_certificate: String,
+    pub tls_config: Option<ServerTlsConfig>,
     pub client_executable: Option<String>,
     pub pubsub: PubSub,
     pub stores: Stores,

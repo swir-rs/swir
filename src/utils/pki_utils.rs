@@ -24,7 +24,7 @@ pub fn load_private_key(filename: String) -> io::Result<rustls::PrivateKey> {
     let mut reader = io::BufReader::new(keyfile);
 
     // Load and return a single private key.
-    let keys = pemfile::rsa_private_keys(&mut reader);
+    let keys = pemfile::pkcs8_private_keys(&mut reader);
 
     let keys = match keys {
         Ok(keys) => keys,
