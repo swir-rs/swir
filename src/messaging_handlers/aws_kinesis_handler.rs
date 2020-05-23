@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use bytes;
 use futures::future::join_all;
-use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use rand::distributions::Alphanumeric;
 use rand::rngs;
@@ -10,7 +9,10 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex
+};
 
 use aws_lock_client::{AwsLockClient, AwsLockClientDynamoDb};
 

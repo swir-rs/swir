@@ -1,9 +1,13 @@
 use config::{Config, File};
-use futures::lock::Mutex;
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex
+};
+    
 
 use crate::utils::structs::{BackendToRestContext, RestToMessagingContext, RestToPersistenceContext, RestToSIContext};
 
@@ -173,12 +177,13 @@ pub struct Stores {
     pub dynamodb: Vec<DynamoDb>,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct MemoryChannelEndpoint<T1, T2> {
     pub from_client_receiver: Arc<Mutex<mpsc::Receiver<T1>>>,
     pub to_client_sender_for_rest: mpsc::Sender<T2>,
     pub to_client_sender_for_grpc: mpsc::Sender<T2>,
 }
+
 
 pub struct MessagingMemoryChannels {
     pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext, BackendToRestContext>>,
@@ -191,10 +196,12 @@ pub struct MessagingMemoryChannels {
     pub to_si_http_client: mpsc::Sender<BackendToRestContext>,
 }
 
+
 pub struct PersistenceMemoryChannels {
     pub from_client_to_persistence_senders: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     pub from_client_to_persistence_receivers_map: HashMap<StoreType, Vec<Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>>>,
 }
+
 
 pub struct MemoryChannels {
     pub messaging_memory_channels: MessagingMemoryChannels,
@@ -445,10 +452,11 @@ fn create_persistence_channels(config: &Swir) -> PersistenceMemoryChannels {
     }
 }
 
+
 pub struct SIMemoryChannel {
     pub client_sender: mpsc::Sender<RestToSIContext>,
     pub internal_sender: mpsc::Sender<RestToSIContext>,
-    pub receiver: mpsc::Receiver<RestToSIContext>,
+    pub receiver: Arc<Mutex<mpsc::Receiver<RestToSIContext>>>,
 }
 
 fn create_service_invocation_channels(_config: &Swir) -> SIMemoryChannel {
@@ -456,7 +464,7 @@ fn create_service_invocation_channels(_config: &Swir) -> SIMemoryChannel {
     SIMemoryChannel {
         client_sender: from_client_sender.clone(),
         internal_sender: from_client_sender,
-        receiver: from_client_receiver,
+        receiver: Arc::new(Mutex::new(from_client_receiver))
     }
 }
 

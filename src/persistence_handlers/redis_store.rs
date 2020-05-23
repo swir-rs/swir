@@ -4,11 +4,15 @@ use crate::utils::config::Redis;
 use crate::utils::structs::DeleteRequest;
 use crate::utils::structs::{BackendStatusCodes, PersistenceJobType, PersistenceRequest, PersistenceResult, RestToPersistenceContext, RetrieveRequest, StoreRequest};
 use async_trait::async_trait;
-use futures::channel::oneshot::Sender;
-use futures::lock::Mutex;
+
+
 use std::sync::Arc;
 use tokio::stream::StreamExt;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex,
+    oneshot::Sender
+};
 
 use redis::{pipe, Client, Commands, Connection};
 

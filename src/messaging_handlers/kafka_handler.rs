@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::future::FutureExt;
-use futures::lock::Mutex;
+
 use futures::stream::StreamExt;
 use rdkafka::client::ClientContext;
 use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
@@ -13,7 +13,10 @@ use rdkafka::error::KafkaResult;
 use rdkafka::message::Message;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::TopicPartitionList;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex
+};
 
 use crate::messaging_handlers::Broker;
 use crate::utils::config::Kafka;

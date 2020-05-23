@@ -1,6 +1,7 @@
-use futures::channel::oneshot;
-
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    oneshot
+};
 
 use crate::utils::structs::*;
 
@@ -39,7 +40,7 @@ impl swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInv
             warn!("invoke internal : Channel is dead {:?}", e);
             Err(tonic::Status::internal("Internal error"))
         } else {
-            let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+            let response_from_service = local_rx.await;
 
             if let Ok(res) = response_from_service {
                 debug!("invoke internal : Got result from client {}", res);

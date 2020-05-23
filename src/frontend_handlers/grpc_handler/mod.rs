@@ -3,15 +3,16 @@ use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-
 use base64;
-use futures::channel::oneshot;
-use futures::lock::Mutex;
 use futures::StreamExt;
 use hyper::StatusCode;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex,
+    oneshot
+};
 use tonic::{Response, Status};
 
 use crate::utils::structs::CustomerInterfaceType::GRPC;
@@ -182,7 +183,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                                     warn!("Channel is dead {:?}", e);
                                 }
 
-                                let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+                                let response_from_broker = local_rx.await;
                                 if let Ok(res) = response_from_broker {
                                     msg.push_str(&res.status.to_string());
                                 } else {
@@ -241,7 +242,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 warn!("Channel is dead {:?}", e);
             }
 
-            let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+            let response_from_broker = local_rx.await;
             let mut msg = String::new();
 
             if let Ok(res) = response_from_broker {
@@ -368,7 +369,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 warn!("Channel is dead {:?}", e);
             }
 
-            let response_from_storage: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
+            let response_from_storage = local_rx.await;
             let mut msg = String::new();
 
             if let Ok(res) = response_from_storage {
@@ -409,7 +410,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 warn!("Channel is dead {:?}", e);
             }
 
-            let response_from_storage: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
+            let response_from_storage = local_rx.await;
 
             let reply = if let Ok(res) = response_from_storage {
                 let mut msg = String::new();
@@ -460,7 +461,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 warn!("Channel is dead {:?}", e);
             }
 
-            let response_from_storage: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
+            let response_from_storage = local_rx.await;
 
             let reply = if let Ok(res) = response_from_storage {
                 let mut msg = String::new();
@@ -524,7 +525,7 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
             warn!("Channel is dead {:?}", e);
             Err(tonic::Status::internal("Internal error"))
         } else {
-            let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+            let response_from_service = local_rx.await;
 
             if let Ok(res) = response_from_service {
                 debug!("Got result from internal {}", res);

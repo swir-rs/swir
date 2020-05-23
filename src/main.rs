@@ -3,7 +3,6 @@
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
-
 extern crate custom_error;
 
 mod frontend_handlers;
@@ -25,7 +24,11 @@ pub mod swir_grpc_api {
     tonic::include_proto!("swir_public");
 }
 
-use std::sync::Arc;
+use std::{    
+    sync::Arc,
+    net::SocketAddr
+};
+
 
 use frontend_handlers::http_handler::{client_handler, handler};
 use frontend_handlers::{grpc_handler, grpc_internal_handler};
@@ -34,11 +37,12 @@ use hyper::service::{make_service_fn, service_fn};
 use futures_util::stream::StreamExt;
 use hyper::{Body, Request, Server};
 use utils::pki_utils::{load_certs, load_private_key};
-
+use tonic::transport::{Identity, ServerTlsConfig,Certificate,Server as TonicServer};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 use crate::utils::config::*;
+
 
 #[tokio::main(core_threads = 8)]
 async fn main() {    
@@ -46,9 +50,6 @@ async fn main() {
     let swir_config = Swir::new();
 
     let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);
-    let mmc = mc.messaging_memory_channels;
-    let pmc = mc.persistence_memory_channels;
-    let simc = mc.si_memory_channels;
 
     let ip = swir_config.ip.clone();
 
@@ -58,29 +59,52 @@ async fn main() {
     let internal_grpc_port: u16 = swir_config.internal_grpc_port;
     let client_executable = swir_config.client_executable.clone();
     
-    let http_addr = std::net::SocketAddr::new(ip.parse().unwrap(), http_port);
-    let grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), grpc_port);
-    let internal_grpc_addr = std::net::SocketAddr::new(ip.parse().unwrap(), internal_grpc_port);
+    let http_addr = SocketAddr::new(ip.parse().unwrap(), http_port);
+    let grpc_addr = SocketAddr::new(ip.parse().unwrap(), grpc_port);
+    let internal_grpc_addr = SocketAddr::new(ip.parse().unwrap(), internal_grpc_port);
+
+   
+    let mut tasks = vec![];
+    
+    tasks.append(&mut start_client_http_interface(&http_addr,&swir_config,&mc));
+    tasks.append(&mut start_client_grpc_interface(&grpc_addr,&swir_config,&mc));
+    tasks.append(&mut start_internal_grpc_interface(&internal_grpc_addr,&swir_config,&mc));
+    tasks.append(&mut start_service_invocation_service(&swir_config,&mc));
+    tasks.append(&mut start_rest_client_service(&swir_config,&mc));
+    tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config,&mc));
+    
+    tasks.append(&mut start_pubsub_service(&swir_config,mc.messaging_memory_channels));
+    tasks.append(&mut start_persistence_service(&swir_config,mc.persistence_memory_channels));
+
+    
+            
+    if let Some(command) = client_executable {
+        utils::command_utils::run_java_command(command);
+    }
+    futures::future::join_all(tasks).await;
+}
 
 
+fn start_client_http_interface(http_addr:&SocketAddr,swir_config:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let http_addr = http_addr.clone();
+    let mmc = &mc.messaging_memory_channels;
+    let pmc = &mc.persistence_memory_channels;
+    let simc = &mc.si_memory_channels;
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
-
-    let to_si_http_client = mmc.to_si_http_client.clone();
-
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
-
-    let client_sender_for_http = simc.client_sender.clone();
-    let client_sender_for_private_http = client_sender_for_http.clone();
+    let client_sender_for_http = simc.client_sender.clone();    
     let client_sender_for_https = simc.client_sender.clone();
-    let http_service = make_service_fn(move |_| {
-        let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
+    
+    
+    let http_service = make_service_fn(move |_|{
+	let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let client_sender_for_http = client_sender_for_http.to_owned();
+
         async move {
-            let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
-            let to_client_sender_for_rest = to_client_sender_for_rest;
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
                 handler(
                     req,
@@ -91,7 +115,8 @@ async fn main() {
                 )
             }))
         }
-    });
+    }
+    );
 
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
@@ -102,9 +127,8 @@ async fn main() {
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let client_sender_for_https = client_sender_for_https.to_owned();
+
         async move {
-            let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
-            let to_client_sender_for_rest = to_client_sender_for_rest;
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
                 handler(
                     req,
@@ -116,79 +140,10 @@ async fn main() {
             }))
         }
     });
-
-    let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
-    let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
-    let to_client_receiver_for_rest = mmc.to_client_receiver_for_rest.clone();
-    let to_client_receiver_for_grpc = mmc.to_client_receiver_for_grpc.clone();
-
-    let mut tasks = vec![];
-    let config = swir_config.clone();
-    let messaging = tokio::spawn(async move {
-        messaging_handlers::configure_broker(config.pubsub, mmc).await;
-    });
-    tasks.push(messaging);
-
-    let config = swir_config.clone();
-    let persistence = tokio::spawn(async move {
-        persistence_handlers::configure_stores(config.stores, pmc.from_client_to_persistence_receivers_map).await;
-    });
-    tasks.push(persistence);
-
-    let config = swir_config.clone();
-    let receiver = simc.receiver;
-
-    let config_si = config.services.clone();
-    let si = tokio::spawn(async move {
-        if let Some(services) = config_si {
-            match services.resolver.resolver_type {
-                ResolverType::MDNS => {
-                    if let Ok(resolver) = service_discovery::mdns_sd::MDNSServiceDiscovery::new(internal_grpc_port) {
-                        si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
-                    } else {
-                        warn!("Problem with resolver");
-                    };
-                }
-                ResolverType::DynamoDb => {
-                    if let Some(resolver_config) = &services.resolver.resolver_config {
-                        let region = resolver_config.get("region");
-                        let table = resolver_config.get("table");
-                        if let (Some(r), Some(t)) = (region, table) {
-                            if let Ok(resolver) = service_discovery::dynamodb_sd::DynamoDBServiceDiscovery::new(r.to_string(), t.to_string(), internal_grpc_port) {
-                                si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
-                            } else {
-                                warn!("Problem with resolver");
-                            };
-                        } else {
-                            warn!("Problem with resolver: Invalid resolver config");
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    tasks.push(si);
-    let maybe_si_pi_config = config.services.clone();
-    let si_private_interface = tokio::spawn(async move {
-        if let Some(services) = maybe_si_pi_config {
-            if let Some(private_http_socket) = services.private_http_socket {
-                info!("Private invocation service enabled at {}", private_http_socket);
-                let http_service = make_service_fn(move |_| {
-                    let client_sender_for_http = client_sender_for_private_http.to_owned();
-                    async move { Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| si_http_handler::handler(req, client_sender_for_http.to_owned()))) }
-                });
-                if let Err(e) = Server::bind(&private_http_socket).serve(http_service).await {
-                    warn!("Problem starting HTTP interface {:?}", e);
-                }
-            };
-        }
-    });
-
-    tasks.push(si_private_interface);
-    if let Some(tls_config) = swir_config.tls_config{
-	let http_tls_certificate = tls_config.certificate.clone();
-	let http_tls_key = tls_config.private_key.clone();
+    
+    if let Some(tls_config) = swir_config.tls_config.clone(){
+	let http_tls_certificate = tls_config.certificate;
+	let http_tls_key = tls_config.private_key;
 	let certs = load_certs(http_tls_certificate).unwrap();	
 	let key = load_private_key(http_tls_key).unwrap();
 	let https_client_interface = tokio::spawn(async move {
@@ -222,23 +177,31 @@ async fn main() {
 	
 	tasks.push(https_client_interface);	
     }else{
-	let http_client_interface = tokio::spawn(async move {
+	let http_client_interface = tokio::spawn(async move {	    	    	    
             let res = Server::bind(&http_addr).serve(http_service).await;
             if let Err(e) = res {
-            warn!("Problem starting HTTP interface {:?}", e);
+		warn!("Problem starting HTTP interface {:?}", e);
             }
 	});
 	tasks.push(http_client_interface);
     }
+    tasks
+}
 
-
-    let http_client = tokio::spawn(async move { client_handler(to_client_receiver_for_rest.clone()).await });
-    tasks.push(http_client);
-
+fn start_client_grpc_interface(grpc_addr:&SocketAddr,swir_config:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let grpc_addr = grpc_addr.clone();
+    let mmc = &mc.messaging_memory_channels;
+    let pmc = &mc.persistence_memory_channels;
+    let simc = &mc.si_memory_channels;
+                
+    let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
+    let to_client_receiver_for_grpc = mmc.to_client_receiver_for_grpc.clone();
+    let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
     let client_sender_for_public = simc.client_sender.clone();
-    let client_sender_for_internal = simc.client_sender.clone();
-
-    let grpc_client_interface = tokio::spawn(async move {
+    let tls_config = swir_config.tls_config.clone();
+    
+    let grpc_client_interface = tokio::spawn(async move {	
         let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
         let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
 
@@ -247,22 +210,39 @@ async fn main() {
 
         let service_invocation_handler = grpc_handler::SwirServiceInvocationApi::new(client_sender_for_public);
         let service_invocation_svc = swir_grpc_api::service_invocation_api_server::ServiceInvocationApiServer::new(service_invocation_handler);
-
-        let grpc = tonic::transport::Server::builder()
-            .add_service(pub_sub_svc)
+        
+            
+	let mut builder = if let Some(tls_config) = tls_config {
+	    let cert = tokio::fs::read(tls_config.certificate).await.unwrap();
+	    let key = tokio::fs::read(tls_config.private_key).await.unwrap();	    
+	    let identity = Identity::from_pem(cert, key);
+	    TonicServer::builder().tls_config(ServerTlsConfig::new().identity(identity))
+	}else{
+	    TonicServer::builder()
+	};
+        let grpc = builder.add_service(pub_sub_svc)
             .add_service(persistence_svc)
             .add_service(service_invocation_svc)
-            .serve(grpc_addr);
+            .serve(grpc_addr.to_owned());
 
         let res = grpc.await;
         if let Err(e) = res {
             warn!("Problem starting gRPC interface {:?}", e);
         }
     });
-    
-
     tasks.push(grpc_client_interface);
-    let si_config = config.services.clone();
+    tasks
+    
+}
+
+fn start_internal_grpc_interface(grpc_addr:&SocketAddr,swir_config:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let grpc_addr = grpc_addr.clone();
+
+    let simc = &mc.si_memory_channels;
+    let si_config = swir_config.services.clone();
+    let client_sender_for_internal = simc.client_sender.clone();
+    
     let grpc_internal_interface = tokio::spawn(async move {
 	if let Some(services) = si_config {
 	    let tls_config = services.tls_config;
@@ -271,13 +251,12 @@ async fn main() {
 	    
 	    let cert = tokio::fs::read(tls_config.server_cert).await.unwrap();
 	    let key = tokio::fs::read(tls_config.server_key).await.unwrap();
-	    let server_identity = tonic::transport::Identity::from_pem(cert, key);	
+	    let server_identity = Identity::from_pem(cert, key);	
 	    let client_ca_cert = tokio::fs::read(tls_config.client_ca_cert).await.unwrap();
-	    let client_ca_cert = tonic::transport::Certificate::from_pem(client_ca_cert);
+	    let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
-	    let tls = tonic::transport::ServerTlsConfig::new().identity(server_identity).client_ca_root(client_ca_cert);
-			    
-            let grpc = tonic::transport::Server::builder().tls_config(tls).add_service(service_invocation_svc).serve(internal_grpc_addr);
+	    let tls = ServerTlsConfig::new().identity(server_identity).client_ca_root(client_ca_cert);			    
+            let grpc = TonicServer::builder().tls_config(tls).add_service(service_invocation_svc).serve(grpc_addr);
 	    
             let res = grpc.await;
             if let Err(e) = res {
@@ -285,10 +264,106 @@ async fn main() {
             }
 	}
     });
-    tasks.push(grpc_internal_interface);
 
-    if let Some(command) = client_executable {
-        utils::command_utils::run_java_command(command);
-    }
-    futures::future::join_all(tasks).await;
+
+    
+    tasks.push(grpc_internal_interface);
+    tasks
+    
+}
+
+fn start_service_invocation_service(swir_config:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let config = swir_config.services.clone();
+    let internal_grpc_port = swir_config.internal_grpc_port;
+
+    let mmc = &mc.messaging_memory_channels;
+    let simc = &mc.si_memory_channels;
+    let to_si_http_client = mmc.to_si_http_client.clone();
+    let receiver = simc.receiver.clone();
+    let si = tokio::spawn(async move {
+        if let Some(services) = config {
+            match services.resolver.resolver_type {
+                ResolverType::MDNS => {
+                    if let Ok(resolver) = service_discovery::mdns_sd::MDNSServiceDiscovery::new(internal_grpc_port) {
+                        si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
+                    } else {
+                        warn!("Problem with resolver");
+                    };
+                }
+                ResolverType::DynamoDb => {
+                    if let Some(resolver_config) = &services.resolver.resolver_config {
+                        let region = resolver_config.get("region");
+                        let table = resolver_config.get("table");
+                        if let (Some(r), Some(t)) = (region, table) {
+                            if let Ok(resolver) = service_discovery::dynamodb_sd::DynamoDBServiceDiscovery::new(r.to_string(), t.to_string(), internal_grpc_port) {
+                                si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
+                            } else {
+                                warn!("Problem with resolver");
+                            };
+                        } else {
+                            warn!("Problem with resolver: Invalid resolver config");
+                        }
+                    }
+                }
+            }
+        }
+    });
+    tasks.push(si);
+    tasks
+    
+}
+
+fn start_service_invocation_service_private_http_interface(swir_config:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let config = swir_config.services.clone();
+    let simc = &mc.si_memory_channels;
+    let client_sender = simc.client_sender.clone();
+    let si_private_interface = tokio::spawn(async move {
+        if let Some(services) = config {
+            if let Some(private_http_socket) = services.private_http_socket {
+                info!("Private invocation service enabled at {}", private_http_socket);
+                let http_service = make_service_fn(move |_| {
+                    let client_sender_for_http = client_sender.to_owned();
+                    async move { Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| si_http_handler::handler(req, client_sender_for_http.to_owned()))) }
+                });
+                if let Err(e) = Server::bind(&private_http_socket).serve(http_service).await {
+                    warn!("Problem starting HTTP interface {:?}", e);
+                }
+            };
+        }
+    });
+
+    tasks.push(si_private_interface);
+    tasks    
+}
+
+fn start_pubsub_service(swir_config:&Swir,mmc: MessagingMemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let config = swir_config.pubsub.clone();
+    let messaging = tokio::spawn(async move {
+        messaging_handlers::configure_broker(config, mmc).await;
+    });
+    tasks.push(messaging);
+    tasks        
+}
+
+fn start_persistence_service(swir_config:&Swir,pmc: PersistenceMemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];
+    let config = swir_config.clone();
+    let pmc = pmc.from_client_to_persistence_receivers_map;
+    let persistence = tokio::spawn(async move {
+        persistence_handlers::configure_stores(config.stores,pmc).await;
+    });
+    tasks.push(persistence);        
+    tasks        
+}
+
+fn start_rest_client_service(_:&Swir,mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>>{
+    let mut tasks = vec![];    
+    let mmc = &mc.messaging_memory_channels;
+    let to_client_receiver_for_rest = mmc.to_client_receiver_for_rest.clone();
+    let http_client = tokio::spawn(async move { client_handler(to_client_receiver_for_rest.clone()).await });
+    tasks.push(http_client);    
+    tasks        
 }

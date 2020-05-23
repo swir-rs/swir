@@ -2,10 +2,13 @@ use crate::utils::config::{StoreType, Stores};
 use crate::utils::structs::RestToPersistenceContext;
 use async_trait::async_trait;
 use futures::future::join_all;
-use futures::lock::Mutex;
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex
+};
 
 mod dynamodb_store;
 mod redis_store;

@@ -1,6 +1,6 @@
 use crate::swir_common;
 use custom_error::custom_error;
-use futures::channel::oneshot::Sender;
+use tokio::sync::oneshot::Sender;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
@@ -194,7 +194,7 @@ impl PartialOrd for SubscribeRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum BackendStatusCodes {
     Ok(String),
     Error(String),
@@ -202,7 +202,7 @@ pub enum BackendStatusCodes {
     NoService(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum ClientCallStatusCodes {
     Ok(String),
     Error(String),
@@ -219,7 +219,7 @@ impl fmt::Display for BackendStatusCodes {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct MessagingResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
@@ -299,7 +299,7 @@ impl fmt::Display for swir_common::HttpMethod {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default,Clone)]
 pub struct RESTRequestParams {
     pub payload: Vec<u8>,
     pub uri: String,
@@ -307,14 +307,14 @@ pub struct RESTRequestParams {
     pub method: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default,Clone)]
 pub struct RESTResponseParams {
     pub payload: Vec<u8>,
     pub headers: std::collections::HashMap<String, String>,
     pub status_code: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct RESTRequestResult {
     pub(crate) correlation_id: String,
     pub(crate) status: ClientCallStatusCodes,

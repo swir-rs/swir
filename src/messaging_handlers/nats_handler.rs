@@ -1,11 +1,17 @@
-use futures::lock::Mutex;
+
 use futures::stream::StreamExt;
 use nats::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;
-use tokio::sync::mpsc;
-use tokio::task;
+use tokio::{
+    task,
+    sync::{
+	mpsc,
+	Mutex
+    }
+};
+
 
 use crate::messaging_handlers::client_handler::ClientHandler;
 use crate::messaging_handlers::Broker;
@@ -152,7 +158,7 @@ impl NatsBroker {
 
                 let mut has_lock = false;
                 while !has_lock {
-                    if let Some(mut subscriptions) = subscriptions.try_lock() {
+                    if let Ok(mut subscriptions) = subscriptions.try_lock() {
                         if let Some(subscriptions) = subscriptions.get_mut(&topic) {
                             subs = subscriptions.clone();
                         }

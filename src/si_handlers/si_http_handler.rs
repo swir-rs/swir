@@ -1,4 +1,3 @@
-use futures::channel::oneshot;
 use futures::stream::StreamExt;
 use http::HeaderValue;
 
@@ -8,7 +7,10 @@ use hyper::{header, Body, HeaderMap, Method, Request, Response, StatusCode};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    oneshot
+};
 
 use hyper::header::HOST;
 
@@ -130,7 +132,7 @@ async fn service_invocation_processor(req: Request<Body>, from_client_to_si_send
         *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
         *response.body_mut() = Body::empty();
     } else {
-        let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+        let response_from_service = local_rx.await;
         if let Ok(res) = response_from_service {
             debug!("service_invocation_processor : Got result {}", res);
             if let BackendStatusCodes::Ok(_) = res.status {

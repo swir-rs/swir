@@ -5,11 +5,9 @@ use crate::swir_common;
 use crate::swir_grpc_internal_api;
 use crate::utils::config::Services;
 use crate::utils::structs::*;
-use futures::channel::oneshot;
-//use multimap::MultiMap;
 
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, oneshot};
 use tokio::time::timeout;
 use std::collections::HashMap;
 use tonic::transport::{Channel,Endpoint,ClientTlsConfig,Identity,Certificate};
@@ -144,7 +142,7 @@ impl ServiceInvocationService {
         }
     }
 
-    pub async fn start<T: ServiceDiscovery>(&self, services: Services, resolver: &T, mut receiver: mpsc::Receiver<RestToSIContext>, http_sender: mpsc::Sender<BackendToRestContext>) {
+    pub async fn start<T: ServiceDiscovery>(&self, services: Services, resolver: &T, receiver: Arc<Mutex<mpsc::Receiver<RestToSIContext>>>, http_sender: mpsc::Sender<BackendToRestContext>) {
         let services_to_resolve = services.resolve_services.clone();
         let services_to_announce = services.announce_services.clone();
 
@@ -230,6 +228,7 @@ impl ServiceInvocationService {
         tasks.push(h2);
 
         let client_endpoint_mapping = services.announce_services.clone();
+	let mut receiver = receiver.lock().await;
         while let Some(ctx) = receiver.recv().await {
             let grpc_clients = self.grpc_clients.clone();
             let mut http_sender = http_sender.clone();
@@ -247,7 +246,7 @@ impl ServiceInvocationService {
                     }
                     SIJobType::InternalInvoke { req } => {
                         debug!("internal_invoke_handler: {}", req);
-                        let (s, r) = futures::channel::oneshot::channel();
+                        let (s, r) = oneshot::channel();
                         let correlation_id = req.correlation_id;
                         let service_name = req.service_name.clone();
                         let client_endpoint = client_endpoint_mapping

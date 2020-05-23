@@ -4,15 +4,18 @@ use crate::utils::config::ClientToBackendDatabaseResolver;
 use crate::utils::structs::{BackendStatusCodes, DeleteRequest, PersistenceJobType, PersistenceRequest, PersistenceResult, RestToPersistenceContext, RetrieveRequest, StoreRequest};
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::channel::oneshot::Sender;
-use futures::lock::Mutex;
+
 use rusoto_dynamodb;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::stream::StreamExt;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    mpsc,
+    Mutex,
+    oneshot::Sender	
+};
 
 #[derive(Debug)]
 pub struct DynamoDbStore {

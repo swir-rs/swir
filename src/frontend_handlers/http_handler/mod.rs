@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-
 use crate::swir_common;
 use crate::utils::structs::*;
-use futures::channel::oneshot;
-use futures::lock::Mutex;
 use futures::stream::StreamExt;
 use http::HeaderValue;
 use hyper::client::connect::dns::GaiResolver;
@@ -12,7 +9,11 @@ use hyper::client::HttpConnector;
 use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
 use serde::Deserialize;
 use std::str::FromStr;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    oneshot,
+    mpsc,
+    Mutex
+};
 
 #[derive(Debug)]
 enum PersistenceOperationType {
@@ -195,7 +196,7 @@ async fn service_invocation_processor(correlation_id: String, path: String, req:
             *response.body_mut() = Body::empty();
         } else {
             debug!("Waiting for response");
-            let response_from_service: Result<SIResult, oneshot::Canceled> = local_rx.await;
+            let response_from_service = local_rx.await;
             debug!("Got result {:?}", response_from_service);
             if let Ok(res) = response_from_service {
                 set_http_response(res.status, &mut response);
@@ -290,7 +291,7 @@ async fn persistence_processor(
         *response.body_mut() = Body::empty();
     } else {
         debug!("Waiting for store");
-        let response_from_store: Result<PersistenceResult, oneshot::Canceled> = local_rx.await;
+        let response_from_store = local_rx.await;
         debug!("Got result {:?}", response_from_store);
         if let Ok(res) = response_from_store {
             set_http_response(res.status, &mut response);
@@ -357,7 +358,7 @@ async fn sub_unsubscribe_processor(
             *response.body_mut() = Body::empty();
         }
 
-        let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+        let response_from_broker = local_rx.await;
         debug!("Got result {:?}", response_from_broker);
         if let Ok(res) = response_from_broker {
             set_http_response(res.status, &mut response);
@@ -428,7 +429,7 @@ pub async fn handler(
             }
 
             debug!("Waiting for broker");
-            let response_from_broker: Result<MessagingResult, oneshot::Canceled> = local_rx.await;
+            let response_from_broker  = local_rx.await;
             debug!("Got result {:?}", response_from_broker);
             if let Ok(res) = response_from_broker {
                 set_http_response(res.status, &mut response);
