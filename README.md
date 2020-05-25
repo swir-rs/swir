@@ -87,16 +87,15 @@ SWIR:
 
 
 # Requirements
-- To compile you will need cargo 1.39.0
-- Linux Ubuntu or similar.
-- Docker and Docker compose to run the infrastructure and the examples. Also you will need Java 1.8 or higher and Gradle to build example applications.
-- openssl to generate certs if you want to enable HTTPs
+- Docker and Docker Compose to build and run the infrastructure, and the examples. 
+- Also you will need Java 1.8 or higher and Gradle to build example applications.
+
 
 
 # Running
-Generally all the steps are exaplained in cicd.sh scripts.  
-The more advanced scenario how SWIR could be applied to facilitate seamless communication of applications based on different technical stacks [docker/solution-example](docker/solution-example) and [docker/solution-example-aws](docker/solution-example-aws) .  
-The performance harness that is used to measure/compare SWIR against other solutions is in [docker/performance-framework](docker/performance-framework)  
+Check examples provided in [performance framework](docker/performance-framework), [messaging](docker/solution-example) and [service invocation](solution-example-service-invocation) to see how to run Swir in Docker Compose environments.  
+
+If you are interested in seeing Swir working in AWS ECS, check examples provided in [messaging in AWS](docker/solution-example-aws) and [service invocation in AWS](docker/solution-example-aws-service-invocation).  
 
 ### Similar Frameworks
 

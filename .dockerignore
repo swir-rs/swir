@@ -1,8 +1,7 @@
 */*
-!demoCA/*
+!src
+!grpc_api
 !rustycar*
-!target/debug/swir
-!target/release/swir
 !docker/performance-framework/swir.yaml
 !certs/*
 #!docker/performance-framework/swir-java-client/build/libs/*.jar

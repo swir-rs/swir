@@ -11,7 +11,7 @@ fi
 echo "Accout " $1 " region " $2
 
 cd ../../
-./cicd.sh
+./cicd.sh swir.yaml
 cd docker/solution-example-aws-service-invocation
 
 source ../../secure.sh

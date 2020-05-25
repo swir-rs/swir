@@ -5,6 +5,7 @@ docker/**/build/**
 **/*.pem
 **/*.csr
 **/*.crt
+**/*.html
 secure.sh
 pass.txt
 /demoCA

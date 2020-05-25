@@ -1,6 +1,6 @@
 # Compile, build and generate necessary docker images
 cd ../../
-./cicd.sh
+./cicd.sh swir.yaml
 cd docker/solution-example-service-invocation
 
 

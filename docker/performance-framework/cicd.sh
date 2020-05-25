@@ -1,7 +1,7 @@
 
 # Compile, build and generate necessary docker images
 cd ../../
-./cicd.sh
+./cicd.sh docker/performance-framework/swir.yaml
 cd docker/performance-framework
 
 cd swir-java-client

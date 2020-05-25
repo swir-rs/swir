@@ -75,7 +75,6 @@ async fn main() {
     
     tasks.append(&mut start_pubsub_service(&swir_config,mc.messaging_memory_channels));
     tasks.append(&mut start_persistence_service(&swir_config,mc.persistence_memory_channels));
-
     
             
     if let Some(command) = client_executable {
