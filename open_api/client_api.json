@@ -1,0 +1,551 @@
+{
+  "openapi" : "3.0.0",
+  "info" : {
+    "license" : {
+      "name" : "Apache 2.0"
+    },
+    "title" : "SWIR Client API",
+    "version" : "1.0.0"
+  },
+  "servers" : [ {
+    "url" : "http://127.0.0.1:8080/"
+  }, {
+    "url" : "http://swir.rs/"
+  } ],
+  "paths" : {
+    "/pubsub/subscribe" : {
+      "post" : {
+        "callbacks" : {
+          "onData" : {
+            "{$request.body.subscription.uri}" : {
+              "post" : {
+                "operationId" : "onData_Post",
+                "requestBody" : {
+                  "content" : {
+                    "application/octet-stream" : {
+                      "schema" : {
+                        "format" : "octet",
+                        "type" : "string"
+                      }
+                    }
+                  },
+                  "description" : "Message payload",
+                  "required" : true
+                },
+                "responses" : {
+                  "200" : {
+                    "description" : "Your server implementation should return this HTTP status code if the data was received successfully"
+                  },
+                  "400" : {
+                    "description" : "Bad request"
+                  },
+                  "406" : {
+                    "description" : "Not acceptable"
+                  },
+                  "500" : {
+                    "description" : "Server error"
+                  }
+                },
+                "x-callback-request" : true
+              }
+            }
+          }
+        },
+        "operationId" : "createSubscription",
+        "parameters" : [ {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Subscription"
+              }
+            }
+          },
+          "description" : "Create a subscription and register a notification endpoint",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Processed"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "406" : {
+            "description" : "Not acceptable"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Subscribe to a stream of events",
+        "tags" : [ "pubsub" ]
+      }
+    },
+    "/pubsub/unsubscribe" : {
+      "post" : {
+        "operationId" : "deleteSubscription",
+        "parameters" : [ {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Subscription"
+              }
+            }
+          },
+          "description" : "Delete a subscription and deregister a notification endpoint",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Processed"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "406" : {
+            "description" : "Not acceptable"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Remove subscription and stop receiving events",
+        "tags" : [ "pubsub" ]
+      }
+    },
+    "/pubsub/publish" : {
+      "post" : {
+        "operationId" : "publish",
+        "parameters" : [ {
+          "description" : "Topic name",
+          "explode" : false,
+          "in" : "header",
+          "name" : "topic",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "format" : "octet",
+                "type" : "string"
+              }
+            }
+          },
+          "description" : "Message payload",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Processed"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "406" : {
+            "description" : "Not acceptable"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Publish a message on a given topic",
+        "tags" : [ "pubsub" ]
+      }
+    },
+    "/persistence/store" : {
+      "post" : {
+        "operationId" : "store",
+        "parameters" : [ {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Logical name of the database",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Key value",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-key",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "format" : "octet",
+                "type" : "string"
+              }
+            }
+          },
+          "description" : "Data to store in the store",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Processed"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "406" : {
+            "description" : "Not acceptable"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Store payload of the message with a given key",
+        "tags" : [ "persistence" ]
+      }
+    },
+    "/persistence/retrieve" : {
+      "post" : {
+        "operationId" : "retrieve",
+        "parameters" : [ {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Logical name of the database",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Key value",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-key",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "format" : "octet",
+                "type" : "string"
+              }
+            }
+          },
+          "description" : "Message payload",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "format" : "octet",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Value retrieved from the store"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "404" : {
+            "description" : "Not found"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Retrieve data for a given key",
+        "tags" : [ "persistence" ]
+      }
+    },
+    "/persistence/delete" : {
+      "post" : {
+        "operationId" : "delete",
+        "parameters" : [ {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Logical name of the database",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Key value",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-database-key",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "format" : "octet",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Value retrieved from the store"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "404" : {
+            "description" : "Not found"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Delete data for a given key",
+        "tags" : [ "persistence" ]
+      }
+    },
+    "/serviceinvocation/invoke/{service_name}" : {
+      "post" : {
+        "operationId" : "invoke",
+        "parameters" : [ {
+          "description" : "Logical name of a service to invoke",
+          "explode" : false,
+          "in" : "path",
+          "name" : "service_name",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        }, {
+          "description" : "Correlation id for this subscription",
+          "explode" : false,
+          "in" : "header",
+          "name" : "x-correlation-id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "style" : "simple"
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ServiceInvokeRequest"
+              }
+            }
+          },
+          "description" : "Message payload",
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "format" : "octet",
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "Value retrieved from the store"
+          },
+          "400" : {
+            "description" : "Bad request"
+          },
+          "404" : {
+            "description" : "Not found"
+          },
+          "500" : {
+            "description" : "Server error"
+          }
+        },
+        "summary" : "Invoke an operation on other REST service",
+        "tags" : [ "service_invocation" ]
+      }
+    }
+  },
+  "components" : {
+    "parameters" : {
+      "correlation_id" : {
+        "description" : "Correlation id for this subscription",
+        "explode" : false,
+        "in" : "header",
+        "name" : "x-correlation-id",
+        "required" : true,
+        "schema" : {
+          "type" : "string"
+        },
+        "style" : "simple"
+      },
+      "database_name" : {
+        "description" : "Logical name of the database",
+        "explode" : false,
+        "in" : "header",
+        "name" : "x-database-name",
+        "required" : true,
+        "schema" : {
+          "type" : "string"
+        },
+        "style" : "simple"
+      },
+      "database_key" : {
+        "description" : "Key value",
+        "explode" : false,
+        "in" : "header",
+        "name" : "x-database-key",
+        "required" : true,
+        "schema" : {
+          "type" : "string"
+        },
+        "style" : "simple"
+      }
+    },
+    "schemas" : {
+      "Subscription" : {
+        "example" : {
+          "endoint" : {
+            "uri" : "https://openapi-generator.tech",
+            "client_id" : "client_id"
+          },
+          "client_topic" : "client_topic"
+        },
+        "properties" : {
+          "client_topic" : {
+            "type" : "string"
+          },
+          "endoint" : {
+            "$ref" : "#/components/schemas/EndpointDesc"
+          }
+        },
+        "required" : [ "client_topic", "endpoint" ],
+        "type" : "object"
+      },
+      "ServiceInvokeRequest" : {
+        "example" : {
+          "headers" : {
+            "key" : "headers"
+          },
+          "request_target" : "request_target",
+          "method" : "post",
+          "payload" : "payload"
+        },
+        "properties" : {
+          "method" : {
+            "description" : "Method to be executed on a service",
+            "enum" : [ "post", "delete", "get", "put" ],
+            "type" : "string"
+          },
+          "request_target" : {
+            "description" : "Path, query and fragment part of URI",
+            "type" : "string"
+          },
+          "headers" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "description" : "Headers to be used during service invocation",
+            "type" : "object"
+          },
+          "payload" : {
+            "description" : "Base64 encoded payload which will be used as body during the service invocation. This payload will be base64 decoded by Swir so you need to double base64 encode it if target service expects base64 encoded payload.",
+            "format" : "byte",
+            "type" : "string"
+          }
+        },
+        "required" : [ "headers", "method", "payload", "request_target" ],
+        "type" : "object"
+      },
+      "EndpointDesc" : {
+        "example" : {
+          "uri" : "https://openapi-generator.tech",
+          "client_id" : "client_id"
+        },
+        "properties" : {
+          "uri" : {
+            "description" : "The location where data will be sent. Must be network accessible by the source server.",
+            "format" : "uri",
+            "type" : "string"
+          },
+          "client_id" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "client_id", "uri" ],
+        "type" : "object"
+      }
+    }
+  }
+}

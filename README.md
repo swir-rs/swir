@@ -100,5 +100,3 @@ If you are interested in seeing Swir working in AWS ECS, check examples provided
 ### Similar Frameworks
 
 SWIR has been influenced by Microsoft's [Distributed Application Runtime - Dapr](https://github.com/dapr/dapr). It is hard to compete with Microsoft's unlimited resources, but someday perhaps SWIR might achieve a parity :)
-
-

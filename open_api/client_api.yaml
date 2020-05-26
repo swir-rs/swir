@@ -1,0 +1,337 @@
+              
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: SWIR Client API
+  license:
+    name: Apache 2.0
+servers:
+  - url: http://127.0.0.1:8080/
+  - url: http://swir.rs/
+paths:
+  /pubsub/subscribe:
+    post:
+      summary: Subscribe to a stream of events 
+      operationId: createSubscription
+      tags:
+        - pubsub
+      parameters: 
+        - $ref: '#/components/parameters/correlation_id'
+        
+      requestBody:
+        description: Create a subscription and register a notification endpoint
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subscription'
+              
+      responses:
+        '200':
+          description: Processed            
+        '400':
+          description: Bad request
+        '406':
+          description: Not acceptable
+        '500':
+          description: Server error
+          
+      callbacks:
+        onData:
+          '{$request.body.subscription.uri}':
+            post:
+              requestBody:
+                description: Message payload 
+                required: true
+                content:
+                  application/octet-stream:
+                    schema:
+                      type: string
+                      format: octet
+              responses:
+                '200': 
+                  description: Your server implementation should return this HTTP status code if the data was received successfully
+                '400': 
+                  description: Bad request
+                '406': 
+                  description: Not acceptable
+                '500': 
+                  description: Server error
+          
+  /pubsub/unsubscribe:          
+    post:
+      summary: Remove subscription and stop receiving events 
+      operationId: deleteSubscription
+      tags:
+        - pubsub
+      parameters: 
+        - $ref: '#/components/parameters/correlation_id'
+      requestBody: 
+        description: Delete a subscription and deregister a notification endpoint
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subscription'
+        
+      responses:
+        '200':
+          description: Processed            
+        '400':
+          description: Bad request
+        '406':
+          description: Not acceptable
+        '500':
+          description: Server error
+          
+  /pubsub/publish:
+    post:
+      summary: Publish a message on a given topic
+      operationId: publish
+      tags:
+        - pubsub
+      parameters: 
+        - name: topic
+          description: Topic name
+          schema: 
+            type: string
+          required: true
+          in: header
+      requestBody:
+        description: Message payload 
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: octet
+      responses:
+        '200':
+          description: Processed          
+        '400':
+          description: Bad request
+        '406':
+          description: Not acceptable
+        '500':
+          description: Server error
+          
+  /persistence/store:
+    post:
+      summary: Store payload of the message with a given key
+      operationId: store
+      tags:
+        - persistence
+      parameters:
+      - $ref: '#/components/parameters/correlation_id'
+      - $ref: '#/components/parameters/database_name'
+      - $ref: '#/components/parameters/database_key'        
+          
+      requestBody:
+        description: Data to store in the store
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: octet
+              
+      responses:
+        '200':
+          description: Processed          
+        '400':
+          description: Bad request
+        '406':
+          description: Not acceptable
+        '500':
+          description: Server error
+          
+  /persistence/retrieve:
+    post:
+      summary: Retrieve data for a given key
+      operationId: retrieve
+      tags:
+        - persistence
+      parameters:
+      - $ref: '#/components/parameters/correlation_id'
+      - $ref: '#/components/parameters/database_name'
+      - $ref: '#/components/parameters/database_key'        
+          
+      requestBody:
+        description: Message payload 
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: octet
+      responses:
+        '200':
+          description: Value retrieved from the store
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: octet
+        '400':
+          description: Bad request
+        '404':
+          description: Not found
+        '500':
+          description: Server error
+          
+  /persistence/delete:
+    post:
+      summary: Delete data for a given key
+      operationId: delete
+      tags:
+        - persistence
+      parameters:
+      - $ref: '#/components/parameters/correlation_id'
+      - $ref: '#/components/parameters/database_name'
+      - $ref: '#/components/parameters/database_key'        
+          
+      responses:
+        '200':
+          description: Value retrieved from the store
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: octet
+        '400':
+          description: Bad request
+        '404':
+          description: Not found
+        '500':
+          description: Server error                
+          
+  /serviceinvocation/invoke/{service_name}:
+    post:
+      summary: Invoke an operation on other REST service
+      operationId: invoke
+      tags:
+        - service_invocation
+      parameters:
+      - in: path
+        name: service_name
+        schema:
+          type: string
+        required: true
+        description: Logical name of a service to invoke
+#        example: "books"
+          
+      - $ref: '#/components/parameters/correlation_id'
+      
+      requestBody:
+        description: Message payload 
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceInvokeRequest'
+            
+      
+        
+      responses:
+        '200':
+          description: Value retrieved from the store
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: octet
+        '400':
+          description: Bad request
+        '404':
+          description: Not found
+        '500':
+          description: Server error    
+      
+  
+components:
+  parameters:
+    correlation_id: 
+      name: x-correlation-id
+      description: Correlation id for this subscription
+      schema: 
+        type: string
+      required: true
+      in: header
+    database_name:
+      name: x-database-name
+      description: Logical name of the database 
+      schema: 
+        type: string
+      required: true
+      in: header
+#      example: "my_data"
+    
+    database_key:    
+      name: x-database-key
+      description: Key value
+      schema: 
+        type: string
+      required: true
+      in: header
+#      example: "transaction_1"
+      
+  schemas:
+    Subscription:
+      type: object
+      required:
+        - client_topic
+        - endpoint
+      properties:
+        client_topic:
+          type: string
+        endoint:
+          $ref: '#/components/schemas/EndpointDesc'
+    ServiceInvokeRequest:
+      type: object
+      required:
+        - method
+        - request_target
+        - headers
+        - payload
+      properties:
+        method:
+          type: string
+          enum: [post, delete, get, put]
+          description: Method to be executed on a service
+        request_target:
+          type: string
+          description: Path, query and fragment part of URI
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Headers to be used during service invocation
+#          example:
+#            "Content-type": "application/json"
+#            "Custom-header": "hello!"
+        payload:
+          type: string
+          format: byte
+          description: Base64 encoded payload which will be used as body during the service invocation. This payload will be base64 decoded by Swir so you need to double base64 encode it if target service expects base64 encoded payload.
+          example:
+              RGVjb2RlIG1lIG9uY2UgOiBSR1ZqYjJSbElHMWxJSFIzYVdObElBbz0K
+            
+            
+          
+    EndpointDesc:
+      type: object
+      required: 
+        - uri
+        - client_id
+      properties:
+        uri: 
+          type: string
+          format: uri
+          description: The location where data will be sent. Must be network accessible by the source server.
+#          example: https://127.0.0.1:8080/pubsub/respones
+        client_id: 
+          type: string
+    
+          
+    
+

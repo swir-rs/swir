@@ -1,0 +1,62 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: SWIR Service Invocation API
+  license:
+    name: Apache 2.0
+servers:
+  - url: http://service_invocation.swir.rs/
+paths:
+  /:
+    post:
+      summary: Invoke POST operation on a REST service and return response 
+      operationId: invokePost
+      tags:
+        - service_invocation
+      parameters: 
+        - $ref: '#/components/parameters/correlation_id'
+        - $ref: '#/components/parameters/host'
+        
+      requestBody:
+        description: Create a subscription and register a notification endpoint
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: octet
+              
+      responses:
+        '200':
+          description: As returned by the other service
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: octet
+        '400':
+          description: As returned by the other service
+        '404':
+          description: As returned by the other service
+        '500':
+          description: As returned by the other service
+          
+                  
+components:
+  parameters:
+    correlation_id: 
+      name: x-correlation-id
+      description: Correlation id for this call
+      schema: 
+        type: string
+      required: true
+      in: header
+    host: 
+      name: host
+      description: Host header is used to find which service needs to be invoked.
+      schema: 
+        type: string
+      required: true
+      in: header        
+    
+
