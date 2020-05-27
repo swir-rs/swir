@@ -1,4 +1,9 @@
-FROM openjdk:14
-COPY build/libs/swir-java-processor-0.0.1-SNAPSHOT.jar /app.jar
+FROM gradle:jdk14
+COPY build.gradle ./
+COPY gradle ./gradle/
+COPY gradlew ./
+COPY settings.gradle ./
+COPY src ./src
+RUN gradle clean bootJar
 EXPOSE 8090
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","build/libs/swir-java-processor-0.0.1-SNAPSHOT.jar"]

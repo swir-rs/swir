@@ -17,10 +17,9 @@ printf "\n**********************\n"
 cd ../swir-python-processor
 printf "\n**********************\n"
 printf "\nPython processor  \n"
-
-./build.sh
+cp ../../../grpc_api/*.proto .
 docker build --tag swir-example-python-processor:v3 .
-
+rm *.proto
 printf "\nPython processor  done"
 printf "\n**********************\n"
 
@@ -39,10 +38,10 @@ printf "\n**********************\n"
 cd ../swir-java-source
 printf "\n**********************\n"
 printf "\nJava GRPC source  \n"
-
-./gradlew clean build installDist assembleDist
+cp -r ../../../grpc_api/ .
+#./gradlew clean build installDist assembleDist
 docker build --tag swir-example-java-source:v3 .
-
+rm -rd grpc_api
 printf "\nJava GRPC source...done"
 printf "\n**********************\n"
 
@@ -51,10 +50,9 @@ cd ../swir-python-sink
 
 printf "\n**********************\n"
 printf "\nPython GRPC sink  \n"
-
-./build.sh
+cp ../../../grpc_api/*.proto .
 docker build --tag swir-example-python-sink:v3 .
-
+rm *.proto
 printf "Python GRPC sink... done  \n"
 printf "\n**********************\n"
 
