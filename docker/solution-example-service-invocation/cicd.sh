@@ -18,7 +18,6 @@ cd ../swir-python-http-server
 printf "\n**********************\n"
 printf "\nPython HTTP server  \n"
 
-./build.sh
 docker build --tag swir-example-si-python-http-server:v3 . 
 
 printf "\nPython HTTP server  done"

@@ -1,4 +1,8 @@
-FROM openjdk:14
-ADD build/distributions/swir-grpc-sink.tar /
+FROM gradle:jre14
+COPY build.gradle ./
+COPY settings.gradle ./
+COPY src ./src
+COPY grpc_api ./grpc_api
+RUN gradle --no-daemon installDist
 EXPOSE 50051 50052
-ENTRYPOINT ["/swir-grpc-sink/bin/swir-grpc-sink"]
+ENTRYPOINT ["build/install/swir-grpc-sink/bin/swir-grpc-sink"]

@@ -5,25 +5,19 @@ cd ../../
 cd docker/performance-framework
 
 cd swir-java-client
-./gradlew clean bootJar
 docker build --tag swir-java-client:v3 .
-
 cd ../swir-kafka-sink
-./gradlew clean bootJar
 docker build --tag swir-kafka-sink:v3 .
-
 cd ../swir-nats-sink
-./gradlew clean bootJar
 docker build --tag swir-nats-sink:v3 .
-
 cd ../swir-grpc-client
-./gradlew clean build installDist assembleDist
-docker build --tag swir-grpc-client:v3 .
-
+cp -r ../../../grpc_api .
+docker build -m 4g --tag swir-grpc-client:v3 .
+rm -rf grpc_api
 cd ../swir-grpc-sink
-./gradlew clean build installDist assembleDist
+cp -r ../../../grpc_api .
 docker build --tag swir-grpc-sink:v3 .
-
+rm -rf grpc_api
 cd ..
 
 docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans

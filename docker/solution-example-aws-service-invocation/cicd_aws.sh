@@ -28,7 +28,6 @@ cd ../../solution-example-service-invocation/swir-python-http-server
 printf "\n**********************\n"
 printf "\nPython HTTP server  \n"
 
-./build.sh
 docker build --tag swir-example-si-python-http-server:v3 . 
 
 printf "\nPython HTTP server  done"
@@ -38,10 +37,9 @@ printf "\n**********************\n"
 cd ../swir-python-grpc-client
 printf "\n**********************\n"
 printf "\nPython GRPC client  \n"
-
-./build.sh
+cp ../../../grpc_api/*.proto .
 docker build --tag swir-example-si-python-grpc-client:v3 .
-
+rm *.proto
 printf "\nPython GRPC client ... done \n"
 printf "\n**********************\n"
 

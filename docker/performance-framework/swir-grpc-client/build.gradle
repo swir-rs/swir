@@ -69,7 +69,7 @@ sourceSets {
     main {
         proto {
             // In addition to the default 'src/main/proto'
-            srcDir '../../../grpc_api'
+            srcDir './grpc_api'
         }
         java {
             srcDirs 'build/generated/source/proto/main/grpc'

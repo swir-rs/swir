@@ -8,7 +8,7 @@ cd ./swir-configurator
 printf "\n**********************\n"
 printf "\nConfigurator \n"
 
-docker build --tag swir-example-configurator:v3 .
+docker build --tag swir-example-configurator:v3 . 
 
 printf "\nConfigurator... done"
 printf "\n**********************\n"
@@ -27,10 +27,7 @@ printf "\n**********************\n"
 cd ../swir-java-processor
 printf "\n**********************\n"
 printf "\nJava processor  \n"
-
-./gradlew clean bootJar
 docker build --tag swir-example-java-processor:v3 .
-
 printf "\nJava processor  done"
 printf "\n**********************\n"
 
@@ -39,9 +36,8 @@ cd ../swir-java-source
 printf "\n**********************\n"
 printf "\nJava GRPC source  \n"
 cp -r ../../../grpc_api/ .
-#./gradlew clean build installDist assembleDist
 docker build --tag swir-example-java-source:v3 .
-rm -rd grpc_api
+rm -rf grpc_api
 printf "\nJava GRPC source...done"
 printf "\n**********************\n"
 

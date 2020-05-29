@@ -1,6 +1,7 @@
-FROM openjdk:14-jdk-alpine
-#VOLUME /tmp
-#ARG SPRINGBOOT_APP=build/libs/KafkaSink-0.1.0-SNAPSHOT.jar
-#COPY ${SPRINGBOOT_APP} app.jar
-COPY build/libs/swir-kafka-sink-0.0.1-SNAPSHOT.jar /app.jar
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]
+FROM gradle:jre14
+COPY build.gradle ./
+COPY settings.gradle ./
+COPY src ./src
+RUN gradle --no-daemon bootJar
+ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","build/libs/swir-kafka-sink-0.0.1-SNAPSHOT.jar"]
+

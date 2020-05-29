@@ -1,7 +1,5 @@
 FROM gradle:jdk14
 COPY build.gradle ./
-COPY gradle ./gradle/
-COPY gradlew ./
 COPY settings.gradle ./
 COPY src ./src
 RUN gradle clean bootJar
