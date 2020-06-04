@@ -1,9 +1,9 @@
 //#![Deny(warnings)]
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate lazy_static;
 extern crate custom_error;
+#[macro_use]
+extern crate tracing;
 
 mod frontend_handlers;
 mod messaging_handlers;
@@ -41,12 +41,20 @@ use tonic::transport::{Identity, ServerTlsConfig,Certificate,Server as TonicServ
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+use tracing_subscriber::filter::EnvFilter;
 use crate::utils::config::*;
 
 
 #[tokio::main(core_threads = 8)]
-async fn main() {    
-    env_logger::builder().format_timestamp_nanos().init();
+async fn main() {
+    let subscriber = tracing_subscriber::fmt()
+	.with_env_filter(EnvFilter::from_default_env())
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
+    
+
+
+//    env_logger::builder().format_timestamp_nanos().init();
     let swir_config = Swir::new();
 
     let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);

@@ -190,7 +190,7 @@ impl AwsKinesisBroker {
                 debug!("Stream {} {} arn {}", consumer_topic, consumer_group, stream_arn);
                 arns.push((consumer_topic, consumer_group, stream_arn));
             } else {
-                warn!("Error {} {:?}", consumer_topic, stream_description_summary_output.unwrap_err());
+                warn!("Error {} {:?}", consumer_topic, stream_description_summary_output);
             }
         }
         arns
@@ -307,7 +307,7 @@ impl AwsKinesisBroker {
                             }
                         }
                     } else {
-                        warn!("Error {:?}", list_shards_output.unwrap_err());
+                        warn!("Error {:?}", list_shards_output);
                     }
                 });
                 tasks.push(handle);

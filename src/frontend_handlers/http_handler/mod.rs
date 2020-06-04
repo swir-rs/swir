@@ -210,7 +210,7 @@ async fn service_invocation_processor(correlation_id: String, path: String, req:
         }
         response
     } else {
-        debug!("Invalid Json {:?}", maybe_json.unwrap_err());
+        debug!("Invalid Json {:?}", maybe_json);
         *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
         response
     };
