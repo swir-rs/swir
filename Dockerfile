@@ -1,14 +1,13 @@
 FROM rust:latest as builder
 WORKDIR /usr/src/swir
-COPY src ./src
-COPY grpc_api ./grpc_api
-COPY Cargo.toml ./
-COPY Cargo.lock ./
+RUN rustup component add rustfmt --toolchain 1.40.0-x86_64-unknown-linux-gnu
 COPY build.rs ./
 COPY rustfmt.toml ./
 COPY deny.toml ./
-
-RUN rustup component add rustfmt --toolchain 1.40.0-x86_64-unknown-linux-gnu
+COPY grpc_api ./grpc_api
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY src ./src
 RUN cargo build --release --all-features
 
 

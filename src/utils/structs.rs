@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use tokio::sync::mpsc;
+use tracing::Span;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 
@@ -354,4 +355,5 @@ pub struct RestToPersistenceContext {
 pub struct RestToSIContext {
     pub job: SIJobType,
     pub sender: Sender<SIResult>,
+    pub span: Span
 }

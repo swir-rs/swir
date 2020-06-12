@@ -1,17 +1,28 @@
 pub mod si_http_handler;
 
+
 use crate::service_discovery::ServiceDiscovery;
 use crate::swir_common;
 use crate::swir_grpc_internal_api;
-use crate::utils::config::Services;
-use crate::utils::structs::*;
-
+use crate::utils::{
+    config::Services,
+    structs::*,
+    tracing_utils
+};
+    
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, oneshot};
 use tokio::time::timeout;
 use std::collections::HashMap;
 use tonic::transport::{Channel,Endpoint,ClientTlsConfig,Identity,Certificate};
+use tonic::{
+    metadata::AsciiMetadataValue,
+    Request};
 use tower::discover::Change;
+
+use tracing::info_span;
+
+use tracing_futures::Instrument;
 
 
 
@@ -37,13 +48,24 @@ fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendSt
     }
 }
 
+
+
+
 async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::Sender<SIResult>, req: swir_common::InvokeRequest) {
     let correlation_id = req.correlation_id.clone();
     let service_name = req.service_name.clone();
 
-    debug!("public_invoke_handler: correlation {} {}", &correlation_id, &service_name);
+    debug!("invoke_handler: {} {}", &correlation_id, &service_name);
     let mut grpc_clients = grpc_clients.lock().await;
-    if let Some(client_holder) = grpc_clients.get_mut(&req.service_name) {	
+    if let Some(client_holder) = grpc_clients.get_mut(&req.service_name) {
+	let mut req = Request::new(req);
+	req.metadata_mut().insert("x-correlation-id",AsciiMetadataValue::from_str(&correlation_id).unwrap());
+	let hostname = hostname::get().unwrap();
+	req.metadata_mut().insert("origin",AsciiMetadataValue::from_str(hostname.to_str().unwrap()).unwrap());
+	if let Some((trace_header_name,trace_header)) = tracing_utils::get_grpc_tracing_header(){
+	    req.metadata_mut().insert(trace_header_name,trace_header);    
+	};
+		
         let resp = client_holder.client.invoke(req);
 	let maybe_timeout =timeout(tokio::time::Duration::from_secs(2), resp).await;
         trace!("public_invoke_handler: got response on internal {:?}", maybe_timeout);
@@ -77,6 +99,10 @@ async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::
         });
     }
 }
+
+
+
+
 
 
 struct ClientHolder<T:PartialEq>{
@@ -233,16 +259,20 @@ impl ServiceInvocationService {
             let grpc_clients = self.grpc_clients.clone();
             let mut http_sender = http_sender.clone();
             let client_endpoint_mapping = client_endpoint_mapping.clone();
+	    let parent_span=ctx.span;
+	    let _s = parent_span.enter();
+	    let span = info_span!("service_invocation");
+	    let job = ctx.job;
+	    let sender = ctx.sender;
             tokio::spawn(async move {
-                let client_endpoint_mapping = client_endpoint_mapping.clone();
-                let ctx = ctx;
-                let job = ctx.job;
+                let client_endpoint_mapping = client_endpoint_mapping.clone();		
+
                 match job {
                     SIJobType::PublicInvokeGrpc { req } => {
-                        invoke_handler(grpc_clients, ctx.sender, req).await;
+                        invoke_handler(grpc_clients, sender, req).await;
                     }
                     SIJobType::PublicInvokeHttp { req } => {
-                        invoke_handler(grpc_clients, ctx.sender, req).await;
+                        invoke_handler(grpc_clients, sender, req).await;
                     }
                     SIJobType::InternalInvoke { req } => {
                         debug!("internal_invoke_handler: {}", req);
@@ -269,14 +299,14 @@ impl ServiceInvocationService {
 
                             if let Err(mpsc::error::SendError(_)) = http_sender.send(mrc).await {
                                 warn!("Unable to send {} {}. Channel is closed", service_name, correlation_id);
-                                let _res = ctx.sender.send(SIResult {
+                                let _res = sender.send(SIResult {
                                     correlation_id,
                                     status: BackendStatusCodes::Error("Internal ereror".to_string()),
                                     response: None,
                                 });
                             } else if let Ok(response_from_client) = r.await {
                                 let (status, result) = map_client_to_backend_status_calls(response_from_client.status);
-                                let _res = ctx.sender.send(SIResult {
+                                let _res = sender.send(SIResult {
                                     correlation_id: correlation_id.clone(),
                                     status,
                                     response: Some(swir_common::InvokeResponse {
@@ -289,7 +319,7 @@ impl ServiceInvocationService {
                                     }),
                                 });
                             } else {
-                                let _res = ctx.sender.send(SIResult {
+                                let _res = sender.send(SIResult {
                                     correlation_id,
                                     status: BackendStatusCodes::Error("Internal ereror".to_string()),
                                     response: None,
@@ -298,7 +328,7 @@ impl ServiceInvocationService {
                         } else {
                             let msg = format!("Can't find client url for service name {}", service_name);
                             warn!("{}", msg);
-                            let _res = ctx.sender.send(SIResult {
+                            let _res = sender.send(SIResult {
                                 correlation_id,
                                 status: BackendStatusCodes::Error(msg.to_string()),
                                 response: None,
@@ -306,7 +336,7 @@ impl ServiceInvocationService {
                         }
                     }
                 }
-            });
+            }.instrument(span));
         }
 
         futures::future::join_all(tasks).await;

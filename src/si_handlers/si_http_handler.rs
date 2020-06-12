@@ -11,6 +11,7 @@ use tokio::sync::{
     mpsc,
     oneshot
 };
+use tracing::Span;
 
 use hyper::header::HOST;
 
@@ -123,7 +124,7 @@ async fn service_invocation_processor(req: Request<Body>, from_client_to_si_send
     let job = SIJobType::PublicInvokeHttp { req };
     let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
 
-    let ctx = RestToSIContext { job, sender: local_sender };
+    let ctx = RestToSIContext { job, sender: local_sender,span:Span::current() };
     let mut sender = from_client_to_si_sender;
 
     let res = sender.try_send(ctx);

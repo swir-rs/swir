@@ -20,6 +20,8 @@ use crate::utils::structs::*;
 
 use crate::swir_common;
 use crate::swir_grpc_api;
+use tracing::Span;
+
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -505,20 +507,22 @@ impl SwirServiceInvocationApi {
 #[tonic::async_trait]
 impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {
     async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status> {
+
         let req = request.into_inner();
+	info!("Invoke {}",&req);
         let correlation_id = req.correlation_id.clone();
         let service_name = req.service_name.clone();
+	
         if !validate_method(req.method) {
             return Err(tonic::Status::invalid_argument("Unsupported method"));
         }
 
-        info!("Invoke {}", req);
-
+        
         let job = SIJobType::PublicInvokeGrpc { req };
 
         let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
 
-        let ctx = RestToSIContext { job, sender: local_sender };
+        let ctx = RestToSIContext { job, sender: local_sender,span:Span::current()};
         let mut sender = self.from_client_to_si_sender.clone();
         let res = sender.try_send(ctx);
         if let Err(e) = res {
