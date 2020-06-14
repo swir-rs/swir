@@ -3,6 +3,11 @@ http_port: 8080
 grpc_port: 50051
 internal_grpc_port: 50052
 
+tracing:
+  open_telemetry:
+    collector_address: swir-example-logger
+    collector_port: 6831
+    service_name: si-example
 
 pubsub:
   kafka: []

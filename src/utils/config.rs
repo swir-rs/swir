@@ -266,7 +266,20 @@ pub struct Services {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct OpenTelemetry{
+    pub collector_address: String,
+    pub collector_port: u16,
+    pub service_name: String    
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct TracingConfig{
+    pub open_telemetry: Option<OpenTelemetry>
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Swir {
+    pub tracing: Option<TracingConfig>,
     pub ip: String,
     pub http_port: u16,    
     pub grpc_port: u16,

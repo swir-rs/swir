@@ -47,77 +47,21 @@ use crate::utils::{
     config::*,
     tracing_utils
 };
-
-use opentelemetry::{
-    api,
-    api::{
-	Provider,
-	HttpTextFormat},
-    sdk};
 use tracing::field;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-use tracing_subscriber::{fmt, EnvFilter,
-	layer::SubscriberExt,
-	util::SubscriberInitExt
-};
-
+use tracing_futures::Instrument;
 static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
 
-
-
-
-
-fn init_tracer() -> Result<(), Box<dyn std::error::Error>> {
-    let exporter = opentelemetry_jaeger::Exporter::builder()
-        .with_agent_endpoint("swir-example-logger:6831".parse().unwrap())
-        .with_process(opentelemetry_jaeger::Process {
-            service_name: "SWIR_sidecar".to_string(),
-            tags: Vec::new(),
-        })
-        .init()?;
-    let provider = sdk::Provider::builder()
-        .with_simple_exporter(exporter)
-        .with_config(sdk::Config {
-            default_sampler: Box::new(sdk::Sampler::Always),
-            ..Default::default()
-        })
-        .build();
-    let tracer = provider.get_tracer("tracing");
-
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    let fmt_layer = fmt::layer().with_target(false);
-    let filter_layer = EnvFilter::try_from_default_env()
-    .or_else(|_| EnvFilter::try_new("info"))
-    .unwrap();
-
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).finish();
-    tracing_subscriber::registry()
-	.with(filter_layer)
-	.with(fmt_layer)
-        .with(opentelemetry)
-        .try_init()?;
-
-    Ok(())
-}
-
-
 #[tokio::main(core_threads = 8)]
-async fn main() {
-    if let Err(_) = init_tracer(){            
-	let subscriber = tracing_subscriber::fmt()
-	    .with_env_filter(EnvFilter::from_default_env())
-            .finish();
-	tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
-    };
-    
-
-//    env_logger::builder().format_timestamp_nanos().init();
+async fn main() {  
     let swir_config = Swir::new();
+    println!("{:?}",swir_config);
+    if let Err(e) = tracing_utils::init_tracer(&swir_config){            
+	println!("Some serious problem with logging system {}",e);
+	return;	      
+    };
 
     let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);
-
     let ip = swir_config.ip.clone();
-
 
     let http_port: u16 = swir_config.http_port;
     let grpc_port: u16 = swir_config.grpc_port;
@@ -204,12 +148,16 @@ fn start_client_http_interface(http_addr:&SocketAddr,swir_config:&Swir,mc: &Memo
             }))
         }
     });
+
+    let span = tracing::info_span!("SWIR_CLIENT_HTTP_API",correlation_id=field::Empty, origin=field::Empty);
+    let _sp = span.enter();
     
     if let Some(tls_config) = swir_config.tls_config.clone(){
 	let http_tls_certificate = tls_config.certificate;
 	let http_tls_key = tls_config.private_key;
 	let certs = load_certs(http_tls_certificate).unwrap();	
 	let key = load_private_key(http_tls_key).unwrap();
+	let span = span.clone();
 	let https_client_interface = tokio::spawn(async move {
             let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
             config.set_single_cert(certs, key).expect("invalid key or certificate");
@@ -233,7 +181,7 @@ fn start_client_http_interface(http_addr:&SocketAddr,swir_config:&Swir,mc: &Memo
                     }
 		}
         }));
-            let res = Server::builder(incoming).serve(https_service).await;
+            let res = Server::builder(incoming).serve(https_service).instrument(span).await;
             if let Err(e) = res {
 		warn!("Problem starting HTTPs interface {:?}", e);
             }
@@ -241,8 +189,9 @@ fn start_client_http_interface(http_addr:&SocketAddr,swir_config:&Swir,mc: &Memo
 	
 	tasks.push(https_client_interface);	
     }else{
-	let http_client_interface = tokio::spawn(async move {	    	    	    
-            let res = Server::bind(&http_addr).serve(http_service).await;
+	let span = span.clone();
+	let http_client_interface = tokio::spawn(async move {	    
+            let res = Server::bind(&http_addr).serve(http_service).instrument(span).await;
             if let Err(e) = res {
 		warn!("Problem starting HTTP interface {:?}", e);
             }
@@ -287,11 +236,8 @@ fn start_client_grpc_interface(grpc_addr:&SocketAddr,swir_config:&Swir,mc: &Memo
 	
         let grpc = builder.
 	    trace_fn(|header_map| {
-		let span = tracing::info_span!("SWIR_CLIENT_GRPC_API",correlation_id=field::Empty, origin=field::Empty);
-		if let Some(ctx) = tracing_utils::from_http_headers(&header_map){
-		    span.set_parent(&ctx);
-		};
-			
+		let span = tracing::info_span!("CLIENT_GRPC",correlation_id=field::Empty, origin=field::Empty);
+		let span = tracing_utils::from_http_headers(span, &header_map);			
 		let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();		
 		let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();												
  		let maybe_corr_id_header = header_map.get(corr_id_header);
@@ -344,20 +290,12 @@ fn start_internal_grpc_interface(grpc_addr:&SocketAddr,swir_config:&Swir,mc: &Me
             let grpc = TonicServer::builder().tls_config(tls).
 		trace_fn(|header_map| {
 
-		    let trace_header = HeaderName::from_lowercase("traceparent".as_bytes()).unwrap();				
+
 		    let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();		
 		    let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();
-		    let maybe_tracingheader_header = header_map.get(trace_header);
-		    let span = tracing::info_span!("SWIR_INTERNAL_GRPC_API",correlation_id=field::Empty, origin=field::Empty);
-		    
-		    if let Some(value) = maybe_tracingheader_header {
-		    	let propagator = api::TraceContextPropagator::new();
-		    let mut carrier = std::collections::HashMap::new();		    
-		    	carrier.insert("traceparent".to_string(),String::from_utf8_lossy(value.as_bytes()).to_string());
-		    	let pc = propagator.extract(&carrier);
-		    	span.set_parent(&pc);
-		    };
-		    		
+		    let span = tracing::info_span!("INTERNAL_GRPC",correlation_id=field::Empty, origin=field::Empty);
+		    let span = tracing_utils::from_http_headers(span, &header_map);			
+		    		    		
 		    let maybe_corr_id_header = header_map.get(corr_id_header);
 		    let maybe_origin_header = header_map.get(origin_header);
 		    

@@ -336,6 +336,7 @@ pub struct CustomContext;
 pub struct RestToMessagingContext {
     pub job: Job,
     pub sender: Sender<MessagingResult>,
+    pub span: Span
 }
 
 #[derive(Debug)]
@@ -343,12 +344,14 @@ pub struct BackendToRestContext {
     pub correlation_id: String,
     pub sender: Option<Sender<RESTRequestResult>>,
     pub request_params: RESTRequestParams,
+    pub span: Span
 }
 
 #[derive(Debug)]
 pub struct RestToPersistenceContext {
     pub job: PersistenceJobType,
     pub sender: Sender<PersistenceResult>,
+    pub span: Span
 }
 
 #[derive(Debug)]

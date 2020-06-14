@@ -1,6 +1,5 @@
 pub mod si_http_handler;
 
-
 use crate::service_discovery::ServiceDiscovery;
 use crate::swir_common;
 use crate::swir_grpc_internal_api;
@@ -10,18 +9,35 @@ use crate::utils::{
     tracing_utils
 };
     
-use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, oneshot};
-use tokio::time::timeout;
-use std::collections::HashMap;
-use tonic::transport::{Channel,Endpoint,ClientTlsConfig,Identity,Certificate};
+
+use tokio::{
+    sync::{
+	mpsc,
+	Mutex,
+	oneshot
+    },
+    time::timeout
+};
+use std::{
+    collections::HashMap,
+    sync::Arc
+};
+
+
 use tonic::{
     metadata::AsciiMetadataValue,
-    Request};
+    Request,
+    transport::{
+	Channel,
+	Endpoint,
+	ClientTlsConfig,
+	Identity,
+	Certificate
+    }	
+};
 use tower::discover::Change;
 
-use tracing::info_span;
-
+use tracing::{info_span,Span};
 use tracing_futures::Instrument;
 
 
@@ -287,6 +303,7 @@ impl ServiceInvocationService {
                         if let Some(endpoint) = client_endpoint {
                             let method = swir_common::HttpMethod::from_i32(req.method).unwrap();
                             let mrc = BackendToRestContext {
+				span:Span::current(),
                                 correlation_id: correlation_id.clone(),
                                 sender: Some(s),
                                 request_params: RESTRequestParams {

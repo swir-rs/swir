@@ -67,6 +67,8 @@ mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
 
 [build-dependencies]
 tonic-build = "0.2"
+prost-build = "0.6"
+
 #tonic-build = { version="0.2", git ="https://github.com/hyperium/tonic", branch = "master"  }
 #tonic-build = { version="0.2", path="../tonic/tonic-build" }
 

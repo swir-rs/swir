@@ -1,10 +1,13 @@
 use crate::persistence_handlers::Store;
-use crate::utils::config::ClientToBackendDatabaseResolver;
-use crate::utils::config::Redis;
-use crate::utils::structs::DeleteRequest;
-use crate::utils::structs::{BackendStatusCodes, PersistenceJobType, PersistenceRequest, PersistenceResult, RestToPersistenceContext, RetrieveRequest, StoreRequest};
-use async_trait::async_trait;
+use crate::utils::{
+    config::{
+	ClientToBackendDatabaseResolver,
+	Redis
+    },
+    structs::*
+};
 
+use async_trait::async_trait;
 
 use std::sync::Arc;
 use tokio::stream::StreamExt;
@@ -15,6 +18,7 @@ use tokio::sync::{
 };
 
 use redis::{pipe, Client, Commands, Connection};
+use tracing::info_span;
 
 #[derive(Debug)]
 pub struct RedisStore {
@@ -152,21 +156,25 @@ impl RedisStore {
 
         info!("Redis is running");
         let mut rx = self.rx.lock().await;
-        while let Some(job) = rx.next().await {
-            let sender = job.sender;
-            match job.job {
-                PersistenceJobType::Store(value) => {
-                    self.store(&mut connection, value, sender);
-                }
 
+        while let Some(ctx) = rx.next().await {
+	    let parent_span = ctx.span;
+	    let span = info_span!(parent:&parent_span,"REDIS");
+	    let _s = span.enter();
+            let sender = ctx.sender;
+	    match ctx.job {
+                PersistenceJobType::Store(value) => {
+		    self.store(&mut connection, value, sender);
+                }
+		
                 PersistenceJobType::Retrieve(value) => {
-                    self.retrieve(&mut connection, value, sender);
+		    self.retrieve(&mut connection, value, sender);
                 }
                 PersistenceJobType::Delete(value) => {
-                    self.delete(&mut connection, value, sender);
+		    self.delete(&mut connection, value, sender);
                 }
-            }
-        }
+	    }
+	}
     }
 }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use crate::swir_common;
 use crate::utils::{
     structs::*,
@@ -7,13 +5,27 @@ use crate::utils::{
 };
 use futures::stream::StreamExt;
 use http::HeaderValue;
-use hyper::client::connect::dns::GaiResolver;
-use hyper::client::HttpConnector;
-use hyper::{header, Body, Client, HeaderMap, Method, Request, Response, StatusCode};
+use hyper::{
+    client::{
+	connect::dns::GaiResolver,
+	HttpConnector
+    },
+    header,
+    Body,
+    Client,
+    HeaderMap,
+    Method, Request,
+    Response,
+    StatusCode
+};
 use serde::Deserialize;
-use std::str::FromStr;
-use tracing::{span, Span, Level,field};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use std::{
+    str::FromStr,
+    collections::HashMap,
+    sync::Arc
+};
+use tracing::Span;
+use tracing_futures::Instrument;
     
 use tokio::sync::{
     oneshot,
@@ -260,6 +272,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Store(sr),
                 sender: local_tx,
+		span: Span::current()
             };
             sender.try_send(job)
         }
@@ -273,6 +286,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Retrieve(rr),
                 sender: local_tx,
+		span: Span::current()
             };
             sender.try_send(job)
         }
@@ -286,6 +300,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Delete(rr),
                 sender: local_tx,
+		span: Span::current()
             };
             sender.try_send(job)
         }
@@ -345,20 +360,22 @@ async fn sub_unsubscribe_processor(
             set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
             return response;
         };
-        let job = if is_subscribe {
+        let ctx = if is_subscribe {
             RestToMessagingContext {
                 job: Job::Subscribe(sb),
                 sender: local_tx,
+		span: Span::current()
             }
         } else {
             RestToMessagingContext {
                 job: Job::Unsubscribe(sb),
                 sender: local_tx,
+		span: Span::current()
             }
         };
 
         debug!("Waiting for broker");
-        if let Err(e) = sender.try_send(job) {
+        if let Err(e) = sender.try_send(ctx) {
             warn!("Channel is dead {:?}", e);
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
@@ -378,6 +395,7 @@ async fn sub_unsubscribe_processor(
     response
 }
 
+#[instrument(name="CLIENT_HTTP_INCOMING", fields(correlation_id),skip(req,from_client_to_backend_channel_sender,to_client_sender_for_rest,from_client_to_persistence_sender,from_client_to_si_sender))]
 pub async fn handler(
     req: Request<Body>,
     from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
@@ -387,12 +405,9 @@ pub async fn handler(
 ) -> Result<Response<Body>, hyper::Error> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
-    
-    let span = span!(Level::INFO,"SWIR_API",correlation_id=field::Empty );
-    if let Some(ctx) = tracing_utils::from_http_headers(&req.headers()){
-	span.set_parent(&ctx);
-    };
-    let _s = span.enter();
+
+
+    let span = tracing_utils::from_http_headers(Span::current(),&req.headers());
     
     let headers = req.headers().clone();
     debug!("Headers {:?}", headers);
@@ -406,7 +421,6 @@ pub async fn handler(
     };
     span.record("correlation_id",&correlation_id.as_str());
     debug!("Correlation id {}", correlation_id);
-
 
 
     let response = match (req.method(), req.uri().path()) {
@@ -426,13 +440,14 @@ pub async fn handler(
 		};
 		
 		let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-		let job = RestToMessagingContext {
+		let ctx = RestToMessagingContext {
                     job: Job::Publish(p),
                     sender: local_tx,
+		    span: Span::current()
 		};
 		let mut channel = channel.to_owned();
 
-		if let Err(e) = channel.try_send(job) {
+		if let Err(e) = channel.try_send(ctx) {
                     warn!("Channel is dead {:?}", e);
                     *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     *response.body_mut() = Body::empty();
@@ -540,10 +555,18 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
             return;
         }
     }
+    if let Some((tracing_header_name, tracing_header_value))=  tracing_utils::get_tracing_header(){
+	let maybe_header = hyper::header::HeaderName::from_bytes(tracing_header_name.as_bytes());
+        let maybe_value = hyper::header::HeaderValue::from_bytes(tracing_header_value.as_bytes());
+	if let (Ok(header), Ok(value)) = (maybe_header, maybe_value) {
+            builder = builder.header(header, value);
+	}
+    }
+    
     let req = builder.body(Body::from(req_params.payload)).expect("request builder");
 
     //    let p = String::from_utf8_lossy(req.as_bytes());
-    info!("Making request for {:?}", req);
+    debug!("HTTP Request {:?}", &uri);
 
     if let Some(sender) = ctx.sender {
         let maybe_response = client.request(req).await;
@@ -587,7 +610,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
         }
     } else {
         let maybe_response = client.request(req).await;
-        debug!("Got response {:?}", maybe_response);
+        debug!("HTTP Response {:?}", maybe_response);
     }
 }
 
@@ -595,8 +618,10 @@ pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>
     let client = hyper::Client::builder().build_http();
     info!("Client done");
     let mut rx = rx.lock().await;
-    while let Some(payload) = rx.next().await {
+    while let Some(ctx) = rx.next().await {
         let client = client.clone();
-        tokio::spawn(async move { send_request(client, payload).await });
+	let parent_span  = ctx.span.clone();
+	let span = info_span!(parent:parent_span, "CLIENT_HTTP_OUTGOING");
+        tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
     }
 }

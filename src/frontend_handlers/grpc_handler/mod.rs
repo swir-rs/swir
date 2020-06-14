@@ -1,8 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{
+	AtomicBool,
+	Ordering
+    },
+    Arc
+};
 use base64;
 use futures::StreamExt;
 use hyper::StatusCode;
@@ -21,6 +25,7 @@ use crate::utils::structs::*;
 use crate::swir_common;
 use crate::swir_grpc_api;
 use tracing::Span;
+use tracing_futures::Instrument;
 
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest {
@@ -125,6 +130,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
         let error2 = error1.clone();
 
         let channels = self.from_client_to_backend_channel_sender.clone();
+
         tokio::spawn(async move {
             let mut cond = false;
             let error = error1.clone();
@@ -152,7 +158,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 cond = error.load(Ordering::Relaxed);
             }
             info!("publish_bi_strean sender 1 terminated");
-        });
+        }.instrument(Span::current()));
 
         tokio::spawn(async move {
             futures::pin_mut!(stream);
@@ -163,6 +169,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 let request = stream.next().await;
                 match request {
                     Some(request) => {
+			
                         if let Ok(request) = request {
                             info!("Publish request {}", request);
                             let mut msg = String::new();
@@ -175,13 +182,14 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                                 };
 
                                 let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-                                let job = RestToMessagingContext {
+                                let ctx = RestToMessagingContext {
                                     job: Job::Publish(p),
                                     sender: local_tx,
+				    span: Span::current()
                                 };
 
                                 let mut tx = tx.clone();
-                                if let Err(e) = tx.try_send(job) {
+                                if let Err(e) = tx.try_send(ctx) {
                                     warn!("Channel is dead {:?}", e);
                                 }
 
@@ -216,7 +224,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 cond = error.load(Ordering::Relaxed);
             }
             info!("publish_bi_stream sender 2 terminated");
-        });
+        }.instrument(Span::current()));
         Ok(tonic::Response::new(rx))
     }
 
@@ -234,13 +242,14 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
             };
             debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-            let job = RestToMessagingContext {
+            let ctx = RestToMessagingContext {
                 job: Job::Publish(p),
                 sender: local_tx,
+		span: Span::current()
             };
 
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(job) {
+            if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
 
@@ -283,15 +292,16 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
         };
 
         let (local_tx, _local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-        let subscribe_job = RestToMessagingContext {
+        let subscribe_ctx = RestToMessagingContext {
             job: Job::Subscribe(sr.clone()),
             sender: local_tx,
+	    span: Span::current()
         };
 
         let mut txx;
         if let Some(tx) = self.find_channel(&topic) {
             txx = tx.clone();
-            if let Err(e) = txx.try_send(subscribe_job) {
+            if let Err(e) = txx.try_send(subscribe_ctx) {
                 warn!("Channel is dead {:?}", e);
                 return Err(tonic::Status::internal("Internal error"));
             }
@@ -313,12 +323,13 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 if r.is_err() {
                     info!("Message pushed back {}", s);
                     let (unsub_tx, _unsub_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-                    let unsubscribe_job = RestToMessagingContext {
+                    let unsubscribe_ctx = RestToMessagingContext {
                         job: Job::Unsubscribe(sr.clone()),
                         sender: unsub_tx,
+			span: Span::current()
                     };
 
-                    if let Err(e) = txx.try_send(unsubscribe_job) {
+                    if let Err(e) = txx.try_send(unsubscribe_ctx) {
                         warn!("Channel is dead {:?}", e);
                     }
                     debug!("Messages processed in this session {}", msgs);
@@ -361,13 +372,14 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             };
             debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
-            let job = RestToPersistenceContext {
+            let ctx = RestToPersistenceContext {
                 job: PersistenceJobType::Store(p),
                 sender: local_tx,
+		span: Span::current()
             };
 
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(job) {
+            if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
 
@@ -402,13 +414,14 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             };
             debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
-            let job = RestToPersistenceContext {
+            let ctx = RestToPersistenceContext {
                 job: PersistenceJobType::Retrieve(p),
                 sender: local_tx,
+		span: Span::current()
             };
 
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(job) {
+            if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
 
@@ -453,13 +466,14 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
             };
             debug!("{}", p);
             let (local_tx, local_rx): (oneshot::Sender<PersistenceResult>, oneshot::Receiver<PersistenceResult>) = oneshot::channel();
-            let job = RestToPersistenceContext {
+            let ctx = RestToPersistenceContext {
                 job: PersistenceJobType::Delete(p),
                 sender: local_tx,
+		span: Span::current()
             };
 
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(job) {
+            if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
 
