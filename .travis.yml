@@ -4,8 +4,11 @@ rust:
   - stable
 script:
   - rustup component add rustfmt --toolchain stable-x86_64-unknown-linux-gnu
-  - cargo build --verbose --workspace
-  - cargo test --verbose --workspace
+  - rustup toolchain install stable-x86_64-pc-windows-msvc
+  - rustup component add rustfmt --toolchain stable-x86_64-unknown-linux-gnu
+  - cargo check --verbose --workspace --all-featuers
+  - cargo fmt -- --check
+
 
 jobs:
   fast_finish: true
