@@ -1,28 +1,31 @@
-
+use bytes::Bytes;
 use futures::stream::StreamExt;
 use nats::*;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::thread;
+use std::{collections::HashMap, sync::Arc, thread};
+
+mod nats_msg_wrapper {
+    include!(concat!(env!("OUT_DIR"), "/nats_msg_wrapper.rs"));
+}
+use nats_msg_wrapper::NatsMessageWrapper;
+
 use tokio::{
+    sync::{mpsc, Mutex},
     task,
-    sync::{
-	mpsc,
-	Mutex
-    }
 };
 
+use crate::messaging_handlers::{client_handler::ClientHandler, Broker};
 
-use crate::messaging_handlers::client_handler::ClientHandler;
-use crate::messaging_handlers::Broker;
-use crate::utils::config::Nats;
+use crate::utils::{
+    config::{ClientTopicsConfiguration, Nats},
+    structs::*,
+};
 use async_trait::async_trait;
-
-use super::super::utils::config::ClientTopicsConfiguration;
-use super::super::utils::structs;
-use super::super::utils::structs::*;
+use prost::Message;
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
+use crate::utils::tracing_utils;
+use tracing::{info_span, Span};
+use tracing_futures::Instrument;
 
 #[derive(Debug)]
 pub struct NatsBroker {
@@ -32,17 +35,15 @@ pub struct NatsBroker {
 }
 
 fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
-    let msg = String::from_utf8_lossy(&p);
-    debug!("Processing message {} {}", subscriptions.len(), msg);
-
     for subscription in subscriptions.iter_mut() {
         let mut got_sent = false;
         while !got_sent {
             let mrc = BackendToRestContext {
+                span: Span::current(),
                 correlation_id: subscription.to_string(),
                 sender: None,
                 request_params: RESTRequestParams {
-                    payload: p.to_vec(),
+                    payload: p.to_owned(),
                     method: "POST".to_string(),
                     uri: subscription.endpoint.url.clone(),
                     ..Default::default()
@@ -51,7 +52,6 @@ fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
 
             match subscription.tx.try_send(mrc) {
                 Ok(_) => {
-                    debug!("Message sent {}", msg);
                     got_sent = true;
                 }
                 Err(mpsc::error::TrySendError::Closed(_)) => {
@@ -59,7 +59,7 @@ fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
                     warn!("Unable to send {}. Channel is closed", subscription);
                 }
                 Err(mpsc::error::TrySendError::Full(_)) => {
-                    warn!("Unable to send {} {} . Channel is full", subscription, msg);
+                    warn!("Unable to send {}. Channel is full", subscription);
                     thread::yield_now();
                 }
             }
@@ -91,53 +91,74 @@ impl NatsBroker {
 
     async fn nats_event_handler(&self, mut nats: Client) {
         let mut rx = self.rx.lock().await;
-        while let Some(job) = rx.next().await {
-            let sender = job.sender;
-            match job.job {
+        while let Some(ctx) = rx.next().await {
+            let parent_span = ctx.span;
+            let span = info_span!(parent: &parent_span, "NATS_OUTGOING");
+            let sender = ctx.sender;
+
+            match ctx.job {
                 Job::Subscribe(value) => {
-                    self.subscribe(value, sender).await;
+                    self.subscribe(value, sender).instrument(span).await;
                 }
 
                 Job::Unsubscribe(value) => {
-                    self.unsubscribe(value, sender).await;
+                    self.unsubscribe(value, sender).instrument(span).await;
                 }
 
                 Job::Publish(value) => {
                     let req = value;
-                    debug!("Publish {}", req);
-                    let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
-                    if let Some(topic) = maybe_topic {
-                        let nats_publish = nats.publish(&topic, &req.payload);
-                        match nats_publish {
-                            Ok(_) => {
-                                let res = sender.send(structs::MessagingResult {
-                                    correlation_id: req.correlation_id,
-                                    status: BackendStatusCodes::Ok("NATS is good".to_string()),
-                                });
-                                if res.is_err() {
-                                    warn!("{:?}", res);
-                                }
-                            }
-                            Err(e) => {
-                                let res = sender.send(structs::MessagingResult {
-                                    correlation_id: req.correlation_id,
-                                    status: BackendStatusCodes::Error(e.to_string()),
-                                });
-                                if res.is_err() {
-                                    warn!("{:?}", res);
-                                }
-                            }
+
+                    async {
+                        debug!("Publish {}", &req.correlation_id);
+
+                        let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
+
+                        let mut headers = HashMap::new();
+                        if let Some((header_name, header_value)) = tracing_utils::get_tracing_header() {
+                            headers.insert(header_name.to_string(), header_value);
                         }
-                    } else {
-                        warn!("Can't find topic {:?}", req);
-                        let res = sender.send(structs::MessagingResult {
-                            correlation_id: req.correlation_id,
-                            status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
-                        });
-                        if res.is_err() {
-                            warn!("Can't send response back {:?}", res);
+                        if let Some(topic) = maybe_topic {
+                            let wrapper = NatsMessageWrapper { headers, payload: req.payload };
+                            let mut p = vec![];
+                            let res = wrapper.encode(&mut p);
+                            if let Ok(_) = res {
+                                let nats_publish = nats.publish(&topic, &p);
+                                match nats_publish {
+                                    Ok(_) => {
+                                        let res = sender.send(MessagingResult {
+                                            correlation_id: req.correlation_id,
+                                            status: BackendStatusCodes::Ok("NATS is good".to_string()),
+                                        });
+                                        if res.is_err() {
+                                            warn!("{:?}", res);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let res = sender.send(MessagingResult {
+                                            correlation_id: req.correlation_id,
+                                            status: BackendStatusCodes::Error(e.to_string()),
+                                        });
+                                        if res.is_err() {
+                                            warn!("{:?}", res);
+                                        }
+                                    }
+                                }
+                            } else {
+                                warn!("Problem with encoding NATS payload {:?}", res)
+                            }
+                        } else {
+                            warn!("Can't find topic {:?}", req);
+                            let res = sender.send(MessagingResult {
+                                correlation_id: req.correlation_id,
+                                status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+                            });
+                            if res.is_err() {
+                                warn!("Can't send response back {:?}", res);
+                            }
                         }
                     }
+                    .instrument(span)
+                    .await;
                 }
             }
         }
@@ -154,18 +175,25 @@ impl NatsBroker {
             info!("Waiting for events ");
             for event in client.events() {
                 let topic = event.subject;
-                let mut subs = Box::new(Vec::new());
-
-                let mut has_lock = false;
-                while !has_lock {
-                    if let Ok(mut subscriptions) = subscriptions.try_lock() {
-                        if let Some(subscriptions) = subscriptions.get_mut(&topic) {
-                            subs = subscriptions.clone();
+                let maybe_msg = NatsMessageWrapper::decode(Bytes::from(event.msg));
+                let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
+                if let Ok(wrapper) = &maybe_msg {
+                    let span = tracing_utils::from_map(span, &wrapper.headers);
+                    let _sp = span.enter();
+                    let mut subs = Box::new(Vec::new());
+                    let mut has_lock = false;
+                    while !has_lock {
+                        if let Ok(mut subscriptions) = subscriptions.try_lock() {
+                            if let Some(subscriptions) = subscriptions.get_mut(&topic) {
+                                subs = subscriptions.clone();
+                            }
+                            has_lock = true;
                         }
-                        has_lock = true;
                     }
-                }
-                send_request(&mut subs, event.msg);
+                    send_request(&mut subs, wrapper.payload.to_owned());
+                } else {
+                    warn!("Unable to decode NATS message {:?}", maybe_msg);
+                };
             }
         });
         let _res = join.await;

@@ -1,12 +1,13 @@
 use crate::swir_common;
 use custom_error::custom_error;
-use tokio::sync::oneshot::Sender;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot::Sender;
+use tracing::Span;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 
@@ -194,7 +195,7 @@ impl PartialOrd for SubscribeRequest {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum BackendStatusCodes {
     Ok(String),
     Error(String),
@@ -202,7 +203,7 @@ pub enum BackendStatusCodes {
     NoService(String),
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum ClientCallStatusCodes {
     Ok(String),
     Error(String),
@@ -219,7 +220,7 @@ impl fmt::Display for BackendStatusCodes {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct MessagingResult {
     pub(crate) correlation_id: String,
     pub(crate) status: BackendStatusCodes,
@@ -299,7 +300,7 @@ impl fmt::Display for swir_common::HttpMethod {
     }
 }
 
-#[derive(Debug, Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RESTRequestParams {
     pub payload: Vec<u8>,
     pub uri: String,
@@ -307,14 +308,14 @@ pub struct RESTRequestParams {
     pub method: String,
 }
 
-#[derive(Debug, Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RESTResponseParams {
     pub payload: Vec<u8>,
     pub headers: std::collections::HashMap<String, String>,
     pub status_code: u16,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct RESTRequestResult {
     pub(crate) correlation_id: String,
     pub(crate) status: ClientCallStatusCodes,
@@ -335,6 +336,7 @@ pub struct CustomContext;
 pub struct RestToMessagingContext {
     pub job: Job,
     pub sender: Sender<MessagingResult>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -342,16 +344,19 @@ pub struct BackendToRestContext {
     pub correlation_id: String,
     pub sender: Option<Sender<RESTRequestResult>>,
     pub request_params: RESTRequestParams,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct RestToPersistenceContext {
     pub job: PersistenceJobType,
     pub sender: Sender<PersistenceResult>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct RestToSIContext {
     pub job: SIJobType,
     pub sender: Sender<SIResult>,
+    pub span: Span,
 }

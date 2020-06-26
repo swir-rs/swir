@@ -1,5 +1,5 @@
 
-docker rmi swir:v3
+docker rmi --no-prune swir:v3
 docker build -f docker/Dockerfile_build_stage1 -t swir_builder:latest .
 if [ -z "$1" ]
 then

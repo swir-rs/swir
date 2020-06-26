@@ -1,43 +1,38 @@
 use async_trait::async_trait;
 use bytes;
-use futures::future::join_all;
-use futures::stream::StreamExt;
-use rand::distributions::Alphanumeric;
-use rand::rngs;
-use rand::{Rng, SeedableRng};
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{
-    mpsc,
-    Mutex
-};
+use futures::{future::join_all, stream::StreamExt};
+
+use rand::{distributions::Alphanumeric, rngs, Rng, SeedableRng};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+
+use tokio::sync::{mpsc, Mutex};
 
 use aws_lock_client::{AwsLockClient, AwsLockClientDynamoDb};
-
-use crate::messaging_handlers::Broker;
-use crate::utils::config::AwsKinesis;
 
 use rusoto_core::Region;
 use rusoto_kinesis::Kinesis;
 
-use super::super::utils::config::ClientTopicsConfiguration;
-use super::super::utils::structs;
-use super::super::utils::structs::*;
-use crate::messaging_handlers::client_handler::ClientHandler;
-use regex::Regex;
+use crate::utils::{
+    config::{AwsKinesis, ClientTopicsConfiguration},
+    structs::*,
+};
 
-lazy_static! {
-    static ref RE: Regex = Regex::new(r"0|([1-9]\\d{0,128})").unwrap();
-}
+use crate::messaging_handlers::{client_handler::ClientHandler, Broker};
+
+use tracing::Span;
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
 
 const DYNAMO_DB_LOCK_TABLE_NAME: &str = "swir-locks";
 
 fn validate_sequence_number(input: &str) -> bool {
-    RE.is_match(input)
+    if input.len() > 128 {
+        return false;
+    };
+    if !input.is_ascii() {
+        return false;
+    };
+    return input.chars().all(char::is_numeric);
 }
 
 pub struct AwsKinesisBroker {
@@ -53,6 +48,7 @@ async fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
     for subscription in subscriptions.iter_mut() {
         debug!("Processing subscription {}", subscription);
         let mrc = BackendToRestContext {
+            span: Span::current(),
             correlation_id: subscription.to_string(),
             sender: None,
             request_params: RESTRequestParams {
@@ -143,7 +139,7 @@ impl AwsKinesisBroker {
                             debug!("Partition topic {} key {}", topic, partition_key);
                             match aws_put_record(client.clone(), topic, bytes::Bytes::from(req.payload), partition_key).await {
                                 Ok(()) => {
-                                    let res = sender.send(structs::MessagingResult {
+                                    let res = sender.send(MessagingResult {
                                         correlation_id: req.correlation_id,
                                         status: BackendStatusCodes::Ok("AWS Kinesis is good".to_string()),
                                     });
@@ -152,7 +148,7 @@ impl AwsKinesisBroker {
                                     }
                                 }
                                 Err(()) => {
-                                    let res = sender.send(structs::MessagingResult {
+                                    let res = sender.send(MessagingResult {
                                         correlation_id: req.correlation_id,
                                         status: BackendStatusCodes::Error("AWS Kinesis error".to_string()),
                                     });
@@ -164,7 +160,7 @@ impl AwsKinesisBroker {
                         });
                     } else {
                         warn!("Can't find topic {}", req);
-                        if let Err(e) = sender.send(structs::MessagingResult {
+                        if let Err(e) = sender.send(MessagingResult {
                             correlation_id: req.correlation_id,
                             status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                         }) {

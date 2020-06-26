@@ -3,12 +3,9 @@ use super::super::utils::structs;
 use super::super::utils::structs::*;
 use async_trait::async_trait;
 
-use tokio::sync::{
-    Mutex,
-    oneshot::Sender
-};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::{oneshot::Sender, Mutex};
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
 

@@ -30,6 +30,9 @@ import time
 import json
 import random, string
 import base64
+import socket
+import secrets
+
 
 logger = logging.getLogger('swir')
 
@@ -50,17 +53,25 @@ def run():
         k=0
         while True:
             for service_name in service_names:                
-                corr_id = str(uuid.uuid4())
                 k=k+1
                 payload = service_name+"--"+str(k)+"--"+randomword(50)
                 payload = payload.encode()
                 
                 for i in range(4):
-                    logger.info("Sending %s %s %s %s" %(str(i),service_name, corr_id, payload));
+                    parent_id = secrets.token_hex(8)    
+                    trace_id = uuid.uuid4().hex
+                    corr_id = str(uuid.uuid4())
+                    logger.info("Sending %s %s %s %s" %(str(i),service_name, corr_id, payload));                    
+                    metadata=(
+                         ('x-correlation-id', corr_id),
+                         ('traceparent',"00-"+trace_id+"-"+parent_id+"-01"),
+                         ('origin',socket.gethostname())
+
+                    )
                     headers = {'Content-type':'application/json'}
-                    headers['x-client-corr-id']=str(uuid.uuid4())
-                    headers['Host']='service_name.swir.rs:8090'
-                    response = service_invocation_api_stub.Invoke(common_structs_pb2.InvokeRequest(correlation_id=corr_id,method=i,service_name=service_name,headers=headers,request_target="/"+service_name+"?"+service_name+"Id=1223434",payload=payload))
+                    headers['x-correlation-id']=corr_id
+                    headers['host']=socket.gethostname()+':8090'
+                    response = service_invocation_api_stub.Invoke(common_structs_pb2.InvokeRequest(correlation_id=corr_id,method=i,service_name=service_name,headers=headers,request_target="/"+service_name+"?"+service_name+"Id=1223434",payload=payload),metadata=metadata)
                     if response.result.status == common_structs_pb2.InvokeStatus.Error:
                         logger.warning("Received %s %s %s %s " %(str(i), service_name, response.correlation_id, str(response.result).replace('\n',' ')))
                     else:

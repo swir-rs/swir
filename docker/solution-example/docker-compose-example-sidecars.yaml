@@ -11,6 +11,23 @@ services:
         source: swir_config
         target: /swir_config
 
+  swir-example-logger:
+    networks:
+      - swir-net
+    image: jaegertracing/all-in-one:1.18
+#    command: ["/bin/bash","-c","cp /config/* swir_config/ ; cp /certificates/* certs/"]
+    environment:
+      - COLLECTOR_ZIPKIN_HTTP_PORT=9411
+    ports:
+      - "9411"
+      - "5775/udp"
+      - "6831/udp"
+      - "6832/udp"
+      - "5778"
+      - "16686:16686"
+      - "14268"
+      - "4250"        
+
 # step 1 
 # Java gRCP
   order-generator-sidecar:
