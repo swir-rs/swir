@@ -6,7 +6,7 @@ script:
   - rustup component add rustfmt --toolchain stable-x86_64-unknown-linux-gnu
   - rustup toolchain install stable-x86_64-pc-windows-msvc
   - rustup component add rustfmt --toolchain stable-x86_64-unknown-linux-gnu
-  - cargo check --verbose --workspace --all-featuers
+  - cargo check --verbose --workspace --all-features
   - cargo fmt -- --check
 
 
