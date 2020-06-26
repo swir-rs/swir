@@ -11,11 +11,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::stream::StreamExt;
-use tokio::sync::{
-    mpsc,
-    Mutex,
-    oneshot::Sender	
-};
+use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 
 #[derive(Debug)]
 pub struct DynamoDbStore {

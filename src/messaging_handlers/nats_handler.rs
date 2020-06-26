@@ -1,11 +1,7 @@
 use bytes::Bytes;
 use futures::stream::StreamExt;
 use nats::*;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    thread
-};
+use std::{collections::HashMap, sync::Arc, thread};
 
 mod nats_msg_wrapper {
     include!(concat!(env!("OUT_DIR"), "/nats_msg_wrapper.rs"));
@@ -13,36 +9,23 @@ mod nats_msg_wrapper {
 use nats_msg_wrapper::NatsMessageWrapper;
 
 use tokio::{
+    sync::{mpsc, Mutex},
     task,
-    sync::{
-	mpsc,
-	Mutex
-    }
 };
 
-use crate::messaging_handlers::{
-    client_handler::ClientHandler,
-    Broker
+use crate::messaging_handlers::{client_handler::ClientHandler, Broker};
+
+use crate::utils::{
+    config::{ClientTopicsConfiguration, Nats},
+    structs::*,
 };
-
-
 use async_trait::async_trait;
 use prost::Message;
-use crate::utils::{
-    config::{
-	Nats,ClientTopicsConfiguration
-    },
-    structs::*
-};
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
-use tracing::{
-    info_span,
-    Span
-};
-use tracing_futures::Instrument;
 use crate::utils::tracing_utils;
-
+use tracing::{info_span, Span};
+use tracing_futures::Instrument;
 
 #[derive(Debug)]
 pub struct NatsBroker {
@@ -52,12 +35,11 @@ pub struct NatsBroker {
 }
 
 fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
-
     for subscription in subscriptions.iter_mut() {
         let mut got_sent = false;
         while !got_sent {
             let mrc = BackendToRestContext {
-		span:Span::current(),
+                span: Span::current(),
                 correlation_id: subscription.to_string(),
                 sender: None,
                 request_params: RESTRequestParams {
@@ -108,13 +90,12 @@ impl NatsBroker {
     }
 
     async fn nats_event_handler(&self, mut nats: Client) {
-
         let mut rx = self.rx.lock().await;
         while let Some(ctx) = rx.next().await {
-	    let parent_span = ctx.span;
-	    let span = info_span!(parent:&parent_span,"NATS_OUTGOING");
+            let parent_span = ctx.span;
+            let span = info_span!(parent: &parent_span, "NATS_OUTGOING");
             let sender = ctx.sender;
-	    
+
             match ctx.job {
                 Job::Subscribe(value) => {
                     self.subscribe(value, sender).instrument(span).await;
@@ -127,59 +108,58 @@ impl NatsBroker {
                 Job::Publish(value) => {
                     let req = value;
 
-		    async {			
-			debug!("Publish {}", &req.correlation_id);
-			
-			let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
+                    async {
+                        debug!("Publish {}", &req.correlation_id);
 
-			let mut headers = HashMap::new();
-			if let Some((header_name, header_value)) =tracing_utils::get_tracing_header(){
-			    headers.insert(header_name.to_string(),header_value);
-			}
-			if let Some(topic) = maybe_topic {
-			    let wrapper = NatsMessageWrapper{
-				headers,
-				payload: req.payload
-			    };
-			    let mut p = vec![];
-			    let res  = wrapper.encode(&mut p);
-			    if let Ok(_) = res{
-				let nats_publish = nats.publish(&topic, &p);
-				match nats_publish {
-				    Ok(_) => {
-					let res = sender.send(MessagingResult {
-					    correlation_id: req.correlation_id,
-					    status: BackendStatusCodes::Ok("NATS is good".to_string()),
-					});
-					if res.is_err() {
-					    warn!("{:?}", res);
-					}
-				    }
-				    Err(e) => {
-					let res = sender.send(MessagingResult {
-					    correlation_id: req.correlation_id,
-					    status: BackendStatusCodes::Error(e.to_string()),
-					});
-					if res.is_err() {
-					    warn!("{:?}", res);
-					}
-				    }
-				}
-			    }else{
-				warn!("Problem with encoding NATS payload {:?}",res)
-			    }
-			} else {
+                        let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
+
+                        let mut headers = HashMap::new();
+                        if let Some((header_name, header_value)) = tracing_utils::get_tracing_header() {
+                            headers.insert(header_name.to_string(), header_value);
+                        }
+                        if let Some(topic) = maybe_topic {
+                            let wrapper = NatsMessageWrapper { headers, payload: req.payload };
+                            let mut p = vec![];
+                            let res = wrapper.encode(&mut p);
+                            if let Ok(_) = res {
+                                let nats_publish = nats.publish(&topic, &p);
+                                match nats_publish {
+                                    Ok(_) => {
+                                        let res = sender.send(MessagingResult {
+                                            correlation_id: req.correlation_id,
+                                            status: BackendStatusCodes::Ok("NATS is good".to_string()),
+                                        });
+                                        if res.is_err() {
+                                            warn!("{:?}", res);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let res = sender.send(MessagingResult {
+                                            correlation_id: req.correlation_id,
+                                            status: BackendStatusCodes::Error(e.to_string()),
+                                        });
+                                        if res.is_err() {
+                                            warn!("{:?}", res);
+                                        }
+                                    }
+                                }
+                            } else {
+                                warn!("Problem with encoding NATS payload {:?}", res)
+                            }
+                        } else {
                             warn!("Can't find topic {:?}", req);
                             let res = sender.send(MessagingResult {
-				correlation_id: req.correlation_id,
-				status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
+                                correlation_id: req.correlation_id,
+                                status: BackendStatusCodes::NoTopic("Can't find subscribe topic".to_string()),
                             });
                             if res.is_err() {
-				warn!("Can't send response back {:?}", res);
+                                warn!("Can't send response back {:?}", res);
                             }
-			}
-		    }.instrument(span).await;
-		}		
+                        }
+                    }
+                    .instrument(span)
+                    .await;
+                }
             }
         }
     }
@@ -195,25 +175,25 @@ impl NatsBroker {
             info!("Waiting for events ");
             for event in client.events() {
                 let topic = event.subject;
-		let maybe_msg = NatsMessageWrapper::decode(Bytes::from(event.msg));
-		let span = info_span!("NATS_INCOMING", topic=&topic.as_str());
-		if let Ok(wrapper)= &maybe_msg{
-		    let span = tracing_utils::from_map(span, &wrapper.headers);
-		    let _sp = span.enter();
-		    let mut subs = Box::new(Vec::new());
+                let maybe_msg = NatsMessageWrapper::decode(Bytes::from(event.msg));
+                let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
+                if let Ok(wrapper) = &maybe_msg {
+                    let span = tracing_utils::from_map(span, &wrapper.headers);
+                    let _sp = span.enter();
+                    let mut subs = Box::new(Vec::new());
                     let mut has_lock = false;
                     while !has_lock {
-			if let Ok(mut subscriptions) = subscriptions.try_lock() {
+                        if let Ok(mut subscriptions) = subscriptions.try_lock() {
                             if let Some(subscriptions) = subscriptions.get_mut(&topic) {
-				subs = subscriptions.clone();
+                                subs = subscriptions.clone();
                             }
                             has_lock = true;
-			}
+                        }
                     }
-		    send_request(&mut subs, wrapper.payload.to_owned());
-		}else{
-		    warn!("Unable to decode NATS message {:?}",maybe_msg);
-		};		
+                    send_request(&mut subs, wrapper.payload.to_owned());
+                } else {
+                    warn!("Unable to decode NATS message {:?}", maybe_msg);
+                };
             }
         });
         let _res = join.await;

@@ -5,10 +5,7 @@ use futures::future::join_all;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{
-    mpsc,
-    Mutex
-};
+use tokio::sync::{mpsc, Mutex};
 
 mod dynamodb_store;
 mod redis_store;

@@ -1,37 +1,17 @@
 use crate::swir_common;
-use crate::utils::{
-    structs::*,
-    tracing_utils
-};
+use crate::utils::{structs::*, tracing_utils};
 use futures::stream::StreamExt;
 use http::HeaderValue;
 use hyper::{
-    client::{
-	connect::dns::GaiResolver,
-	HttpConnector
-    },
-    header,
-    Body,
-    Client,
-    HeaderMap,
-    Method, Request,
-    Response,
-    StatusCode
+    client::{connect::dns::GaiResolver, HttpConnector},
+    header, Body, Client, HeaderMap, Method, Request, Response, StatusCode,
 };
 use serde::Deserialize;
-use std::{
-    str::FromStr,
-    collections::HashMap,
-    sync::Arc
-};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::Span;
 use tracing_futures::Instrument;
-    
-use tokio::sync::{
-    oneshot,
-    mpsc,
-    Mutex
-};
+
+use tokio::sync::{mpsc, oneshot, Mutex};
 
 #[derive(Debug)]
 enum PersistenceOperationType {
@@ -203,8 +183,12 @@ async fn service_invocation_processor(correlation_id: String, path: String, req:
 
         let job = SIJobType::PublicInvokeHttp { req };
         let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
-	
-        let ctx = RestToSIContext { job, sender: local_sender, span:Span::current() };
+
+        let ctx = RestToSIContext {
+            job,
+            sender: local_sender,
+            span: Span::current(),
+        };
         let mut sender = from_client_to_si_sender;
 
         let res = sender.try_send(ctx);
@@ -248,7 +232,7 @@ async fn persistence_processor(
     let database_name = extract_database_name_from_headers(headers).unwrap();
     let key = extract_database_key_from_headers(headers).unwrap();
     let whole_body = get_whole_body(req).await;
-    let msg = format!("op {:?} -> {} {}",op_type, database_name, key);
+    let msg = format!("op {:?} -> {} {}", op_type, database_name, key);
 
     let maybe_channel = find_channel_by_database_name(&database_name, from_client_to_persistence_sender);
     let mut sender = if let Some(channel) = maybe_channel {
@@ -272,7 +256,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Store(sr),
                 sender: local_tx,
-		span: Span::current()
+                span: Span::current(),
             };
             sender.try_send(job)
         }
@@ -286,7 +270,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Retrieve(rr),
                 sender: local_tx,
-		span: Span::current()
+                span: Span::current(),
             };
             sender.try_send(job)
         }
@@ -300,7 +284,7 @@ async fn persistence_processor(
             let job = RestToPersistenceContext {
                 job: PersistenceJobType::Delete(rr),
                 sender: local_tx,
-		span: Span::current()
+                span: Span::current(),
             };
             sender.try_send(job)
         }
@@ -323,7 +307,7 @@ async fn persistence_processor(
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             *response.body_mut() = Body::empty();
         }
-        info!("end {}",msg);
+        info!("end {}", msg);
     }
     response
 }
@@ -364,13 +348,13 @@ async fn sub_unsubscribe_processor(
             RestToMessagingContext {
                 job: Job::Subscribe(sb),
                 sender: local_tx,
-		span: Span::current()
+                span: Span::current(),
             }
         } else {
             RestToMessagingContext {
                 job: Job::Unsubscribe(sb),
                 sender: local_tx,
-		span: Span::current()
+                span: Span::current(),
             }
         };
 
@@ -395,7 +379,11 @@ async fn sub_unsubscribe_processor(
     response
 }
 
-#[instrument(name="CLIENT_HTTP_INCOMING", fields(correlation_id),skip(req,from_client_to_backend_channel_sender,to_client_sender_for_rest,from_client_to_persistence_sender,from_client_to_si_sender))]
+#[instrument(
+    name = "CLIENT_HTTP_INCOMING",
+    fields(correlation_id),
+    skip(req, from_client_to_backend_channel_sender, to_client_sender_for_rest, from_client_to_persistence_sender, from_client_to_si_sender)
+)]
 pub async fn handler(
     req: Request<Body>,
     from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
@@ -406,9 +394,8 @@ pub async fn handler(
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
+    let span = tracing_utils::from_http_headers(Span::current(), &req.headers());
 
-    let span = tracing_utils::from_http_headers(Span::current(),&req.headers());
-    
     let headers = req.headers().clone();
     debug!("Headers {:?}", headers);
 
@@ -419,9 +406,8 @@ pub async fn handler(
         *response.body_mut() = Body::empty();
         return Ok(response);
     };
-    span.record("correlation_id",&correlation_id.as_str());
+    span.record("correlation_id", &correlation_id.as_str());
     debug!("Correlation id {}", correlation_id);
-
 
     let response = match (req.method(), req.uri().path()) {
         (&Method::POST, "/pubsub/publish") => {
@@ -432,44 +418,43 @@ pub async fn handler(
             let client_topic = extract_topic_from_headers(&headers).unwrap();
             let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
             if let Some(channel) = maybe_channel {
-		info!("Publish start {}", wb);
-		let p = PublishRequest {
-		    correlation_id,
-		    payload: whole_body,
-		    client_topic:client_topic.to_owned(),
-		};
-		
-		let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-		let ctx = RestToMessagingContext {
+                info!("Publish start {}", wb);
+                let p = PublishRequest {
+                    correlation_id,
+                    payload: whole_body,
+                    client_topic: client_topic.to_owned(),
+                };
+
+                let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+                let ctx = RestToMessagingContext {
                     job: Job::Publish(p),
                     sender: local_tx,
-		    span: Span::current()
-		};
-		let mut channel = channel.to_owned();
+                    span: Span::current(),
+                };
+                let mut channel = channel.to_owned();
 
-		if let Err(e) = channel.try_send(ctx) {
+                if let Err(e) = channel.try_send(ctx) {
                     warn!("Channel is dead {:?}", e);
                     *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     *response.body_mut() = Body::empty();
-		}
+                }
 
-		debug!("Waiting for broker");
-		let response_from_broker  = local_rx.await;
-		debug!("Got result {:?}", response_from_broker);
-		if let Ok(res) = response_from_broker {
+                debug!("Waiting for broker");
+                let response_from_broker = local_rx.await;
+                debug!("Got result {:?}", response_from_broker);
+                if let Ok(res) = response_from_broker {
                     set_http_response(res.status, &mut response);
-		} else {
+                } else {
                     *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     *response.body_mut() = Body::empty();
-		}
-		info!("Publish end {}", wb);
-		response		    
+                }
+                info!("Publish end {}", wb);
+                response
             } else {
                 set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
-		debug!("No mapping for this topic:  {}",&client_topic);
+                debug!("No mapping for this topic:  {}", &client_topic);
                 response
             }
-            
         }
 
         (&Method::POST, "/pubsub/subscribe") => {
@@ -506,9 +491,9 @@ pub async fn handler(
         (&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
             if validate_content_type(&headers).is_none() {
                 response
-            }else{
-		service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await
-	    }
+            } else {
+                service_invocation_processor(correlation_id, path.to_string(), req, from_client_to_si_sender).await
+            }
         }
         // The 404 Not Found route...
         _ => {
@@ -518,9 +503,8 @@ pub async fn handler(
             not_found
         }
     };
-    info!("{:?}",response);
+    info!("{:?}", response);
     Ok(response)
-    
 }
 
 async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendToRestContext) {
@@ -531,7 +515,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
-    let mut builder = Request::builder().method(method).uri(uri);
+    let mut builder = Request::builder().method(method).uri(&uri);
 
     for (k, v) in req_params.headers.iter() {
         let maybe_header = hyper::header::HeaderName::from_bytes(k.as_bytes());
@@ -555,14 +539,14 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
             return;
         }
     }
-    if let Some((tracing_header_name, tracing_header_value))=  tracing_utils::get_tracing_header(){
-	let maybe_header = hyper::header::HeaderName::from_bytes(tracing_header_name.as_bytes());
+    if let Some((tracing_header_name, tracing_header_value)) = tracing_utils::get_tracing_header() {
+        let maybe_header = hyper::header::HeaderName::from_bytes(tracing_header_name.as_bytes());
         let maybe_value = hyper::header::HeaderValue::from_bytes(tracing_header_value.as_bytes());
-	if let (Ok(header), Ok(value)) = (maybe_header, maybe_value) {
+        if let (Ok(header), Ok(value)) = (maybe_header, maybe_value) {
             builder = builder.header(header, value);
-	}
+        }
     }
-    
+
     let req = builder.body(Body::from(req_params.payload)).expect("request builder");
 
     //    let p = String::from_utf8_lossy(req.as_bytes());
@@ -620,8 +604,8 @@ pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>
     let mut rx = rx.lock().await;
     while let Some(ctx) = rx.next().await {
         let client = client.clone();
-	let parent_span  = ctx.span.clone();
-	let span = info_span!(parent:parent_span, "CLIENT_HTTP_OUTGOING");
+        let parent_span = ctx.span.clone();
+        let span = info_span!(parent: parent_span, "CLIENT_HTTP_OUTGOING");
         tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
     }
 }

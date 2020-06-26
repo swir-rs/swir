@@ -7,41 +7,27 @@ use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use rdkafka::{
     client::ClientContext,
-    config::{
-	ClientConfig,
-	RDKafkaLogLevel},
-    consumer::{
-	Consumer,
-	ConsumerContext,
-	Rebalance,
-	stream_consumer::StreamConsumer
-    },
+    config::{ClientConfig, RDKafkaLogLevel},
+    consumer::{stream_consumer::StreamConsumer, Consumer, ConsumerContext, Rebalance},
     error::KafkaResult,
-    message::{Message,OwnedHeaders,Headers},
-    producer::{
-	FutureProducer,
-	FutureRecord
-    },
-    TopicPartitionList
+    message::{Headers, Message, OwnedHeaders},
+    producer::{FutureProducer, FutureRecord},
+    TopicPartitionList,
 };
-use tokio::sync::{
-    mpsc,
-    Mutex
-};
+use tokio::sync::{mpsc, Mutex};
 
 use crate::messaging_handlers::Broker;
 
 use crate::utils::{
-    config::{ClientTopicsConfiguration,Kafka},
-    structs::*
+    config::{ClientTopicsConfiguration, Kafka},
+    structs::*,
 };
-	
+
 use crate::messaging_handlers::client_handler::ClientHandler;
 
-use tracing::{Span,info_span};
-use tracing_futures::Instrument;
 use crate::tracing_utils;
-
+use tracing::{info_span, Span};
+use tracing_futures::Instrument;
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
 
@@ -77,7 +63,7 @@ async fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
     for subscription in subscriptions.iter_mut() {
         debug!("Processing subscription {}", subscription);
         let mrc = BackendToRestContext {
-	    span:Span::current(),
+            span: Span::current(),
             correlation_id: subscription.to_string(),
             sender: None,
             request_params: RESTRequestParams {
@@ -132,8 +118,8 @@ impl KafkaBroker {
         info!("Kafka running");
         let mut rx = self.rx.lock().await;
         while let Some(ctx) = rx.next().await {
-	    let parent_span = ctx.span;
-	    let span = info_span!(parent:&parent_span,"KAFKA_OUTGOING");
+            let parent_span = ctx.span;
+            let span = info_span!(parent: &parent_span, "KAFKA_OUTGOING");
             let sender = ctx.sender;
             match ctx.job {
                 Job::Subscribe(value) => {
@@ -149,27 +135,30 @@ impl KafkaBroker {
                     let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
                     let kafka_producer = kafka_producer.clone();
                     if let Some(topic) = maybe_topic {
-                        tokio::spawn(async move {
-			    debug!("Publish {}", req);			    
-			    let headers = if let Some((header_name, header_value)) = tracing_utils::get_tracing_header(){
-				OwnedHeaders::new().add(header_name,header_value.as_bytes())
-			    }else{
-				OwnedHeaders::new()
-			    };
-                            let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key").headers(headers);
-                            let kafka_send = kafka_producer.send(r, 0).map(move |status| match status {
-                                Ok(_) => sender.send(MessagingResult {
-                                    correlation_id: req.correlation_id,
-                                    status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
-                                }),
-                                Err(e) => sender.send(MessagingResult {
-                                    correlation_id: req.correlation_id,
-                                    status: BackendStatusCodes::Error(e.to_string()),
-                                }),
-                            });
+                        tokio::spawn(
+                            async move {
+                                debug!("Publish {}", req);
+                                let headers = if let Some((header_name, header_value)) = tracing_utils::get_tracing_header() {
+                                    OwnedHeaders::new().add(header_name, header_value.as_bytes())
+                                } else {
+                                    OwnedHeaders::new()
+                                };
+                                let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key").headers(headers);
+                                let kafka_send = kafka_producer.send(r, 0).map(move |status| match status {
+                                    Ok(_) => sender.send(MessagingResult {
+                                        correlation_id: req.correlation_id,
+                                        status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
+                                    }),
+                                    Err(e) => sender.send(MessagingResult {
+                                        correlation_id: req.correlation_id,
+                                        status: BackendStatusCodes::Error(e.to_string()),
+                                    }),
+                                });
 
-                            kafka_send.await.expect("Should not panic!");
-                        }.instrument(span));
+                                kafka_send.await.expect("Should not panic!");
+                            }
+                            .instrument(span),
+                        );
                     //                            if let Err(e) = foo.await {
                     //                                warn!("hmmm something is very wrong here. it seems that the channel has been closed {:?}", e);
                     //                            }
@@ -227,8 +216,6 @@ impl KafkaBroker {
             info!("Subsciptions {:?}", subscriptions);
         }
 
-	
-
         let mut message_stream = consumer.start();
         while let Some(message) = message_stream.next().await {
             match message {
@@ -262,14 +249,14 @@ impl KafkaBroker {
                     let mut subscriptions = self.subscriptions.lock().await;
                     if let Some(mut subs) = subscriptions.get_mut(&t) {
                         if subs.len() != 0 {
-			    let mut span = info_span!("KAFKA_INCOMING");
-			    if let Some(headers) = m.headers(){				
-				for i in 0..headers.count(){
-				    if let Some(("traceparent",value)) = headers.get(i){
-					span = tracing_utils::from_bytes(span,value);
-				    }
-				};				
-			    }
+                            let mut span = info_span!("KAFKA_INCOMING");
+                            if let Some(headers) = m.headers() {
+                                for i in 0..headers.count() {
+                                    if let Some(("traceparent", value)) = headers.get(i) {
+                                        span = tracing_utils::from_bytes(span, value);
+                                    }
+                                }
+                            }
                             send_request(&mut subs, vec).instrument(span).await;
                         } else {
                             warn!("No subscriptions for {} {}", t, String::from_utf8_lossy(&vec));

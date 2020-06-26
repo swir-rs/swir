@@ -1,8 +1,4 @@
-
-use tokio::sync::{
-    mpsc,
-    oneshot
-};
+use tokio::sync::{mpsc, oneshot};
 use tracing::Span;
 
 use crate::utils::structs::*;
@@ -35,7 +31,11 @@ impl swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInv
 
         let (local_sender, local_rx): (oneshot::Sender<SIResult>, oneshot::Receiver<SIResult>) = oneshot::channel();
 
-        let ctx = RestToSIContext { job, sender: local_sender,span:Span::current() };
+        let ctx = RestToSIContext {
+            job,
+            sender: local_sender,
+            span: Span::current(),
+        };
         let mut sender = self.from_client_to_si_sender.clone();
         let res = sender.try_send(ctx);
         if let Err(e) = res {

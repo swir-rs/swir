@@ -3,11 +3,7 @@ use config::{Config, File};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{
-    mpsc,
-    Mutex
-};
-    
+use tokio::sync::{mpsc, Mutex};
 
 use crate::utils::structs::{BackendToRestContext, RestToMessagingContext, RestToPersistenceContext, RestToSIContext};
 
@@ -177,13 +173,12 @@ pub struct Stores {
     pub dynamodb: Vec<DynamoDb>,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct MemoryChannelEndpoint<T1, T2> {
     pub from_client_receiver: Arc<Mutex<mpsc::Receiver<T1>>>,
     pub to_client_sender_for_rest: mpsc::Sender<T2>,
     pub to_client_sender_for_grpc: mpsc::Sender<T2>,
 }
-
 
 pub struct MessagingMemoryChannels {
     pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext, BackendToRestContext>>,
@@ -196,12 +191,10 @@ pub struct MessagingMemoryChannels {
     pub to_si_http_client: mpsc::Sender<BackendToRestContext>,
 }
 
-
 pub struct PersistenceMemoryChannels {
     pub from_client_to_persistence_senders: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     pub from_client_to_persistence_receivers_map: HashMap<StoreType, Vec<Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>>>,
 }
-
 
 pub struct MemoryChannels {
     pub messaging_memory_channels: MessagingMemoryChannels,
@@ -241,19 +234,19 @@ pub struct Resolver {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct TlsConfig {
-   pub client_ca_cert: String,
-   pub client_cert: String,
-   pub client_key: String,
-   pub server_ca_cert: String,
-   pub server_cert: String,
-   pub server_key: String,
-   pub domain_name: String
+    pub client_ca_cert: String,
+    pub client_cert: String,
+    pub client_key: String,
+    pub server_ca_cert: String,
+    pub server_cert: String,
+    pub server_key: String,
+    pub domain_name: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ServerTlsConfig {
-   pub private_key: String,   
-   pub certificate: String,
+    pub private_key: String,
+    pub certificate: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -266,22 +259,22 @@ pub struct Services {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct OpenTelemetry{
+pub struct OpenTelemetry {
     pub collector_address: String,
     pub collector_port: u16,
-    pub service_name: String    
+    pub service_name: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct TracingConfig{
-    pub open_telemetry: Option<OpenTelemetry>
+pub struct TracingConfig {
+    pub open_telemetry: Option<OpenTelemetry>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Swir {
     pub tracing: Option<TracingConfig>,
     pub ip: String,
-    pub http_port: u16,    
+    pub http_port: u16,
     pub grpc_port: u16,
     pub internal_grpc_port: u16,
     pub tls_config: Option<ServerTlsConfig>,
@@ -294,9 +287,6 @@ pub struct Swir {
 impl Swir {
     pub fn new() -> Box<Swir> {
         let mut s = Config::new();
-        s.merge(config::Environment::with_prefix("SWIR")).unwrap();
-        debug!("{:?}", s);
-
         match s.get_str("config_file") {
             Ok(config_file) => {
                 debug!("Trying config file at : {}", config_file);
@@ -307,7 +297,10 @@ impl Swir {
                 s.merge(File::with_name("swir.yaml")).unwrap();
             }
         }
-
+        let env_conf = config::Environment::with_prefix("SWIR").separator("_");
+        debug!("Trying env config {:?}", env_conf);
+        s.merge(env_conf).unwrap();
+        debug!("{:?}", s);
         let s = s.try_into().unwrap();
         info!("SWIR Config : {:?}", s);
         Box::new(s)
@@ -465,7 +458,6 @@ fn create_persistence_channels(config: &Swir) -> PersistenceMemoryChannels {
     }
 }
 
-
 pub struct SIMemoryChannel {
     pub client_sender: mpsc::Sender<RestToSIContext>,
     pub internal_sender: mpsc::Sender<RestToSIContext>,
@@ -477,7 +469,7 @@ fn create_service_invocation_channels(_config: &Swir) -> SIMemoryChannel {
     SIMemoryChannel {
         client_sender: from_client_sender.clone(),
         internal_sender: from_client_sender,
-        receiver: Arc::new(Mutex::new(from_client_receiver))
+        receiver: Arc::new(Mutex::new(from_client_receiver)),
     }
 }
 
