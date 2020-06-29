@@ -287,6 +287,8 @@ pub struct Swir {
 impl Swir {
     pub fn new() -> Box<Swir> {
         let mut s = Config::new();
+        let env_conf = config::Environment::with_prefix("SWIR");
+        s.merge(env_conf).unwrap();
         match s.get_str("config_file") {
             Ok(config_file) => {
                 debug!("Trying config file at : {}", config_file);
@@ -297,9 +299,7 @@ impl Swir {
                 s.merge(File::with_name("swir.yaml")).unwrap();
             }
         }
-        let env_conf = config::Environment::with_prefix("SWIR").separator("_");
-        debug!("Trying env config {:?}", env_conf);
-        s.merge(env_conf).unwrap();
+
         debug!("{:?}", s);
         let s = s.try_into().unwrap();
         info!("SWIR Config : {:?}", s);
