@@ -6,7 +6,7 @@ containerDefinitions:
   - name: swir_config_file
     value: /swir_config/swir_books_service_aws.yaml
   essential: true
-  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir:v3
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir/swir:v3
   logConfiguration:
     logDriver: awslogs
     options:

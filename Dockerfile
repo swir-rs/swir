@@ -1,6 +1,6 @@
-FROM rust:latest as builder
+FROM rust:1.41 as builder
 WORKDIR /usr/src/swir
-RUN rustup component add rustfmt --toolchain 1.40.0-x86_64-unknown-linux-gnu
+RUN rustup component add rustfmt 
 COPY build.rs ./
 COPY rustfmt.toml ./
 COPY deny.toml ./

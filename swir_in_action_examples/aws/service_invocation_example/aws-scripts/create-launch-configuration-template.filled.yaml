@@ -11,8 +11,8 @@ ImageId: ami-0851c53aff84212c3
 InstanceMonitoring:
   Enabled: true
 InstanceType: t2.micro
-LaunchConfigurationName: swir-demo-si-launch-configuration-0HFPHDT0YI
+LaunchConfigurationName: swir-demo-si-launch-configuration-DTNC23PQKY
 UserData: '#!/bin/bash
 
-  echo ECS_CLUSTER=swir-demo-si-cluster-0HFPHDT0YI >> /etc/ecs/ecs.config;echo ECS_BACKEND_HOST=
+  echo ECS_CLUSTER=swir-demo-si-cluster-DTNC23PQKY >> /etc/ecs/ecs.config;echo ECS_BACKEND_HOST=
   >> /etc/ecs/ecs.config;'

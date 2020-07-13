@@ -14,9 +14,9 @@ aws ecr create-repository --repository-name swir-example-si-python-grpc-client
 docker tag swir-example-si-python-grpc-client:v3 ${repoUri}/swir-example-si-python-grpc-client:v3
 docker push ${repoUri}/swir-example-si-python-grpc-client
 
-aws ecr create-repository --repository-name swir
-docker tag swir:v3 ${repoUri}/swir:v3
-docker push ${repoUri}/swir
+aws ecr create-repository --repository-name swir/swir
+docker tag swir:v3 ${repoUri}/swir/swir:v3
+docker push ${repoUri}/swir/swir
 
 
 #docker -v logout "${repoUri}"

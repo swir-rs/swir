@@ -18,9 +18,9 @@ aws ecr create-repository --repository-name swir-example-python-processor
 docker tag swir-example-python-processor:v3 ${repoUri}/swir-example-python-processor:v3
 docker push ${repoUri}/swir-example-python-processor
 
-aws ecr create-repository --repository-name swir
-docker tag swir:v3 ${repoUri}/swir:v3
-docker push ${repoUri}/swir
+aws ecr create-repository --repository-name swir/swir
+docker tag swir/swir:v3 ${repoUri}/swir/swir:v3
+docker push ${repoUri}/swir/swir:v3
 
 aws ecr create-repository --repository-name swir-aws-example-configurator
 docker tag swir-aws-example-configurator:v3 ${repoUri}/swir-aws-example-configurator:v3

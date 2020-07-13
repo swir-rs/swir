@@ -1,5 +1,5 @@
 capacityProviders: []
-clusterName: swir-demo-si-cluster-0HFPHDT0YI
+clusterName: swir-demo-si-cluster-DTNC23PQKY
 defaultCapacityProviderStrategy: []
 tags:
 - key: swir-cluster

@@ -1,8 +1,8 @@
 FROM debian:buster-slim
 RUN apt-get update && apt-get upgrade -y && apt-get install -y ca-certificates libssl-dev libssl1.1
 COPY --from=swir_builder:latest /swir/target/release/swir /swir
-ARG swir_config
-COPY $swir_config /swir.yaml
+#ARG swir_config
+#COPY $swir_config /swir.yaml
 ENV RUST_BACKTRACE=full
 ENV RUST_LOG=info,rusoto_core=info,swir=debug,rusoto_dynamodb=info
 EXPOSE 8080 8090 50051

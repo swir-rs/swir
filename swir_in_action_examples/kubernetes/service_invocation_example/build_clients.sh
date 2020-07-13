@@ -3,7 +3,7 @@ eval $(minikube docker-env) # this has to be executed in a shell that will build
 cwd=$(pwd)
 cd ../../../
 rood_dir=$(pwd)
-./cicd.sh
+docker pull swir/swir:v3
 cd $cwd
 cd ../../docker/service_invocation_example/swir-python-http-server
 printf "\n**********************\n"

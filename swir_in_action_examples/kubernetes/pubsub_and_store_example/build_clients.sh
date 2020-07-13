@@ -3,7 +3,7 @@ eval $(minikube docker-env) # this has to be executed in a shell that will build
 cwd=$(pwd)
 cd ../../../
 root_dir=$(pwd)
-./cicd.sh
+docker pull swir/swir:v3
 cd $cwd
 cd ../../docker/pubsub_and_store_example/swir-python-processor
 printf "\n**********************\n"

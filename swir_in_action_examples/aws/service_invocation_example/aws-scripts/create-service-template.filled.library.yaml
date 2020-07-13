@@ -1,6 +1,6 @@
 capacityProviderStrategy: []
-clientToken: 3JMRXJJFU4
-cluster: swir-demo-si-cluster-0HFPHDT0YI
+clientToken: HUBW44YSWI
+cluster: swir-demo-si-cluster-DTNC23PQKY
 deploymentConfiguration:
   maximumPercent: 200
   minimumHealthyPercent: 100
@@ -21,4 +21,4 @@ schedulingStrategy: REPLICA
 serviceName: library
 serviceRegistries: []
 tags: []
-taskDefinition: arn:aws:ecs:eu-west-1:164450575887:task-definition/swir-library-service:26
+taskDefinition: arn:aws:ecs:eu-west-1:164450575887:task-definition/swir-library-service:27

@@ -13,7 +13,7 @@ echo "Accout " $1 " region " $2
 cwd=$(pwd)
 
 cd ../../../
-./cicd.sh swir.yaml
+docker pull swir/swir:v3
 root_folder=$(pwd)
 image_folder=$root_folder/swir_in_action_examples/docker/pubsub_and_store_example
 cd $cwd

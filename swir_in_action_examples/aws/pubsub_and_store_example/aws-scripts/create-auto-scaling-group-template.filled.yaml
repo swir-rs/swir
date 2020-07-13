@@ -1,8 +1,0 @@
-AutoScalingGroupName: swir-demo-autoscaling-group-GHZQWWRV4A
-AvailabilityZones:
-- eu-west-1b
-- eu-west-1a
-DesiredCapacity: 5
-LaunchConfigurationName: swir-demo-launch-configuration-GHZQWWRV4A
-MaxSize: 5
-MinSize: 5

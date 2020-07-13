@@ -3,7 +3,7 @@
 cwd=$(pwd)
 cd ../../../
 root_dir=$(pwd)
-./cicd.sh swir.yaml
+docker pull swir/swir:v3
 cd $cwd
 
 cd ./swir-configurator

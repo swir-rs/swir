@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: swir
-        image: swir:v3
+        image: swir/swir:v3
         env:
           - name: swir_config_file
             value: /swir_config/config.yaml

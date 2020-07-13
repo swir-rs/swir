@@ -9,6 +9,6 @@ docker rmi ${repoUri}/swir-example-java-source:v3
 docker rmi ${repoUri}/swir-example-java-processor:v3
 docker rmi ${repoUri}/swir-example-python-sink:v3
 docker rmi ${repoUri}/swir-example-python-processor:v3
-docker rmi ${repoUri}/swir:v3
+docker rmi ${repoUri}/swir/swir:v3
 docker rmi ${repoUri}/swir-aws-example-configurator:v3
 

@@ -15,7 +15,7 @@ services:
   order-generator-sidecar:
     networks:
       - swir-net
-    image: swir:v3
+    image: swir/swir:v3
     ports:
       - "8080"
       - "8443"
@@ -35,7 +35,7 @@ services:
   order-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v3
+    image: swir/swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -57,7 +57,7 @@ services:
   inventory-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v3
+    image: swir/swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -81,7 +81,7 @@ services:
   billing-processor-sidecar:
     networks:
       - swir-net
-    image: swir:v3
+    image: swir/swir:v3
     depends_on:
       - swir-example-configurator
     ports:
@@ -105,7 +105,7 @@ services:
   shipments-sink-sidecar:
     networks:
       - swir-net
-    image: swir:v3
+    image: swir/swir:v3
     depends_on:
       - swir-example-configurator
     ports:

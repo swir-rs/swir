@@ -1,8 +1,9 @@
 # Compile, build and generate necessary docker images
 #!/bin/bash
 cwd=$(pwd)
-cd ../../
-./cicd.sh swir.yaml
+cd ../../../
+root_dir=$(pwd)
+docker pull swir/swir:v3
 cd $cwd
 
 cd ./swir-configurator
@@ -28,7 +29,7 @@ printf "\n**********************\n"
 cd ../swir-python-grpc-client
 printf "\n**********************\n"
 printf "\nPython GRPC client  \n"
-cp ../../../grpc_api/*.proto .
+cp $root_dir/grpc_api/*.proto .
 docker build --tag swir-example-si-python-grpc-client:v3 .
 rm *.proto
 printf "\nPython GRPC client ... done \n"

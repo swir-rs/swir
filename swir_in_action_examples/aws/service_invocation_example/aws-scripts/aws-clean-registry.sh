@@ -5,6 +5,6 @@ aws ecr delete-repository --repository-name swir-example-aws-si-configurator --f
 
 docker rmi ${repoUri}/swir-example-si-python-http-server:v3
 docker rmi ${repoUri}/swir-example-si-python-grpc-client:v3
-docker rmi ${repoUri}/swir:v3
+docker rmi ${repoUri}/swir/swir:v3
 docker rmi ${repoUri}/swir-example-aws-si-configurator:v3
 
