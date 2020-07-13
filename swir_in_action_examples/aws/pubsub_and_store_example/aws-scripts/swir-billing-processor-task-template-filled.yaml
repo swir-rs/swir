@@ -1,0 +1,81 @@
+containerDefinitions:
+- dependsOn:
+  - condition: COMPLETE
+    containerName: swir-configurator
+  environment:
+  - name: swir_config_file
+    value: /swir_config/swir_billing_processor.yaml
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-billing-processor
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 200
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-sidecar
+  portMappings:
+  - containerPort: 50051
+    hostPort: 50051
+    protocol: tcp
+  - containerPort: 8443
+    hostPort: 8443
+    protocol: tcp
+  - containerPort: 8080
+    hostPort: 8080
+    protocol: tcp
+- dependsOn:
+  - condition: START
+    containerName: swir-sidecar
+  environment:
+  - name: publish_topic
+    value: shipments
+  - name: sidecar
+    value: 127.0.0.1:50051
+  - name: subscribe_topic
+    value: billing
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-example-python-processor:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-billing-processor
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 500
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-example-python-processor
+  portMappings: []
+- dependsOn: []
+  environment: []
+  essential: false
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-aws-example-configurator:v3
+  memory: 100
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-configurator
+  portMappings: []
+executionRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+family: swir-billing-processor
+memory: '800'
+networkMode: host
+placementConstraints: []
+requiresCompatibilities:
+- EC2
+taskRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+volumes:
+- dockerVolumeConfiguration:
+    autoprovision: true
+    driver: local
+    scope: shared
+  name: swir_config

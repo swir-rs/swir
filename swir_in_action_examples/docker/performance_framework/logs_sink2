@@ -1,0 +1,40 @@
+21:24:55.030 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":0,"timestamp":1594589095017,"payload":"VBzF+DybQGnVxUXxDs7AcA=="}" on subject "Request2", replying to Response2
+
+21:24:55.033 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":1,"timestamp":1594589095018,"payload":"/Xsm7BUYUwKykoFSFaX/FA=="}" on subject "Request2", replying to Response2
+
+21:24:55.033 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":2,"timestamp":1594589095019,"payload":"aT7lcnNsWK5+XC5bWnQefQ=="}" on subject "Request2", replying to Response2
+
+21:24:55.033 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":3,"timestamp":1594589095020,"payload":"WdOTFYejUTPjidXUQ77mpg=="}" on subject "Request2", replying to Response2
+
+21:24:55.034 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":5,"timestamp":1594589095022,"payload":"MDd85yow67Ul9p1/TcG2VQ=="}" on subject "Request2", replying to Response2
+
+21:24:55.034 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":7,"timestamp":1594589095024,"payload":"IM5XNtc8tbLez4QINi8Vww=="}" on subject "Request2", replying to Response2
+
+21:24:55.034 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":6,"timestamp":1594589095023,"payload":"f/T5ny/LV77cBaSkb5aVdA=="}" on subject "Request2", replying to Response2
+
+21:24:55.034 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":4,"timestamp":1594589095021,"payload":"IgXYy4ZRTt4/cPrg2l/ytw=="}" on subject "Request2", replying to Response2
+
+21:24:55.035 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":8,"timestamp":1594589095025,"payload":"uol0Cmf6339a3fNDO1iimA=="}" on subject "Request2", replying to Response2
+
+21:24:55.035 [nats:3] INFO  rs.swir.nats.sink.App - Received message "
+
+dummydummy�{"producer":"ProduceToAppD","consumer":"SubscribeToAppD","counter":9,"timestamp":1594589095026,"payload":"BqAZRKiw9nyz8mZRPct9GQ=="}" on subject "Request2", replying to Response2
+

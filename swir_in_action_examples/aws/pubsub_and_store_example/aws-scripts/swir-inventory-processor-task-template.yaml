@@ -1,0 +1,93 @@
+family: 'swir-inventory-processor'  # [REQUIRED] You must specify a family for a task definition, which allows you to track multiple versions of the same task definition.
+taskRoleArn: 'arn:aws:iam::<aws_account>:role/ecsTaskExecutionRole' # The short name or full Amazon Resource Name (ARN) of the IAM role that containers in this task can assume.
+executionRoleArn: 'arn:aws:iam::<aws_account>:role/ecsTaskExecutionRole' # The Amazon Resource Name (ARN) of the task execution role that the Amazon ECS container agent and the Docker daemon can assume.
+networkMode: host # The Docker networking mode to use for the containers in the task. Valid values are: bridge, host, awsvpc, none.
+containerDefinitions: # [REQUIRED] A list of container definitions in JSON format that describe the different containers that make up your task.
+- name: 'swir-sidecar'  # The name of a container.
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir:v3' # The image used to start a container.
+  memory: 200 # The amount (in MiB) of memory to present to the container.
+  portMappings: # The list of port mappings for the container.
+  - containerPort: 50051  # The port number on the container that is bound to the user-specified or automatically assigned host port.
+    hostPort: 50051 # The port number on the container instance to reserve for your container.
+    protocol: tcp # The protocol used for the port mapping. Valid values are: tcp, udp.
+  essential: true # If the essential parameter of a container is marked as true, and that container fails or stops for any reason, all other containers that are part of the task are stopped.
+  environment: # The environment variables to pass to a container.
+  - name: 'swir_config_file'  # The name of the key-value pair.
+    value: '/swir_config/swir_inventory_processor.yaml' # The value of the key-value pair.
+  mountPoints: # The mount points for data volumes in your container.
+  - sourceVolume: 'swir_config'  # The name of the volume to mount.
+    containerPath: '/swir_config' # The path on the container to mount the host volume at.
+    readOnly: false # If this value is true, the container has read-only access to the volume.
+  dependsOn: # The dependencies defined for container startup and shutdown.
+  - containerName: 'swir-configurator'  # [REQUIRED] The name of a container.
+    condition: COMPLETE # [REQUIRED] The dependency condition of the container. Valid values are: START, COMPLETE, SUCCESS, HEALTHY.
+
+  logConfiguration: # The log configuration specification for the container.
+    logDriver: awslogs  # [REQUIRED] The log driver to use for the container. Valid values are: json-file, syslog, journald, gelf, fluentd, awslogs, splunk, awsfirelens.
+    options: # The configuration options to send to the log driver.
+      awslogs-group: /swir/swir-inventory-processor
+      awslogs-region: <aws_region>
+      awslogs-stream-prefix: ecs
+
+
+- name: 'swir-example-http-java-processor'  # The name of a container.
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-example-java-processor:v3' # The image used to start a container.
+  memory: 500 # The amount (in MiB) of memory to present to the container.
+  portMappings: [] # The list of port mappings for the container.
+  essential: true # If the essential parameter of a container is marked as true, and that container fails or stops for any reason, all other containers that are part of the task are stopped.
+  environment: # The environment variables to pass to a container.
+    - name: subscribe_topic
+      value: inventory
+    - name: producer_topic
+      value: billing      
+    - name: sidecar_url
+      value: "http://127.0.0.1:8080"
+    - name: server_port
+      value: "8090"
+
+  mountPoints: # The mount points for data volumes in your container.
+  - sourceVolume: 'swir_config'  # The name of the volume to mount.
+    containerPath: '/swir_config' # The path on the container to mount the host volume at.
+    readOnly: false # If this value is true, the container has read-only access to the volume.
+  dependsOn: # The dependencies defined for container startup and shutdown.
+  - containerName: 'swir-sidecar'  # [REQUIRED] The name of a container.
+    condition: START # [REQUIRED] The dependency condition of the container. Valid values are: START, COMPLETE, SUCCESS, HEALTHY.
+
+  logConfiguration: # The log configuration specification for the container.
+    logDriver: awslogs  # [REQUIRED] The log driver to use for the container. Valid values are: json-file, syslog, journald, gelf, fluentd, awslogs, splunk, awsfirelens.
+    options: # The configuration options to send to the log driver.
+      awslogs-group: /swir/swir-inventory-processor
+      awslogs-region: <aws_region>
+      awslogs-stream-prefix: ecs
+
+      
+
+- name: 'swir-configurator'  # The name of a container.
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-aws-example-configurator:v3' # The image used to start a container.
+  memory: 100 # The amount (in MiB) of memory to present to the container.
+  portMappings: [] # The list of port mappings for the container.
+  essential: false # If the essential parameter of a container is marked as true, and that container fails or stops for any reason, all other containers that are part of the task are stopped.
+  environment: [] # The environment variables to pass to a container.
+  mountPoints: # The mount points for data volumes in your container.
+  - sourceVolume: 'swir_config'  # The name of the volume to mount.
+    containerPath: '/swir_config' # The path on the container to mount the host volume at.
+    readOnly: false # If this value is true, the container has read-only access to the volume.
+  dependsOn: []# The dependencies defined for container startup and shutdown.
+
+  
+volumes: # A list of volume definitions in JSON format that containers in your task may use.
+- name: 'swir_config'  # The name of the volume.
+  dockerVolumeConfiguration: # This parameter is specified when you are using Docker volumes.
+    scope: shared  # The scope for the Docker volume that determines its lifecycle. Valid values are: task, shared.
+    autoprovision: true # If this value is true, the Docker volume is created if it does not already exist.
+    driver: 'local' # The Docker volume driver to use.
+
+placementConstraints: [] # An array of placement constraint objects to use for the task.
+requiresCompatibilities: # The launch type required by the task.
+- EC2
+
+memory: '800' # The amount of memory (in MiB) used by the task.
+
+
+
+

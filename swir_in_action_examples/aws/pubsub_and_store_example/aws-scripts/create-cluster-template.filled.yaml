@@ -1,0 +1,6 @@
+capacityProviders: []
+clusterName: swir-demo-cluster-GHZQWWRV4A
+defaultCapacityProviderStrategy: []
+tags:
+- key: swir-cluster
+  value: ''

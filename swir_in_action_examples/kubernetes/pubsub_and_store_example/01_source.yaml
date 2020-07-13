@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: source
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"
+  labels:
+    app: swir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swir
+  template:
+    metadata:
+      labels:
+        app: swir
+    spec:
+      containers:
+      - name: swir
+        image: swir:v3
+        env:
+          - name: swir_config_file
+            value: /swir_config/config.yaml
+        volumeMounts:
+          - name: config-volume
+            mountPath: /swir_config            
+      - name: client
+        image: swir-example-java-source:v3
+        env:
+          - name: sidecar_hostname
+            value: "127.0.0.1"
+          - name: sidecar_port
+            value: "50051"
+          - name: produce_topic
+            value: orders
+          - name: client_database_name
+            value: source_store
+
+      volumes:
+        - name: config-volume
+          configMap:
+            name: source-config
+            items:
+              - key: source.yaml
+                path: config.yaml

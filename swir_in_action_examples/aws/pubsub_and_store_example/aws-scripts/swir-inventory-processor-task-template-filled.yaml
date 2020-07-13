@@ -1,0 +1,77 @@
+containerDefinitions:
+- dependsOn:
+  - condition: COMPLETE
+    containerName: swir-configurator
+  environment:
+  - name: swir_config_file
+    value: /swir_config/swir_inventory_processor.yaml
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-inventory-processor
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 200
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-sidecar
+  portMappings:
+  - containerPort: 50051
+    hostPort: 50051
+    protocol: tcp
+- dependsOn:
+  - condition: START
+    containerName: swir-sidecar
+  environment:
+  - name: subscribe_topic
+    value: inventory
+  - name: producer_topic
+    value: billing
+  - name: sidecar_url
+    value: http://127.0.0.1:8080
+  - name: server_port
+    value: '8090'
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-example-java-processor:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-inventory-processor
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 500
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-example-http-java-processor
+  portMappings: []
+- dependsOn: []
+  environment: []
+  essential: false
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-aws-example-configurator:v3
+  memory: 100
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-configurator
+  portMappings: []
+executionRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+family: swir-inventory-processor
+memory: '800'
+networkMode: host
+placementConstraints: []
+requiresCompatibilities:
+- EC2
+taskRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+volumes:
+- dockerVolumeConfiguration:
+    autoprovision: true
+    driver: local
+    scope: shared
+  name: swir_config

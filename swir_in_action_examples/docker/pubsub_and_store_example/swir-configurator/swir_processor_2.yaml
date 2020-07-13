@@ -1,0 +1,37 @@
+ip: "0.0.0.0"
+http_port: 8080
+grpc_port: 50051
+internal_grpc_port: 50052
+
+tracing:
+  open_telemetry:
+    collector_address: swir-example-logger
+    collector_port: 6831
+    service_name: pubsub-store-example
+
+
+#client_executable: "client.jar"
+pubsub:
+  kafka:
+    - brokers: [kafka:9094]
+      producer_topics:
+        - producer_topic: processor3_kafka_red
+          client_topic: billing
+      consumer_topics: []                
+      
+
+  nats:
+    - brokers:
+        - nats://nats:4222
+      consumer_topics:
+        - consumer_topic: processor2_nats_green
+          consumer_group: swir
+          client_topic: inventory
+      producer_topics: []
+      
+  aws_kinesis: []
+
+stores:  
+  redis: []
+  dynamodb: []  
+

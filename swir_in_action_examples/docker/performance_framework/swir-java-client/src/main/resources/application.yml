@@ -1,0 +1,14 @@
+spring:
+  profiles:
+    active: "docker"
+
+server:
+  port: 8090
+
+
+logging:
+  level:
+    .: DEBUG
+    org.springframework: INFO
+
+

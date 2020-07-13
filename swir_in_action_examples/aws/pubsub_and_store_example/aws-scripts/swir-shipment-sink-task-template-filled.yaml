@@ -1,0 +1,74 @@
+containerDefinitions:
+- dependsOn:
+  - condition: COMPLETE
+    containerName: swir-configurator
+  environment:
+  - name: swir_config_file
+    value: /swir_config/swir_sink.yaml
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-shipments-sink
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 200
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-sidecar
+  portMappings:
+  - containerPort: 50051
+    hostPort: 50051
+    protocol: tcp
+- dependsOn:
+  - condition: START
+    containerName: swir-sidecar
+  environment:
+  - name: subscribe_topic
+    value: shipments
+  - name: sidecar
+    value: 127.0.0.1:50051
+  - name: client_database_name
+    value: sink_store
+  essential: true
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-example-python-sink:v3
+  logConfiguration:
+    logDriver: awslogs
+    options:
+      awslogs-group: /swir/swir-demo
+      awslogs-region: eu-west-1
+      awslogs-stream-prefix: ecs
+  memory: 500
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-shipments-python-sink
+  portMappings: []
+- dependsOn: []
+  environment: []
+  essential: false
+  image: 164450575887.dkr.ecr.eu-west-1.amazonaws.com/swir-aws-example-configurator:v3
+  memory: 100
+  mountPoints:
+  - containerPath: /swir_config
+    readOnly: false
+    sourceVolume: swir_config
+  name: swir-configurator
+  portMappings: []
+executionRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+family: swir-shipments-sink
+networkMode: host
+placementConstraints: []
+requiresCompatibilities:
+- EC2
+taskRoleArn: arn:aws:iam::164450575887:role/swirEcsTaskExecutionRole
+volumes:
+- dockerVolumeConfiguration:
+    autoprovision: true
+    driver: local
+    scope: shared
+  name: swir_config

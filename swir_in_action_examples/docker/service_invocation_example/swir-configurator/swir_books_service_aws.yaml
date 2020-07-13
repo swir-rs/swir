@@ -1,0 +1,42 @@
+ip: "0.0.0.0"
+http_port: 8080
+grpc_port: 50051
+internal_grpc_port: 50052
+
+
+pubsub:
+  kafka: []
+  nats: []
+  aws_kinesis: []
+stores:  
+  redis: []
+  dynamodb: []
+
+services:
+  tls_config: 
+    client_ca_cert: /certs/ca-chain.cert.pem
+    client_cert: /certs/client.internal_grpc.swir.rs.cert.pem
+    client_key: /certs/client.internal_grpc.swir.rs.key.pem
+    server_ca_cert: /certs/ca-chain.cert.pem
+    server_cert: /certs/server.internal_grpc.swir.rs.cert.pem
+    server_key: /certs/server.internal_grpc.swir.rs.key.pem
+    domain_name: demo.swir.rs
+  resolver:
+    resolver_type: DynamoDb
+    resolver_config:
+      region : eu-west-1
+      table: swir-service-discovery
+  resolve_services: []
+  announce_services:
+    - service_details:
+        service_name: books
+        domain: swir
+        protocol: tcp
+      client_url: "http://127.0.0.1:8090"
+      
+      
+
+
+      
+
+

@@ -1,0 +1,24 @@
+capacityProviderStrategy: []
+clientToken: DQVDAOS8LF
+cluster: swir-demo-cluster-GHZQWWRV4A
+deploymentConfiguration:
+  maximumPercent: 200
+  minimumHealthyPercent: 100
+deploymentController:
+  type: ECS
+desiredCount: 1
+enableECSManagedTags: false
+loadBalancers: []
+placementConstraints: []
+placementStrategy:
+- field: attribute:ecs.availability-zone
+  type: spread
+- field: instanceId
+  type: spread
+propagateTags: SERVICE
+role: ''
+schedulingStrategy: REPLICA
+serviceName: inventory
+serviceRegistries: []
+tags: []
+taskDefinition: arn:aws:ecs:eu-west-1:164450575887:task-definition/swir-inventory-processor:42

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helpdesk
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"  
+  labels:
+    app: swir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swir
+  template:
+    metadata:
+      labels:
+        app: swir
+    spec:
+      containers:
+      - name: swir
+        image: swir:v3
+        env:
+          - name: swir_config_file
+            value: /swir_config/config.yaml
+        volumeMounts:
+          - name: config-volume
+            mountPath: /swir_config
+          - name: certs-volume
+            mountPath: /certs
+      - name: client
+        image: swir-example-si-python-grpc-client:v3
+        env:
+          - name: sidecar
+            value: "127.0.0.1:50051"
+          - name: service_names
+            value: "books,magazines"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: helpdesk-config
+            items:
+              - key: helpdesk.yaml
+                path: config.yaml
+        - name: certs-volume
+          configMap:
+            name: certs-config
+            items:
+              - key: client.internal_grpc.swir.rs.cert.pem
+                path: client.internal_grpc.swir.rs.cert.pem
+              - key: ca-chain.cert.pem
+                path: ca-chain.cert.pem
+              - key: client.internal_grpc.swir.rs.key.pem
+                path: client.internal_grpc.swir.rs.key.pem
+              - key: server.internal_grpc.swir.rs.cert.pem
+                path: server.internal_grpc.swir.rs.cert.pem
+              - key: server.internal_grpc.swir.rs.key.pem
+                path: server.internal_grpc.swir.rs.key.pem
+

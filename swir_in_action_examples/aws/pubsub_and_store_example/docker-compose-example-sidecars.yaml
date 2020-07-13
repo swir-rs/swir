@@ -1,0 +1,130 @@
+version: '3.7'
+# Sidecars layer. All sidecars are already deployed.
+services:
+  swir-example-configurator:
+    networks:
+      - swir-net
+    image: swir-aws-example-configurator:v3
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+# step 1 
+# Java gRCP
+  order-generator-sidecar:
+    networks:
+      - swir-net
+    image: swir:v3
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+    environment:
+      - swir_config_file=/swir_config/swir_source.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECURE_ACCESS_KEY}
+
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+# step 2     
+# python gRPC
+  order-processor-sidecar:
+    networks:
+      - swir-net
+    image: swir:v3
+    depends_on:
+      - swir-example-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+    environment:
+      - swir_config_file=/swir_config/swir_order_processor.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECURE_ACCESS_KEY}
+
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+# step 3           
+# Java SpringBoot and REST        
+  inventory-processor-sidecar:
+    networks:
+      - swir-net
+    image: swir:v3
+    depends_on:
+      - swir-example-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+    environment:
+      - swir_config_file=/swir_config/swir_inventory_processor.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECURE_ACCESS_KEY}
+
+
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+
+# step 4           
+# python gRPC              
+  billing-processor-sidecar:
+    networks:
+      - swir-net
+    image: swir:v3
+    depends_on:
+      - swir-example-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+    environment:
+      - swir_config_file=/swir_config/swir_billing_processor.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECURE_ACCESS_KEY}
+
+
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config
+
+
+# step 5
+# Python gRPC
+  shipments-sink-sidecar:
+    networks:
+      - swir-net
+    image: swir:v3
+    depends_on:
+      - swir-example-configurator
+    ports:
+      - "8080"
+      - "8443"
+      - "50051"
+    environment:
+      - swir_config_file=/swir_config/swir_sink.yaml
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECURE_ACCESS_KEY}
+
+    volumes:
+      - type: volume
+        source: swir_config
+        target: /swir_config                
+        
+volumes:
+  swir_config:
+networks:
+  swir-net:
+    external:
+      name: docker_swir-net-aws

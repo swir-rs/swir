@@ -1,0 +1,92 @@
+plugins {
+    // Provide convenience executables for trying out the examples.
+    id 'application'
+    // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.8'
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+sourceCompatibility = 1.10
+targetCompatibility = 1.10
+
+def grpcVersion = '1.25.0' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.11.0'
+def protocVersion = protobufVersion
+
+
+dependencies {
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    compileOnly "javax.annotation:javax.annotation-api:1.2"
+
+    // examples/advanced need this for JsonFormat
+    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+
+    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.10.1'
+    compile 'com.fasterxml.jackson.core:jackson-core:2.10.1'
+    // https://mvnrepository.com/artifact/ch.qos.logback/logback-core
+    compile 'ch.qos.logback:logback-classic:1.2.3'
+    compile 'ch.qos.logback:logback-core:1.2.3'
+    compile 'org.slf4j:slf4j-api:1.7.30'
+
+
+
+    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "junit:junit:4.12"
+    testImplementation "org.mockito:mockito-core:2.28.2"
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins {
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+    }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+
+//jar {
+//    manifest {
+//        attributes(
+//                'Main-Class': 'rs.swir.api.client.GrpcClient'
+//        )
+//    }
+//}
+
+// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+sourceSets {
+    main {
+        proto {
+            // In addition to the default 'src/main/proto'
+            srcDir './grpc_api'
+        }
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
+}
+startScripts.enabled = false
+
+task swirClient(type: CreateStartScripts) {
+    mainClassName = 'rs.swir.api.client.GrpcClient'
+    applicationName = 'swir-java-source'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+applicationDistribution.into('bin') {
+    from(swirClient)
+    fileMode = 0755
+}

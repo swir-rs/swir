@@ -1,0 +1,18 @@
+LaunchConfigurationName: ''  # [REQUIRED] The name of the launch configuration.
+
+
+UserData: '' # The Base64-encoded user data to make available to the launched EC2 instances.
+InstanceType: 't2.micro' # Specifies the instance type of the EC2 instance.
+BlockDeviceMappings: # A block device mapping, which specifies the block devices for the instance.
+- DeviceName: '/dev/xvdcz' # [REQUIRED] The device name exposed to the EC2 instance (for example, /dev/sdh or xvdh).
+  Ebs: # The information about the Amazon EBS volume.
+    VolumeSize: 10 # The volume size, in Gibibytes (GiB).
+    VolumeType: 'gp2' # The volume type, which can be standard for Magnetic, io1 for Provisioned IOPS SSD, gp2 for General Purpose SSD, st1 for Throughput Optimized HDD, or sc1 for Cold HDD.
+    DeleteOnTermination: true # Indicates whether the volume is deleted on instance termination.
+InstanceMonitoring: # Controls whether instances in this group are launched with detailed (true) or basic (false) monitoring.
+  Enabled: true  # If true, detailed monitoring is enabled.
+
+IamInstanceProfile: 'arn:aws:iam::164450575887:instance-profile/ecsInstanceRole' # The name or the Amazon Resource Name (ARN) of the instance profile associated with the IAM role for the instance.
+EbsOptimized: false # Specifies whether the launch configuration is optimized for EBS I/O (true) or not (false).
+AssociatePublicIpAddress: true # For Auto Scaling groups that are running in a virtual private cloud (VPC), specifies whether to assign a public IP address to the group's instances.
+

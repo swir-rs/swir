@@ -1,0 +1,44 @@
+ip: "0.0.0.0"
+http_port: 8080
+grpc_port: 50051
+internal_grpc_port: 50052
+
+tracing:
+  open_telemetry:
+    collector_address: swir-example-logger
+    collector_port: 6831
+    service_name: si-example
+
+pubsub:
+  kafka: []
+  nats: []
+  aws_kinesis: []
+stores:  
+  redis: []
+  dynamodb: []
+
+services:
+  tls_config: 
+    client_ca_cert: /certs/ca-chain.cert.pem
+    client_cert: /certs/client.internal_grpc.swir.rs.cert.pem
+    client_key: /certs/client.internal_grpc.swir.rs.key.pem
+    server_ca_cert: /certs/ca-chain.cert.pem
+    server_cert: /certs/server.internal_grpc.swir.rs.cert.pem
+    server_key: /certs/server.internal_grpc.swir.rs.key.pem
+    domain_name: demo.swir.rs
+  resolver:
+    resolver_type: MDNS
+    
+  resolve_services:
+    - service_name: books
+      domain: swir
+      protocol: tcp
+    - service_name: magazines
+      domain: swir
+      protocol: tcp      
+  announce_services: []
+
+      
+
+
+
