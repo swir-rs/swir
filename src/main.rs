@@ -213,34 +213,36 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
             let identity = Identity::from_pem(cert, key);
             TonicServer::builder().tls_config(ServerTlsConfig::new().identity(identity))
         } else {
-            TonicServer::builder()
+            Ok(TonicServer::builder())
         };
 
-        let grpc = builder
-            .trace_fn(|header_map| {
-                let span = tracing::info_span!("CLIENT_GRPC", correlation_id = field::Empty, origin = field::Empty);
-                let span = tracing_utils::from_http_headers(span, &header_map);
-                let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();
-                let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();
-                let maybe_corr_id_header = header_map.get(corr_id_header);
-                let maybe_origin_header = header_map.get(origin_header);
+        if let Ok(builder) = builder {
+            let grpc = builder
+                .trace_fn(|header_map| {
+                    let span = tracing::info_span!("CLIENT_GRPC", correlation_id = field::Empty, origin = field::Empty);
+                    let span = tracing_utils::from_http_headers(span, &header_map);
+                    let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();
+                    let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();
+                    let maybe_corr_id_header = header_map.get(corr_id_header);
+                    let maybe_origin_header = header_map.get(origin_header);
 
-                if let Some(value) = maybe_corr_id_header {
-                    span.record("correlation_id", &String::from_utf8_lossy(value.as_bytes()).to_string().as_str());
-                };
-                if let Some(value) = maybe_origin_header {
-                    span.record("origin", &String::from_utf8_lossy(value.as_bytes()).to_string().as_str());
-                };
-                span
-            })
-            .add_service(pub_sub_svc)
-            .add_service(persistence_svc)
-            .add_service(service_invocation_svc)
-            .serve(grpc_addr.to_owned());
+                    if let Some(value) = maybe_corr_id_header {
+                        span.record("correlation_id", &String::from_utf8_lossy(value.as_bytes()).to_string().as_str());
+                    };
+                    if let Some(value) = maybe_origin_header {
+                        span.record("origin", &String::from_utf8_lossy(value.as_bytes()).to_string().as_str());
+                    };
+                    span
+                })
+                .add_service(pub_sub_svc)
+                .add_service(persistence_svc)
+                .add_service(service_invocation_svc)
+                .serve(grpc_addr.to_owned());
 
-        let res = grpc.await;
-        if let Err(e) = res {
-            warn!("Problem starting gRPC interface {:?}", e);
+            let res = grpc.await;
+            if let Err(e) = res {
+                warn!("Problem starting gRPC interface {:?}", e);
+            }
         }
     });
     tasks.push(grpc_client_interface);
@@ -270,6 +272,7 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
             let tls = ServerTlsConfig::new().identity(server_identity).client_ca_root(client_ca_cert);
             let grpc = TonicServer::builder()
                 .tls_config(tls)
+                .unwrap()
                 .trace_fn(|header_map| {
                     let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();
                     let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-helm init > /dev/null
+#helm init > /dev/null
 helm repo add stable https://kubernetes-charts.storage.googleapis.com
 helm repo add incubator https://kubernetes-charts-incubator.storage.googleapis.com
 helm repo add bitnami https://charts.bitnami.com/bitnami

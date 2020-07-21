@@ -130,7 +130,7 @@ impl AwsKinesisBroker {
 
                 Job::Publish(value) => {
                     let req = value;
-                    debug!("Publish {}", req);
+                    debug!("Publish {}", &req.correlation_id);
                     let maybe_topic = self.aws_kinesis.get_producer_topic_for_client_topic(&req.client_topic);
                     let client = aws_kinesis_client.clone();
                     if let Some(topic) = maybe_topic {
