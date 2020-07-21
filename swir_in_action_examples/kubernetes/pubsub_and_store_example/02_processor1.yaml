@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor1
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"
+  labels:
+    app: swir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swir
+  template:
+    metadata:
+      labels:
+        app: swir
+    spec:
+      containers:
+      - name: swir
+        image: swir/swir:v3
+        env:
+          - name: swir_config_file
+            value: /swir_config/config.yaml
+        volumeMounts:
+          - name: config-volume
+            mountPath: /swir_config            
+      - name: client
+        image: swir-example-python-processor:v3
+        env:
+          - name: sidecar
+            value: "127.0.0.1:50051"
+          - name: subscribe_topic
+            value: orders
+          - name: publish_topic
+            value: inventory
+      volumes:
+        - name: config-volume
+          configMap:
+            name: processor1-config
+            items:
+              - key: processor_1.yaml
+                path: config.yaml

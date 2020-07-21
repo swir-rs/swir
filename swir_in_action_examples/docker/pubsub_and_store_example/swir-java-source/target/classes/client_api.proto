@@ -1,0 +1,151 @@
+// Copyright 2019 SWIR authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+import "common_structs.proto";
+
+
+option java_multiple_files = true;
+option java_package = "rs.swir.api.client";
+option java_outer_classname = "SwirClientApiProto";
+
+package swir_public;
+
+// The definition of API exposed by Sidecar.
+service PubSubApi {
+    rpc Publish (PublishRequest) returns (PublishResponse) {
+    }
+    rpc PublishBiStream (stream PublishRequest) returns (stream PublishResponse) {
+    }  
+    rpc Subscribe (SubscribeRequest) returns (stream SubscribeResponse) {
+    }
+}
+
+service PersistenceApi {
+    rpc Store (StoreRequest) returns (StoreResponse) {
+    }
+    rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
+    }  
+    rpc Delete (DeleteRequest) returns (DeleteResponse) {
+    }  
+}
+
+service ServiceInvocationApi {
+    rpc Invoke (swir_common.InvokeRequest) returns (swir_common.InvokeResponse) {
+    }
+
+}
+
+// Publish message structure.
+message PublishRequest {
+  string correlation_id=1;
+  //queue name, will be mapped to a physical queue name
+    string topic = 2;
+    //Payload is copied directly into appropriate format
+  bytes payload = 3;
+}
+
+// Response message structure
+message PublishResponse {
+  string correlation_id=1;
+  string status = 2;
+}
+
+message SubscribeRequest {
+  //correlation id for the whole stream
+    string correlation_id=1;
+  //queue name, will be mapped to a physical queue name
+    string topic = 2;
+}
+
+// Response message structure
+message SubscribeResponse {
+    string correlation_id=1;
+  //Payload is copied directly into appropriate format
+    bytes payload = 2;
+}
+
+message StoreRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+  bytes payload = 4;
+}
+message StoreResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+  string status = 4;
+}
+
+
+
+message RetrieveRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+}
+
+message RetrieveResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
+}
+
+message DeleteRequest {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3;
+}
+
+message DeleteResponse {
+  string correlation_id=1;
+  string database_name=2;
+  string key = 3; 
+  string status = 4;
+  bytes payload = 5;
+}
+
+
+
+// message InvokeRequest {
+//   string correlation_id=1;
+//   string service_name=2;
+//   string method = 3;
+//   string request_target = 4;
+//   map<string, string> headers = 5;
+//   bytes payload = 6;
+// }
+
+// enum InvokeStatus {
+//   Ok = 0;
+//   Error = 1;
+// }
+
+// message InvokeResult {
+//   InvokeStatus status =1;
+//   string msg = 2;
+// }
+  
+// message InvokeResponse {
+//   string correlation_id=1;
+//   string service_name=2;
+//   InvokeResult result=3;
+//   map<string, string> headers = 5;
+//   bytes payload = 6;  
+// }
+
+

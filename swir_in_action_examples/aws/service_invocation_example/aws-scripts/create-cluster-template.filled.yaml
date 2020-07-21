@@ -1,0 +1,6 @@
+capacityProviders: []
+clusterName: swir-demo-si-cluster-DTNC23PQKY
+defaultCapacityProviderStrategy: []
+tags:
+- key: swir-cluster
+  value: ''

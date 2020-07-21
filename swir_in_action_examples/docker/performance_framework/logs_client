@@ -1,0 +1,198 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v2.2.1.RELEASE)
+
+2020-07-12 21:45:41.045  INFO 1 --- [           main] rs.swir.client.ClientApplication         : Starting ClientApplication on 28af738813a4 with PID 1 (/home/gradle/build/libs/swir-java-client-0.0.1-SNAPSHOT.jar started by root in /home/gradle)
+2020-07-12 21:45:41.049  INFO 1 --- [           main] rs.swir.client.ClientApplication         : The following profiles are active: docker
+2020-07-12 21:45:42.671  INFO 1 --- [           main] org.eclipse.jetty.util.log               : Logging initialized @3423ms to org.eclipse.jetty.util.log.Slf4jLog
+2020-07-12 21:45:42.869  INFO 1 --- [           main] .s.b.w.e.j.JettyReactiveWebServerFactory : Server initialized with port: 8090
+2020-07-12 21:45:42.876  INFO 1 --- [           main] org.eclipse.jetty.server.Server          : jetty-9.4.22.v20191022; built: 2019-10-22T13:37:13.455Z; git: b1e6b55512e008f7fbdf1cbea4ff8a6446d1073b; jvm 14.0.1+7
+2020-07-12 21:45:42.960  INFO 1 --- [           main] o.e.jetty.server.handler.ContextHandler  : Started o.e.j.s.ServletContextHandler@7098b907{/,null,AVAILABLE}
+2020-07-12 21:45:42.961  INFO 1 --- [           main] org.eclipse.jetty.server.Server          : Started @3714ms
+2020-07-12 21:45:43.756  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+2020-07-12 21:45:44.200  INFO 1 --- [           main] o.a.k.clients.admin.AdminClientConfig    : AdminClientConfig values: 
+	bootstrap.servers = [kafka:9094]
+	client.dns.lookup = default
+	client.id = 
+	connections.max.idle.ms = 300000
+	metadata.max.age.ms = 300000
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 120000
+	retries = 5
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.mechanism = GSSAPI
+	security.protocol = PLAINTEXT
+	send.buffer.bytes = 131072
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.1, TLSv1]
+	ssl.endpoint.identification.algorithm = https
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLS
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+
+2020-07-12 21:45:44.371  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 2.3.1
+2020-07-12 21:45:44.372  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: 18a913733fb71c01
+2020-07-12 21:45:44.372  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1594590344370
+2020-07-12 21:45:44.580  INFO 1 --- [           main] o.a.k.clients.consumer.ConsumerConfig    : ConsumerConfig values: 
+	allow.auto.create.topics = true
+	auto.commit.interval.ms = 5000
+	auto.offset.reset = earliest
+	bootstrap.servers = [kafka:9094]
+	check.crcs = true
+	client.dns.lookup = default
+	client.id = 
+	client.rack = 
+	connections.max.idle.ms = 540000
+	default.api.timeout.ms = 60000
+	enable.auto.commit = false
+	exclude.internal.topics = true
+	fetch.max.bytes = 52428800
+	fetch.max.wait.ms = 500
+	fetch.min.bytes = 1
+	group.id = swir
+	group.instance.id = null
+	heartbeat.interval.ms = 3000
+	interceptor.classes = []
+	internal.leave.group.on.close = true
+	isolation.level = read_uncommitted
+	key.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+	max.partition.fetch.bytes = 1048576
+	max.poll.interval.ms = 300000
+	max.poll.records = 500
+	metadata.max.age.ms = 300000
+	metric.reporters = []
+	metrics.num.samples = 2
+	metrics.recording.level = INFO
+	metrics.sample.window.ms = 30000
+	partition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor]
+	receive.buffer.bytes = 65536
+	reconnect.backoff.max.ms = 1000
+	reconnect.backoff.ms = 50
+	request.timeout.ms = 30000
+	retry.backoff.ms = 100
+	sasl.client.callback.handler.class = null
+	sasl.jaas.config = null
+	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+	sasl.kerberos.min.time.before.relogin = 60000
+	sasl.kerberos.service.name = null
+	sasl.kerberos.ticket.renew.jitter = 0.05
+	sasl.kerberos.ticket.renew.window.factor = 0.8
+	sasl.login.callback.handler.class = null
+	sasl.login.class = null
+	sasl.login.refresh.buffer.seconds = 300
+	sasl.login.refresh.min.period.seconds = 60
+	sasl.login.refresh.window.factor = 0.8
+	sasl.login.refresh.window.jitter = 0.05
+	sasl.mechanism = GSSAPI
+	security.protocol = PLAINTEXT
+	send.buffer.bytes = 131072
+	session.timeout.ms = 10000
+	ssl.cipher.suites = null
+	ssl.enabled.protocols = [TLSv1.2, TLSv1.1, TLSv1]
+	ssl.endpoint.identification.algorithm = https
+	ssl.key.password = null
+	ssl.keymanager.algorithm = SunX509
+	ssl.keystore.location = null
+	ssl.keystore.password = null
+	ssl.keystore.type = JKS
+	ssl.protocol = TLS
+	ssl.provider = null
+	ssl.secure.random.implementation = null
+	ssl.trustmanager.algorithm = PKIX
+	ssl.truststore.location = null
+	ssl.truststore.password = null
+	ssl.truststore.type = JKS
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+2020-07-12 21:45:44.626  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 2.3.1
+2020-07-12 21:45:44.626  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: 18a913733fb71c01
+2020-07-12 21:45:44.626  INFO 1 --- [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1594590344626
+2020-07-12 21:45:44.628  INFO 1 --- [           main] o.a.k.clients.consumer.KafkaConsumer     : [Consumer clientId=consumer-1, groupId=swir] Subscribed to topic(s): ResponseNoSidecar
+2020-07-12 21:45:44.629  INFO 1 --- [           main] o.s.s.c.ThreadPoolTaskScheduler          : Initializing ExecutorService
+2020-07-12 21:45:44.656  INFO 1 --- [ntainer#0-0-C-1] org.apache.kafka.clients.Metadata        : [Consumer clientId=consumer-1, groupId=swir] Cluster ID: c29IO3eHSle2Ys8LcmV34g
+2020-07-12 21:45:44.658  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.AbstractCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Discovered group coordinator 21d2443e2ae9:9094 (id: 2147482646 rack: null)
+2020-07-12 21:45:44.662  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Revoking previously assigned partitions []
+2020-07-12 21:45:44.663  INFO 1 --- [ntainer#0-0-C-1] o.s.k.l.KafkaMessageListenerContainer    : swir: partitions revoked: []
+2020-07-12 21:45:44.663  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.AbstractCoordinator  : [Consumer clientId=consumer-1, groupId=swir] (Re-)joining group
+2020-07-12 21:45:44.675  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.AbstractCoordinator  : [Consumer clientId=consumer-1, groupId=swir] (Re-)joining group
+2020-07-12 21:45:44.682  INFO 1 --- [           main] o.e.jetty.server.AbstractConnector       : Started ServerConnector@439afb83{HTTP/1.1,[http/1.1]}{0.0.0.0:8090}
+2020-07-12 21:45:44.684  INFO 1 --- [           main] o.s.b.web.embedded.jetty.JettyWebServer  : Jetty started on port(s) 8090 (http/1.1) with context path '/'
+2020-07-12 21:45:44.688  INFO 1 --- [           main] rs.swir.client.ClientApplication         : Started ClientApplication in 4.636 seconds (JVM running for 5.441)
+2020-07-12 21:45:44.691  INFO 1 --- [           main] rs.swir.client.ClientApplication         : Args = []
+2020-07-12 21:45:46.867  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.AbstractCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Successfully joined group with generation 2
+2020-07-12 21:45:46.873  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Setting newly assigned partitions: ResponseNoSidecar-1, ResponseNoSidecar-0
+2020-07-12 21:45:46.883  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Found no committed offset for partition ResponseNoSidecar-1
+2020-07-12 21:45:46.883  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-1, groupId=swir] Found no committed offset for partition ResponseNoSidecar-0
+2020-07-12 21:45:46.897  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.SubscriptionState    : [Consumer clientId=consumer-1, groupId=swir] Resetting offset for partition ResponseNoSidecar-1 to offset 0.
+2020-07-12 21:45:46.897  INFO 1 --- [ntainer#0-0-C-1] o.a.k.c.c.internals.SubscriptionState    : [Consumer clientId=consumer-1, groupId=swir] Resetting offset for partition ResponseNoSidecar-0 to offset 0.
+2020-07-12 21:45:46.903  INFO 1 --- [ntainer#0-0-C-1] o.s.k.l.KafkaMessageListenerContainer    : swir: partitions assigned: [ResponseNoSidecar-1, ResponseNoSidecar-0]
+2020-07-12 21:45:47.958  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Test {"messages":10,"threads":1,"sidecarUrl":"http://pf_swir_1:8080","producerTopics":["ProduceToAppB","ProduceToAppD"],"subscriberTopics":["SubscribeToAppB","SubscribeToAppD"],"missedPackets":50}
+2020-07-12 21:45:47.965  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : url http://pf_swir_1:8080
+2020-07-12 21:45:47.965  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : offset 10
+2020-07-12 21:45:47.966  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : subscribe request ClientSubscribeRequest{endpoint=EndpointDescription{url='http://172.19.0.7:8090/response-SubscribeToAppB', clientId='f7db6a9f-63a7-4c7c-a505-4c85289ae0c1'}, clientTopic='SubscribeToAppB'}
+2020-07-12 21:45:48.309  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Subscription status = 200 OK , Nats has one susbscription for topic SubscribeToAppB
+2020-07-12 21:45:48.309  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : subscribe request ClientSubscribeRequest{endpoint=EndpointDescription{url='http://172.19.0.7:8090/response-SubscribeToAppD', clientId='f7db6a9f-63a7-4c7c-a505-4c85289ae0c1'}, clientTopic='SubscribeToAppD'}
+2020-07-12 21:45:48.314  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Subscription status = 200 OK , Nats has one susbscription for topic SubscribeToAppD
+2020-07-12 21:45:53.315  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : Executing run sidecar 0
+2020-07-12 21:45:53.316  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=0, timestamp=1594590353316, payload='1NRPbhzgwTbAcDBvv5ujiQ=='}
+2020-07-12 21:45:53.329  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=0, timestamp=1594590353329, payload='o8NjzrZ+1CeGn5Lg3+lsVw=='}
+2020-07-12 21:45:53.330  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=1, timestamp=1594590353330, payload='/24ihil6RS0NO9rd/IvbHQ=='}
+2020-07-12 21:45:53.330  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=1, timestamp=1594590353330, payload='l5HoMpQ8GYpFK8wh4qY3/w=='}
+2020-07-12 21:45:53.331  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=2, timestamp=1594590353331, payload='hjMWzqloliUEVCZr633gpA=='}
+2020-07-12 21:45:53.331  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=2, timestamp=1594590353331, payload='16xZB+mDKCstxfw0SEpqEQ=='}
+2020-07-12 21:45:53.332  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=3, timestamp=1594590353332, payload='S8xJ5BGQhjIOSfeLobPxtQ=='}
+2020-07-12 21:45:53.333  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=3, timestamp=1594590353333, payload='WSa1U9RHJYkK9W4E4b3VWw=='}
+2020-07-12 21:45:53.334  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=4, timestamp=1594590353334, payload='ddDo1MnyQ5J3oEEjSkDCFQ=='}
+2020-07-12 21:45:53.335  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=4, timestamp=1594590353335, payload='lQyRnqYEXsTJZSs4zzkC5w=='}
+2020-07-12 21:45:53.336  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=5, timestamp=1594590353336, payload='8Kj6aa77ujDvkdQCopay9w=='}
+2020-07-12 21:45:53.338  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=5, timestamp=1594590353338, payload='CBikxmgyeQ/9pcR1CjvjpA=='}
+2020-07-12 21:45:53.340  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=6, timestamp=1594590353340, payload='6oR5e5GYB8cKT1Faemc9Pg=='}
+2020-07-12 21:45:53.342  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=6, timestamp=1594590353342, payload='tGcHX1KHzcxbeKp438mj3A=='}
+2020-07-12 21:45:53.344  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=7, timestamp=1594590353344, payload='WF6jWrUk/3zA25KVOdCxDw=='}
+2020-07-12 21:45:53.345  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=7, timestamp=1594590353345, payload='nk1DJlUKkEQ+tGYWbRBFoA=='}
+2020-07-12 21:45:53.360  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=8, timestamp=1594590353360, payload='bw63H1UjHcntdghSWNmU3Q=='}
+2020-07-12 21:45:53.361  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=8, timestamp=1594590353361, payload='Tyt5YJL1weojtmWMJ0EJtg=='}
+2020-07-12 21:45:53.362  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppB', consumer='SubscribeToAppB', counter=9, timestamp=1594590353362, payload='K3KPlRzKXMrSksTA5URErg=='}
+2020-07-12 21:45:53.362  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : sending request Payload{producer='ProduceToAppD', consumer='SubscribeToAppD', counter=9, timestamp=1594590353362, payload='VF481eFoCF8uYCzHVc3k5A=='}
+2020-07-12 21:45:53.363  INFO 1 --- [pool-1-thread-1] rs.swir.client.TestController            : Run 0 completed in 47112157
+2020-07-12 21:45:53.363  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : sent count 20 20
+2020-07-12 21:45:53.363  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : completed count 0 0
+2020-07-12 21:45:53.363  WARN 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Count has not changed 1
+2020-07-12 21:45:53.464  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : unsubscribe request ClientSubscribeRequest{endpoint=EndpointDescription{url='http://172.19.0.7:8090/response-SubscribeToAppB', clientId='f7db6a9f-63a7-4c7c-a505-4c85289ae0c1'}, clientTopic='SubscribeToAppB'}
+2020-07-12 21:45:53.468  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Subscription status = 200 OK , Nats has 0 susbscriptions for topic SubscribeToAppB
+2020-07-12 21:45:53.469  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : unsubscribe request ClientSubscribeRequest{endpoint=EndpointDescription{url='http://172.19.0.7:8090/response-SubscribeToAppD', clientId='f7db6a9f-63a7-4c7c-a505-4c85289ae0c1'}, clientTopic='SubscribeToAppD'}
+2020-07-12 21:45:53.472  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : Subscription status = 200 OK , Nats has 0 susbscriptions for topic SubscribeToAppD
+2020-07-12 21:45:53.472  INFO 1 --- [ttp@3e27aa33-51] rs.swir.client.TestController            : {"totalSendTimeNs":47112157,"totalSendTimeMs":47,"totalSendTimeS":0,"totalTimeNs":149197775,"totalTimeMs":149,"totalTimeS":0,"throughput msg/sec":134.05025644651872,"packets missed ":0}

@@ -1,0 +1,9 @@
+server.port: ${server_port}
+producer_topic: ${producer_topic}
+subscribe_topic: ${subscribe_topic}
+sidecar_url: ${sidecar_url}
+logging:
+  level:
+    root: INFO
+    org:
+      springframework: INFO

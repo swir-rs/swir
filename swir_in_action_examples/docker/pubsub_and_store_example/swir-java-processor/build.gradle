@@ -1,0 +1,32 @@
+plugins {
+	id 'org.springframework.boot' version '2.3.1.RELEASE'
+//id 'io.spring.dependency-management' version '1.0.9.RELEASE'
+	id 'java'
+}
+
+group = 'rs.swir'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '1.10'
+
+
+repositories {
+        mavenLocal()
+	mavenCentral()
+	jcenter()
+}
+
+
+dependencies {
+	compile 'org.springframework.boot:spring-boot-starter-actuator'
+	compile 'org.springframework.boot:spring-boot-starter-webflux'
+	compile 'org.springframework.boot:spring-boot-starter-jetty'
+	compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.10.1'
+	compile 'org.springframework.kafka:spring-kafka'
+	testImplementation('org.springframework.boot:spring-boot-starter-test') {
+		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+	}
+	testImplementation 'io.projectreactor:reactor-test'
+}
+test {
+	useJUnitPlatform()
+}

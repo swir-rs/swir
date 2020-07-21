@@ -1,0 +1,51 @@
+plugins {
+	id 'org.springframework.boot' version '2.2.2.RELEASE'
+	id 'io.spring.dependency-management' version '1.0.8.RELEASE'
+	id 'java'
+	id 'com.google.protobuf' version '0.8.12'
+}
+
+group = 'rs.swir.performance'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '1.8'
+
+sourceSets {
+	main {
+		proto {
+			// In addition to the default 'src/main/proto'
+			srcDir 'src/main/proto'
+		}
+		java {
+			java.srcDir "${buildDir}/generated/source/proto/main/java"
+		}
+	}
+}
+
+protobuf {
+	generatedFilesBaseDir = "$projectDir/src"
+	protoc {
+		artifact = 'com.google.protobuf:protoc:3.12.3'
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	compile 'io.nats:nats-spring-boot-starter:0.4.0'
+	compile 'io.nats:nats-spring-cloud-stream-binder:0.4.0'
+	compile 'io.nats:spring-nats:0.3.2'
+	compile 'io.nats:jnats:2.6.8'
+	compile 'org.springframework.cloud:spring-cloud-stream:2.2.0.RELEASE'
+	compile 'org.springframework.integration:spring-integration-core:5.1.6.RELEASE'
+	compile 'org.springframework.integration:spring-integration-tuple:1.0.0.RELEASE'
+	compile 'com.google.protobuf:protobuf-java:3.12.2'
+	compile 'commons-codec:commons-codec:1.14'
+
+
+}
+
+test {
+	useJUnitPlatform()
+}

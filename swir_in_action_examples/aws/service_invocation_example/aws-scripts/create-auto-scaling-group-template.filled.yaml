@@ -1,0 +1,8 @@
+AutoScalingGroupName: swir-demo-si-autoscaling-group-DTNC23PQKY
+AvailabilityZones:
+- eu-west-1b
+- eu-west-1a
+DesiredCapacity: 5
+LaunchConfigurationName: swir-demo-si-launch-configuration-DTNC23PQKY
+MaxSize: 5
+MinSize: 5
