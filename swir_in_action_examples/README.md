@@ -5,11 +5,19 @@
 ### Requirements:
 > **Docker** : 19.03.6
 
+<<<<<<< HEAD
 > **Minikube** : [1.11.0](https://github.com/kubernetes/minikube/releases/tag/v1.11.0)
 
 > **Kubectl** : [1.17.0](https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl)
 
 > **Helm** : [3.2.4](https://github.com/helm/helm/releases/tag/v3.2.4)
+=======
+> **Minikube** : 1.11.0
+
+> **Kubectl** : 1.17.0
+
+> **Helm** : 3.0.2
+>>>>>>> master
 * * *
 
 ## Examples on how SWIR can benefit your organization dived by the environment type
