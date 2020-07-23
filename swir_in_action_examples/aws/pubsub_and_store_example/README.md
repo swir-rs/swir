@@ -10,7 +10,7 @@
 
 ```./run_example.sh amazonID region```
 
-you need to export your AWS credentials as environment variables in ../../../secure.sh for example
+you need to export your AWS credentials as environment variables in ../../../secure.sh as shown below
 
 ```
 export AWS_ACCESS_KEY=Swir  
