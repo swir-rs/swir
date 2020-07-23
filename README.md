@@ -46,7 +46,7 @@ SWIR:
 # Requirements
 - Docker, Docker Compose to build the project, run the infrastructure and the examples. 
 - Minikube to run examples for Kubernetes
-- AWS account to run AWS based account
+- AWS account to run AWS based examples
 - Rust 1.44.1 or above
 
 

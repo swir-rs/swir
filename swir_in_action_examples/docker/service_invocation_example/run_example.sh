@@ -63,7 +63,7 @@ docker-compose  -f docker-compose-si-example-sidecars.yaml -p app logs -ft
 docker-compose  -f docker-compose-si-example-applications.yaml -p app logs -ft
 
 #clean all
-./cicd_cleanup.sh
+./cleanup_example.sh
 
 
 

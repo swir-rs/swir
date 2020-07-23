@@ -3,7 +3,7 @@ cwd=$(pwd)
 # Compile, build and generate necessary docker images
 cd ../../../
 root_dir=$(pwd)
-./cicd.sh swir_in_action_examples/docker/performance_framework/swir.yaml
+./build.sh swir_in_action_examples/docker/performance_framework/swir.yaml
 cd $cwd
 
 cd swir-java-client

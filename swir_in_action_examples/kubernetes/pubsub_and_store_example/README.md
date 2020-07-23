@@ -9,7 +9,7 @@
 
 ### Running this example:
 
-```./cicd.sh```
+```./run_example.sh```
 
 ### Get URL for tracing dashboard
 
@@ -17,4 +17,4 @@
 
 ### Cleaning up resources:
 
-```./cicd_cleanup.sh```
+```./cleanup_example.sh```

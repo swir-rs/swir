@@ -104,7 +104,7 @@ docker-compose  -f docker-compose-example-applications.yaml -p app logs -ft
 
 
 #clean all
-./cicd_cleanup.sh
+./cleanup_example.sh
 
 
 

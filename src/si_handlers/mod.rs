@@ -199,7 +199,7 @@ impl ServiceInvocationService {
                         .ca_certificate(server_root_ca_cert.clone())
                         .identity(client_identity.clone());
 
-                    let endpoint = endpoint.tls_config(tls);
+                    let endpoint = endpoint.tls_config(tls).unwrap();
                     let endpoint = endpoint.timeout(std::time::Duration::from_millis(500));
                     match grpc_clients.get_mut(service_name) {
                         Some(svc_holder) => {

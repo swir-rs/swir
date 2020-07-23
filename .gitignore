@@ -24,4 +24,5 @@ Cargo.lock
 /.vscode/
 /web/node_modules/
 /web/vendor/
+swir_in_action_examples/aws/**/aws-scripts/*filled*yaml
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 cwd=$(pwd)
 cd ..
-./cicd.sh
+./setup.sh
 cd $cwd
 ./build_clients.sh
 ./deploy_example.sh
