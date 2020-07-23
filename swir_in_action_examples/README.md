@@ -5,19 +5,12 @@
 ### Requirements:
 > **Docker** : 19.03.6
 
-<<<<<<< HEAD
 > **Minikube** : [1.11.0](https://github.com/kubernetes/minikube/releases/tag/v1.11.0)
 
 > **Kubectl** : [1.17.0](https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl)
 
 > **Helm** : [3.2.4](https://github.com/helm/helm/releases/tag/v3.2.4)
-=======
-> **Minikube** : 1.11.0
 
-> **Kubectl** : 1.17.0
-
-> **Helm** : 3.0.2
->>>>>>> master
 * * *
 
 ## Examples on how SWIR can benefit your organization dived by the environment type
@@ -32,7 +25,7 @@
 Running locally will require Docker, Minikube, Kubectl and Helm.
 
    - [PubSub, Store and Tracing with Kafka, Nats, Redis and Jaeger](kubernetes/pubsub_and_store_example/README.md)
-   - [Service Invocation and Tracing with Service Meshing, multicastDNS and Jaeger](kubernetes/service_invocation_example/README.md))
+   - [Service Invocation and Tracing with Service Meshing, multicastDNS and Jaeger](kubernetes/service_invocation_example/README.md)
    
 ### AWS based examples. 
 
