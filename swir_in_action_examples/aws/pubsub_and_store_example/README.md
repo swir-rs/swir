@@ -8,7 +8,7 @@
 
 ### Running this example:
 
-```./cicd.sh amazonID region```
+```./run_example.sh amazonID region```
 
 you need to export your AWS credentials as environment variables in ../../../secure.sh for example
 
@@ -19,6 +19,6 @@ export AWS_SECURE_ACCESS_KEY=Swir
 
 ### Cleaning up resources:
 
-```./cicd_cleanup.sh clusterID``` 
+```./cleanup_example.sh clusterID``` 
 
 where clusterID is printed when the ECS cluster is created

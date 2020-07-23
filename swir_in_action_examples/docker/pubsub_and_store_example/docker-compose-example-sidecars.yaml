@@ -16,6 +16,8 @@ services:
       - swir-net
     image: jaegertracing/all-in-one:1.18
 #    command: ["/bin/bash","-c","cp /config/* swir_config/ ; cp /certificates/* certs/"]
+    depends_on:
+      - swir-example-configurator
     environment:
       - COLLECTOR_ZIPKIN_HTTP_PORT=9411
     ports:
@@ -34,6 +36,9 @@ services:
     networks:
       - swir-net
     image: swir/swir:v3
+    depends_on:
+      - swir-example-configurator
+      - swir-example-logger
     ports:
       - "8080"
       - "8443"
@@ -53,6 +58,7 @@ services:
     image: swir/swir:v3
     depends_on:
       - swir-example-configurator
+      - swir-example-logger      
     ports:
       - "8080"
       - "8443"
@@ -72,6 +78,7 @@ services:
     image: swir/swir:v3
     depends_on:
       - swir-example-configurator
+      - swir-example-logger      
     ports:
       - "8080"
       - "8443"
@@ -92,6 +99,7 @@ services:
     image: swir/swir:v3
     depends_on:
       - swir-example-configurator
+      - swir-example-logger      
     ports:
       - "8080"
       - "8443"
@@ -113,6 +121,7 @@ services:
     image: swir/swir:v3
     depends_on:
       - swir-example-configurator
+      - swir-example-logger
     ports:
       - "8080"
       - "8443"

@@ -11,8 +11,8 @@
 
 ### Running this example:
 
-```./cicd.sh```
+```./run_example.sh```
 
 ### Cleaning up resources:
 
-```./cicd_cleanup.sh```
+```./cleanup_example.sh```
