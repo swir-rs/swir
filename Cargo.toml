@@ -18,55 +18,58 @@ bench = false
 path = "src/main.rs"
 
 [dependencies]
+async-trait="*"
+aws-lock-client = {version="*", git="https://github.com/swir-rs/aws-lock-client-rs"} 
+base64 = "*"
 bytes = "0.5"
+cfg-if = { version = "=0.1.10" }
+config = "*"
+currenttimemillis = {version ="*", git = "https://github.com/swir-rs/currenttimemillis-rs"}
+custom_error= "1.7"
+env_logger = "0.7"
 futures = "0.3"
 futures-util = "0.3"
-env_logger = "0.7"
-rand = "0.7"
-base64 = "*"
-multimap="0.8"
-cfg-if = { version = "=0.1.10" }
-custom_error= "1.7"
-tokio = { version = "0.2", features = ["full","sync"]}
-tokio-rustls = "0.13"
-rustls = "0.17"
-hyper = "0.13"
-http = "0.2"
-tower="0.3"
-hostname= "0.3"
 get_if_addrs = "0.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-serde_bytes = { version = "0.11"}
-currenttimemillis = {version ="*", git = "https://github.com/swir-rs/currenttimemillis-rs"}
-rdkafka = { version="0.23",features = ["default"] } 
-rdkafka-sys = { version = "1.3", features = ["default"]} 
+hostname= "0.3"
+http = "0.2"
+hyper = "0.13"
+mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
+multimap="0.8"
 nats = {version="0.7.3",optional=true}
+opentelemetry = "0.8"
+opentelemetry-jaeger = "0.7"
+prost = "0.6"
+rand = "0.7"
+rdkafka = { version="0.23",features = ["default"] } 
+rdkafka-sys = { version = "1.3", features = ["default"]}
+redis = { version="0.17",features = ["cluster"]}
 rusoto_kinesis="0.43"
 rusoto_dynamodb="0.43"
 rusoto_signature="0.43"
 rusoto_core="0.43"
-aws-lock-client = {version="*", git="https://github.com/swir-rs/aws-lock-client-rs"} 
-async-trait="*"
-tracing = "0.1.15"
-tracing-subscriber = "0.2.4"
-tracing-futures = "0.2.4"
-tracing-opentelemetry = "0.5.0"
-opentelemetry = "0.6"
-opentelemetry-jaeger = "0.5"
-prost = "0.6"
-#tonic = {version="0.2.1", optional=false, features=["default","tls"] }
+rustls = "0.18"
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = { version = "0.11"}
+serde_json = { version = "1.0" }
+tokio = { version = "0.2", features = ["full","sync"]}
+tokio-rustls = "0.14"
 tonic = {version="0.3",  features=["default","tls"] }
+tower="0.3"
+tracing = "0.1.19"
+tracing-futures = "0.2"
+tracing-opentelemetry = "0.7"
+tracing-subscriber = "0.2"
+
+
+#tonic = {version="0.2.1", optional=false, features=["default","tls"] }
 #tonic = {version="0.3", git ="https://github.com/hyperium/tonic", optional=false, branch = "master", features=["default","tls"] }
 #tonic = {version="0.2", path="../tonic/tonic", optional=false, features=["default","tls"] }
-config = "*"
-redis = { version="0.15",features = ["cluster"]}
 
-mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
 	       
 [build-dependencies]
-tonic-build = "0.3"
 prost-build = "0.6"
+tonic-build = "0.3"
+
 
 
 [features]
