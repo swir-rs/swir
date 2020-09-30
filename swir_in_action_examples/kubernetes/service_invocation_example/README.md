@@ -9,15 +9,25 @@
 ![Service Discovery and Invocation](../../../graphics/example-solution-sdi.png)
 
 
-### Running this example:
+### Running this example :
 
-```./run_example.sh```
+```./run_example.sh si-example swir-operator-ns```
+
+#### it will take a while for a solution to stabilize
 
 ### Get URL for tracing dashboard
 
-```../tracing_dashboard.sh```
+```../tracing_dashboard.sh si-example```
+
+### To check logs run : 
+
+```./display_books_logs.sh si-example ```
+
+```./display_helpdesk_logs.sh si-example ```
 
 
 ### Cleaning up resources:
 
-```./cleanup_example.sh```
+```./cleanup_example.sh si-example swir-operator-ns```
+
+
