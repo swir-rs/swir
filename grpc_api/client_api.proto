@@ -26,9 +26,9 @@ package swir_public;
 service PubSubApi {
     rpc Publish (PublishRequest) returns (PublishResponse) {
     }
-    rpc PublishBiStream (stream PublishRequest) returns (stream PublishResponse) {
-    }  
-    rpc Subscribe (SubscribeRequest) returns (stream SubscribeResponse) {
+
+  
+    rpc Subscribe (SubscribeRequest) returns (SubscribeResponse) {
     }
 }
 
@@ -64,13 +64,21 @@ message PublishResponse {
 
 message SubscribeRequest {
   //correlation id for the whole stream
-    string correlation_id=1;
+  string correlation_id=1;
   //queue name, will be mapped to a physical queue name
-    string topic = 2;
+  string topic = 2;
+  string client_id  =3;
+  string uri =4;
 }
 
 // Response message structure
 message SubscribeResponse {
+    string correlation_id=1;
+  //Payload is copied directly into appropriate format
+    string status = 2;
+}
+
+message SubscribeNotification {
     string correlation_id=1;
   //Payload is copied directly into appropriate format
     bytes payload = 2;

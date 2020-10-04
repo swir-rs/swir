@@ -189,6 +189,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     let mut tasks = vec![];
     let grpc_addr = grpc_addr.clone();
     let mmc = &mc.messaging_memory_channels;
+
     let pmc = &mc.persistence_memory_channels;
     let simc = &mc.si_memory_channels;
 
@@ -199,7 +200,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     let tls_config = swir_config.tls_config.clone();
 
     let grpc_client_interface = tokio::spawn(async move {
-        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
+        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone(),vec!());
         let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
 
         let pub_sub_svc = swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
