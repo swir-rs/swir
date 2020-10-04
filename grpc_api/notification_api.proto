@@ -17,7 +17,7 @@ import "client_api.proto";
 
 option java_multiple_files = true;
 option java_package = "rs.swir.api.client";
-option java_outer_classname = "SwirClientApiProto";
+option java_outer_classname = "SwirNotificationApiProto";
 
 package swir_public;
 

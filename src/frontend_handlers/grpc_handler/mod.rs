@@ -1,25 +1,31 @@
 use hyper::StatusCode;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::{
-    Arc,
-};
+use std::sync::Arc;
 use tokio::{
+    stream::StreamExt,
     sync::{mpsc, oneshot, Mutex},
-    stream::StreamExt
 };
-
-use crate::utils::structs::*;
 
 use crate::swir_common;
 use crate::swir_grpc_api;
+use crate::utils::config::ClientConfig;
+use crate::utils::structs::*;
 use tracing::Span;
 use tracing_futures::Instrument;
+
+use swir_grpc_api::notification_api_client::NotificationApiClient;
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SubscribeRequest {{ correlation_id:{}, topic:{}}}", &self.correlation_id, &self.topic)
+    }
+}
+
+impl fmt::Display for swir_grpc_api::UnsubscribeRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UnsubscribeRequest {{ correlation_id:{}, topic:{}}}", &self.correlation_id, &self.topic)
     }
 }
 
@@ -88,19 +94,10 @@ impl fmt::Display for swir_grpc_api::DeleteRequest {
     }
 }
 
-
-fn find_to_client_sender<'a>(client_topic: &'a str, to_client_sender: &'a HashMap<String, mpsc::Sender<BackendToRestContext>>) -> Option<&'a mpsc::Sender<BackendToRestContext>> {
-    to_client_sender.get(client_topic)
-}
-
-
 #[derive(Debug)]
 pub struct SwirPubSubApi {
-    missed_messages: Arc<Mutex<Box<VecDeque<swir_grpc_api::SubscribeNotification>>>>,
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
     pub to_client_sender: mpsc::Sender<BackendToRestContext>,
-    pub to_client_receiver: mpsc::Receiver<BackendToRestContext>,
-    pub topics: Vec<String>
 }
 
 impl SwirPubSubApi {
@@ -108,27 +105,52 @@ impl SwirPubSubApi {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 
-    pub fn new(from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_receiver: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>, topics: Vec<String>) -> SwirPubSubApi {
-        let missed_messages = Arc::new(Mutex::new(Box::new(VecDeque::new())));
-	let (to_client_sender, to_client_receiver) : (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(1000);
+    pub fn new(from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender: mpsc::Sender<BackendToRestContext>) -> SwirPubSubApi {
         SwirPubSubApi {
-            missed_messages,
             from_client_to_backend_channel_sender,
-	    to_client_sender,
-            to_client_receiver,
-	    topics,
-	    
+            to_client_sender,
         }
+    }
+    async fn send_to_backend(&self, tx: &mut mpsc::Sender<RestToMessagingContext>, local_rx: oneshot::Receiver<MessagingResult>, ctx: RestToMessagingContext) -> String {
+        if let Err(e) = tx.try_send(ctx) {
+            warn!("Channel is dead {:?}", e);
+        }
+
+        let response_from_broker = local_rx.await;
+        let mut msg = String::new();
+
+        if let Ok(res) = response_from_broker {
+            msg.push_str(&res.status.to_string());
+        } else {
+            msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
+        }
+
+        msg
+    }
+
+    async fn subscribe_unsubscribe_processor(&self, subscribe: bool, request: crate::utils::structs::SubscribeRequest, tx: &mut mpsc::Sender<RestToMessagingContext>) -> String {
+        debug!("{}", request);
+        let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
+        let ctx = if subscribe {
+            RestToMessagingContext {
+                job: Job::Subscribe(request),
+                sender: local_tx,
+                span: Span::current(),
+            }
+        } else {
+            RestToMessagingContext {
+                job: Job::Unsubscribe(request),
+                sender: local_tx,
+                span: Span::current(),
+            }
+        };
+        self.send_to_backend(tx, local_rx, ctx).await
     }
 }
 
 #[tonic::async_trait]
 impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
-
-    async fn publish(
-        &self,
-        request: tonic::Request<swir_grpc_api::PublishRequest>, // Accept request of type HelloRequest
-    ) -> Result<tonic::Response<swir_grpc_api::PublishResponse>, tonic::Status> {
+    async fn publish(&self, request: tonic::Request<swir_grpc_api::PublishRequest>) -> Result<tonic::Response<swir_grpc_api::PublishResponse>, tonic::Status> {
         let request = request.into_inner();
         info!("Publish {}", request);
         if let Some(tx) = self.find_channel(&request.topic) {
@@ -144,20 +166,8 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 sender: local_tx,
                 span: Span::current(),
             };
-
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(ctx) {
-                warn!("Channel is dead {:?}", e);
-            }
-
-            let response_from_broker = local_rx.await;
-            let mut msg = String::new();
-
-            if let Ok(res) = response_from_broker {
-                msg.push_str(&res.status.to_string());
-            } else {
-                msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
-            }
+            let msg = self.send_to_backend(&mut tx, local_rx, ctx).await;
             let reply = swir_grpc_api::PublishResponse {
                 correlation_id: request.correlation_id,
                 status: msg,
@@ -168,50 +178,54 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
         }
     }
 
-    
-
-    async fn subscribe(
-        &self,
-        request: tonic::Request<swir_grpc_api::SubscribeRequest>, // Accept request of type HelloRequest
-    ) -> Result<tonic::Response<swir_grpc_api::SubscribeResponse>, tonic::Status> {
+    async fn subscribe(&self, request: tonic::Request<swir_grpc_api::SubscribeRequest>) -> Result<tonic::Response<swir_grpc_api::SubscribeResponse>, tonic::Status> {
         let request = request.into_inner();
         info!("Subscribe {}", request);
 
-	if let Some(tx) = self.find_channel(&request.topic) {
+        if let Some(tx) = self.find_channel(&request.topic) {
             let p = crate::utils::structs::SubscribeRequest {
                 correlation_id: request.correlation_id.clone(),
-		client_interface_type: CustomerInterfaceType::GRPC,
-		client_topic: request.topic,
-		endpoint: EndpointDesc{url: request.uri, client_id: request.client_id},
-		tx: Box::new(self.to_client_sender.clone()),
+                client_interface_type: CustomerInterfaceType::GRPC,
+                client_topic: request.topic,
+                endpoint: EndpointDesc {
+                    url: String::new(),
+                    client_id: request.client_id,
+                },
+                tx: Box::new(self.to_client_sender.clone()),
             };
-	    
-            debug!("{}", p);
-            let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-            let ctx = RestToMessagingContext {
-                job: Job::Subscribe(p),
-                sender: local_tx,
-                span: Span::current(),
-            };
-
             let mut tx = tx.clone();
-            if let Err(e) = tx.try_send(ctx) {
-                warn!("Channel is dead {:?}", e);
-            }
-
-            let response_from_broker = local_rx.await;
-            let mut msg = String::new();
-
-            if let Ok(res) = response_from_broker {
-                msg.push_str(&res.status.to_string());
-            } else {
-                msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
-            }
-            let reply = swir_grpc_api::SubscribeResponse {
-                correlation_id: request.correlation_id,
+            let msg = self.subscribe_unsubscribe_processor(true, p, &mut tx).await;
+            Ok(tonic::Response::new(swir_grpc_api::SubscribeResponse {
+                correlation_id: request.correlation_id.clone(),
                 status: msg,
+            }))
+        } else {
+            Err(tonic::Status::invalid_argument("Invalid topic"))
+        }
+    }
+
+    async fn unsubscribe(&self, request: tonic::Request<swir_grpc_api::UnsubscribeRequest>) -> Result<tonic::Response<swir_grpc_api::UnsubscribeResponse>, tonic::Status> {
+        let request = request.into_inner();
+        info!("Unsubscribe {}", request);
+
+        if let Some(tx) = self.find_channel(&request.topic) {
+            let p = crate::utils::structs::SubscribeRequest {
+                correlation_id: request.correlation_id.clone(),
+                client_interface_type: CustomerInterfaceType::GRPC,
+                client_topic: request.topic,
+                endpoint: EndpointDesc {
+                    url: String::new(),
+                    client_id: request.client_id,
+                },
+                tx: Box::new(self.to_client_sender.clone()),
             };
-            Ok(tonic::Response::new(reply))
+            let mut tx = tx.clone();
+            let msg = self.subscribe_unsubscribe_processor(false, p, &mut tx).await;
+
+            Ok(tonic::Response::new(swir_grpc_api::UnsubscribeResponse {
+                correlation_id: request.correlation_id.clone(),
+                status: msg,
+            }))
         } else {
             Err(tonic::Status::invalid_argument("Invalid topic"))
         }
@@ -444,34 +458,38 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
             }
         }
     }
-
 }
-
-use swir_grpc_api::notification_api_client::NotificationApiClient;
 
 async fn send_request(mut client: NotificationApiClient<tonic::transport::Channel>, ctx: BackendToRestContext) {
-    
-    let req = swir_grpc_api::SubscribeNotification{
-	correlation_id: ctx.correlation_id,
-	payload: ctx.request_params.payload	    
+    let req = swir_grpc_api::SubscribeNotification {
+        correlation_id: ctx.correlation_id,
+        payload: ctx.request_params.payload,
     };
-    
-    client.subscription_notification(req);
-    
-}
 
-pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
-
-    if let Ok(client) = NotificationApiClient::connect("http://127.0.0.1:50052").await{
-	info!("Client done");
-	let mut rx = rx.lock().await;
-	while let Some(ctx) = rx.next().await {
-            let client = client.clone();
-            let parent_span = ctx.span.clone();
-            let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
-            tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
-	}
+    if let Err(e) = client.subscription_notification(req.clone()).await {
+        info!("Unable to send {:?} {:?}", req, e);
     }
 }
 
-
+pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
+    if let Some(port) = client_config.grpc_port {
+        if let Ok(client) = NotificationApiClient::connect(format! {"http://{}:{}", client_config.ip, port}).await {
+            info!("GRPC client created");
+            let mut rx = rx.lock().await;
+            while let Some(ctx) = rx.next().await {
+                let client = client.clone();
+                let parent_span = ctx.span.clone();
+                let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
+                tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
+            }
+        } else {
+            warn!("Unable to connect to GRPC notification server")
+        }
+    } else {
+        warn!("No GRPC port set. Client will not get any notifications");
+        let mut rx = rx.lock().await;
+        while let Some(ctx) = rx.next().await {
+            debug!("Discarding {}", ctx.correlation_id);
+        }
+    }
+}

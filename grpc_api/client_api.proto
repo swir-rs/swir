@@ -24,35 +24,36 @@ package swir_public;
 
 // The definition of API exposed by Sidecar.
 service PubSubApi {
-    rpc Publish (PublishRequest) returns (PublishResponse) {
-    }
-
+  rpc Publish (PublishRequest) returns (PublishResponse) {
+  }
   
-    rpc Subscribe (SubscribeRequest) returns (SubscribeResponse) {
-    }
+  
+  rpc Subscribe (SubscribeRequest) returns (SubscribeResponse) {
+  }
+  
+  rpc Unsubscribe (UnsubscribeRequest) returns (UnsubscribeResponse) {
+  }
 }
 
 service PersistenceApi {
-    rpc Store (StoreRequest) returns (StoreResponse) {
-    }
-    rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
-    }  
-    rpc Delete (DeleteRequest) returns (DeleteResponse) {
-    }  
+  rpc Store (StoreRequest) returns (StoreResponse) {
+  }
+  rpc Retrieve (RetrieveRequest) returns (RetrieveResponse) {
+  }  
+  rpc Delete (DeleteRequest) returns (DeleteResponse) {
+  }  
 }
 
 service ServiceInvocationApi {
-    rpc Invoke (swir_common.InvokeRequest) returns (swir_common.InvokeResponse) {
-    }
+  rpc Invoke (swir_common.InvokeRequest) returns (swir_common.InvokeResponse) {
+  }
 
 }
 
 // Publish message structure.
 message PublishRequest {
   string correlation_id=1;
-  //queue name, will be mapped to a physical queue name
-    string topic = 2;
-    //Payload is copied directly into appropriate format
+  string topic = 2;
   bytes payload = 3;
 }
 
@@ -63,25 +64,34 @@ message PublishResponse {
 }
 
 message SubscribeRequest {
-  //correlation id for the whole stream
   string correlation_id=1;
-  //queue name, will be mapped to a physical queue name
   string topic = 2;
   string client_id  =3;
-  string uri =4;
+}
+
+message UnsubscribeRequest {
+  string correlation_id=1;
+  string topic = 2;
+  string client_id  =3;
 }
 
 // Response message structure
 message SubscribeResponse {
-    string correlation_id=1;
+  string correlation_id=1;
   //Payload is copied directly into appropriate format
-    string status = 2;
+  string status = 2;
+}
+
+message UnsubscribeResponse {
+  string correlation_id=1;
+  //Payload is copied directly into appropriate format
+  string status = 2;
 }
 
 message SubscribeNotification {
-    string correlation_id=1;
+  string correlation_id=1;
   //Payload is copied directly into appropriate format
-    bytes payload = 2;
+  bytes payload = 2;
 }
 
 message StoreRequest {

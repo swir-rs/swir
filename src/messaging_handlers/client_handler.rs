@@ -31,7 +31,7 @@ pub trait ClientHandler {
                     subscriptions_for_topic.push(req.clone());
                     if let Err(e) = sender.send(structs::MessagingResult {
                         correlation_id: req.correlation_id,
-                        status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}", broker_type, subscriptions_for_topic.len(), &client_topic)),
+                        status: BackendStatusCodes::Ok(format!("{} has {} subscriptions for topic {}", broker_type, subscriptions_for_topic.len(), &client_topic)),
                     }) {
                         warn!("Can't send response back {:?}", e);
                     }
@@ -45,11 +45,11 @@ pub trait ClientHandler {
                     }
                 }
             } else {
-                info!("Can't find subscriptions {} adding new one", req);
+                info!("Adding new subscription {:?}", req);
                 subscriptions.insert(topic.clone(), Box::new(vec![req.clone()]));
                 if let Err(e) = sender.send(structs::MessagingResult {
                     correlation_id: req.correlation_id,
-                    status: BackendStatusCodes::Ok(format!("{} has one susbscription for topic {}", &broker_type, &client_topic)),
+                    status: BackendStatusCodes::Ok(format!("{} has one subscription for topic {}", &broker_type, &client_topic)),
                 }) {
                     warn!("Can't send response back {:?}", e);
                 }
@@ -87,7 +87,7 @@ pub trait ClientHandler {
 
                     if let Err(e) = sender.send(structs::MessagingResult {
                         correlation_id: req.correlation_id,
-                        status: BackendStatusCodes::Ok(format!("{} has {} susbscriptions for topic {}", &broker_type, subscriptions_for_topic.len(), &client_topic)),
+                        status: BackendStatusCodes::Ok(format!("{} has {} subscriptions for topic {}", &broker_type, subscriptions_for_topic.len(), &client_topic)),
                     }) {
                         warn!("Can't send response back {:?}", e);
                     }
