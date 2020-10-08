@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: client
-        image: swir-example-java-processor:v3
+        image: swir-example-java-processor:v0.3.1
         env:
           - name: sidecar_url
             value: "http://127.0.0.1:8080"

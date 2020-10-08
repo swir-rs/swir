@@ -12,39 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """The Python implementation of an example SWIR gRPC processor."""
-
 from __future__ import print_function
-
+from concurrent import futures
 import sys
 import random
 import logging
 import time
 import uuid
-import grpc
+
 import os
 import queue
 import threading
+import grpc
 import client_api_pb2
 import client_api_pb2_grpc
+import notification_api_pb2_grpc
+import notification_api_pb2
 
 
 logger = logging.getLogger('swir')
 
-def receiver(queue,pub_sub_stub,topic):
+
+class NotificationApiServicer(notification_api_pb2_grpc.NotificationApiServicer):
+
+    def __init__(self, incoming_queue):
+        self.queue = incoming_queue
+
+    def subscriptionNotification(self, request, context):
+        logger.debug("Subscription : %s" % request)
+        self.queue.put(request)
+        return client_api_pb2.SubscribeResponse(correlation_id=request.correlation_id,status="Ok")
+
+
+
+def receiver(pub_sub_stub,topic):
     while True:
         try:
             subscribe = client_api_pb2.SubscribeRequest(
                 correlation_id=str(uuid.uuid4()),
                 topic=topic
             )
-
-            messages = pub_sub_stub.Subscribe(subscribe)
-            for message in messages:
-                logger.debug("Subscription : %s" % message)
-                queue.put(message)        
+            res = pub_sub_stub.Subscribe(subscribe)
+            logger.info("Subscribed : %s  " % (res.correlation_id))
+            return
         except:
             logger.error("Can't connect to sidecar")
-        time.sleep(5)
 
 
 
@@ -73,7 +85,6 @@ def sender(queue,client_api_stub,topic):
         
 
 def run():
-
     incoming_queue = queue.Queue()
     outgoing_queue = queue.Queue()
     subscribe_topic = os.environ['subscribe_topic']
@@ -83,6 +94,13 @@ def run():
     logger.info("Sidecar is %s" % sidecar)
     logger.info("Subscribe topic is %s" % subscribe_topic)
     logger.info("Publish topic is %s" % publish_topic)
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    notification_api_pb2_grpc.add_NotificationApiServicer_to_server(
+        NotificationApiServicer(incoming_queue), server)
+    server.add_insecure_port('0.0.0.0:50053')
+    server.start()
+
     
     with grpc.insecure_channel(sidecar) as channel:
         threads = []
@@ -92,7 +110,7 @@ def run():
             logger.error("Can't connect to sidecar ")
             exit
         else:            
-            t1 = threading.Thread(target=receiver, args=[incoming_queue, pub_sub_api_stub,subscribe_topic] )
+            t1 = threading.Thread(target=receiver, args=[pub_sub_api_stub,subscribe_topic] )
             t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue])
             t3 = threading.Thread(target=sender,args=[outgoing_queue,pub_sub_api_stub,publish_topic])
             t1.start()
@@ -103,7 +121,9 @@ def run():
             threads.append(t3)
 
             for t in threads:
-                t.join()        
+                t.join()
+
+    server.wait_for_termination()
             
 
 if __name__ == '__main__':

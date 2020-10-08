@@ -81,7 +81,7 @@ public class GrpcClient {
      * greeting.
      */
     public void executeTest(String[] args) throws Exception {
-        var processedCounter = new AtomicInteger(1);
+        var processedCounter = new AtomicInteger(0);
 
         var server = ServerBuilder.forPort(50053).addService(new NotificationApiGrpc.NotificationApiImplBase() {
             @Override
@@ -127,7 +127,7 @@ public class GrpcClient {
 
         logger.info(String.format("offset %d", offset));
 
-        subscribeForMessagesFromSidecar(blockingStub,subscriberTopic);
+        var sr = subscribeForMessagesFromSidecar(blockingStub,subscriberTopic);
 
         Thread.sleep(5000);
 
@@ -200,7 +200,7 @@ public class GrpcClient {
                 }
         );
 
-        unsubscribeForMessagesFromSidecar(blockingStub,subscriberTopic);
+        unsubscribeForMessagesFromSidecar(blockingStub,sr);
 
         long ts = totalSendTime.get() / threads;
         long totalEnd = System.nanoTime();
@@ -223,15 +223,16 @@ public class GrpcClient {
         return;
     }
 
-    private void subscribeForMessagesFromSidecar(PubSubApiGrpc.PubSubApiBlockingStub apiStub, String subscriberTopic) {
+    private SubscribeRequest subscribeForMessagesFromSidecar(PubSubApiGrpc.PubSubApiBlockingStub apiStub, String subscriberTopic) {
         var  sr = SubscribeRequest.newBuilder().setClientId("someclient").setCorrelationId(UUID.randomUUID().toString()).setTopic(subscriberTopic).build();
         logger.debug("Subscribe request {}",sr);
         var response = apiStub.subscribe(sr);
         logger.debug(String.format("Subscribe response status: %s", response.getStatus()));
+        return sr;
     }
 
-    private void unsubscribeForMessagesFromSidecar(PubSubApiGrpc.PubSubApiBlockingStub apiStub, String subscriberTopic) {
-        var  sr = UnsubscribeRequest.newBuilder().setClientId("someclient").setCorrelationId(UUID.randomUUID().toString()).setTopic(subscriberTopic).build();
+    private void unsubscribeForMessagesFromSidecar(PubSubApiGrpc.PubSubApiBlockingStub apiStub, SubscribeRequest subscribeRequest) {
+        var  sr = UnsubscribeRequest.newBuilder().setClientId(subscribeRequest.getClientId()).setCorrelationId(subscribeRequest.getCorrelationId()).setTopic(subscribeRequest.getTopic()).build();
         logger.debug("Unsubscribe request {}",sr);
         var response = apiStub.unsubscribe(sr);
         logger.debug(String.format("Unsubscribe response status: %s", response.getStatus()));

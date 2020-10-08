@@ -14,6 +14,7 @@
 """The Python implementation of an example SWIR gRPC Sink."""
 
 from __future__ import print_function
+from concurrent import futures
 
 import random
 import logging
@@ -22,29 +23,41 @@ import grpc
 import os
 import queue
 import threading
+import grpc
 import client_api_pb2
 import client_api_pb2_grpc
+import notification_api_pb2_grpc
 import time
 import json
 
 logger = logging.getLogger('swir')
 
-def receiver(queue,pub_sub_stub,topic):
+class NotificationApiServicer(notification_api_pb2_grpc.NotificationApiServicer):
+
+    def __init__(self, incoming_queue):
+        self.queue = incoming_queue
+
+    def subscriptionNotification(self, request, context):
+        logger.debug("Subscription : %s" % request)
+        self.queue.put(request)
+        return client_api_pb2.SubscribeResponse(correlation_id=request.correlation_id,status="Ok")
+        
+
+
+
+def receiver(pub_sub_stub,topic):
     while True:
         try:
             subscribe = client_api_pb2.SubscribeRequest(
                 correlation_id=str(uuid.uuid4()),
                 topic=topic
             )
-
-            messages = pub_sub_stub.Subscribe(subscribe)
-            for message in messages:
-                logger.debug("Subscription : %s" % message)
-                queue.put(message)        
+            res = pub_sub_stub.Subscribe(subscribe)
+            logger.info("Subscribed : %s  " % (res.correlation_id))
+            return
         except:
-            logger.error("Can't connect to sidecar")            
-        time.sleep(5)
-
+            logger.error("Can't connect to sidecar")
+            
 
 def processor(incoming_queue,outgoing_queue,persistence_stub,database_name):
     while True:
@@ -75,12 +88,19 @@ def run():
 
     logger.info("Sidecar is %s" % sidecar)
     logger.info("Subscribe topic is %s" % subscribe_topic)
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    notification_api_pb2_grpc.add_NotificationApiServicer_to_server(
+        NotificationApiServicer(incoming_queue), server)
+    server.add_insecure_port('0.0.0.0:50053')
+    server.start()
+    
     
     with grpc.insecure_channel(sidecar) as channel:
         threads = []
         pub_sub_api_stub = client_api_pb2_grpc.PubSubApiStub(channel)
         persistence_api_stub = client_api_pb2_grpc.PersistenceApiStub(channel)
-        t1 = threading.Thread(target=receiver, args=[incoming_queue, pub_sub_api_stub,subscribe_topic] )
+        t1 = threading.Thread(target=receiver, args=[pub_sub_api_stub,subscribe_topic] )
         t2 = threading.Thread(target=processor, args=[incoming_queue, outgoing_queue,persistence_api_stub,database_name])
         t1.start()
         threads.append(t1)

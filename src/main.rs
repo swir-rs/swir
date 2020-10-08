@@ -222,7 +222,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
         if let Ok(builder) = builder {
             let grpc = builder
                 .trace_fn(|header_map| {
-                    let span = tracing::info_span!("CLIENT_GRPC", correlation_id = field::Empty, origin = field::Empty);
+                    let span = tracing::info_span!("CLIENT_GRPC_INCOMING", correlation_id = field::Empty, origin = field::Empty);
                     let span = tracing_utils::from_http_headers(span, &header_map);
                     let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();
                     let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();

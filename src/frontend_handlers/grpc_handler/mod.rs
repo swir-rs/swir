@@ -15,7 +15,12 @@ use crate::utils::structs::*;
 use tracing::Span;
 use tracing_futures::Instrument;
 
+use crate::utils::tracing_utils;
 use swir_grpc_api::notification_api_client::NotificationApiClient;
+use tokio::time::Duration;
+
+use tonic::transport::Endpoint;
+use tonic::Request;
 
 impl fmt::Display for swir_grpc_api::SubscribeRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -461,19 +466,35 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
 }
 
 async fn send_request(mut client: NotificationApiClient<tonic::transport::Channel>, ctx: BackendToRestContext) {
-    let req = swir_grpc_api::SubscribeNotification {
+    let sreq = swir_grpc_api::SubscribeNotification {
         correlation_id: ctx.correlation_id,
         payload: ctx.request_params.payload,
     };
 
-    if let Err(e) = client.subscription_notification(req.clone()).await {
-        info!("Unable to send {:?} {:?}", req, e);
+    let mut req = Request::new(sreq.clone());
+
+    if let Some((trace_header_name, trace_header)) = tracing_utils::get_grpc_tracing_header() {
+        req.metadata_mut().insert(trace_header_name, trace_header);
+    };
+
+    if let Err(e) = client.subscription_notification(req).await {
+        warn!("Unable to send {} {:?}", sreq, e);
+    } else {
+        info!("Notify {}", sreq);
     }
 }
 
 pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
     if let Some(port) = client_config.grpc_port {
-        if let Ok(client) = NotificationApiClient::connect(format! {"http://{}:{}", client_config.ip, port}).await {
+        let endpoint = Endpoint::from_shared(format! {"http://{}:{}", client_config.ip, port})
+            .unwrap()
+            .timeout(Duration::from_secs(2))
+            .concurrency_limit(256)
+            .connect()
+            .await;
+
+        if let Ok(channel) = endpoint {
+            let client = NotificationApiClient::new(channel);
             info!("GRPC client created");
             let mut rx = rx.lock().await;
             while let Some(ctx) = rx.next().await {
@@ -483,7 +504,7 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
             }
         } else {
-            warn!("Unable to connect to GRPC notification server")
+            warn!("Can't create a GRPC channel {:?} {:?}", client_config, endpoint);
         }
     } else {
         warn!("No GRPC port set. Client will not get any notifications");
