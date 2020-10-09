@@ -1,7 +1,10 @@
 docker/**/build/**
 /target
+**/target/**
+**/*.class
 **/*.rs.bk
 **/*.key
+**/.idea/**
 **/*.pem
 **/*.csr
 **/*.crt
