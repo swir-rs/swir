@@ -13,4 +13,4 @@ python3 aws-log-groups.py DELETE
 ./aws-delete-role.sh
 cd ..
 
-docker rmi -f $(docker image list 164450575887.dkr.ecr.eu-west-1.amazonaws.com/*:v3 -q)
+docker rmi -f $(docker image list 164450575887.dkr.ecr.eu-west-1.amazonaws.com/*:v0.3.1 -q)

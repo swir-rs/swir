@@ -20,7 +20,7 @@ spec:
       containers:
 
       - name: client
-        image: swir-example-python-processor:v3
+        image: swir-example-python-processor:v0.3.1
         env:
           - name: sidecar
             value: "127.0.0.1:50051"

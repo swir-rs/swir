@@ -1,4 +1,4 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 extern crate custom_error;
 #[macro_use]
 extern crate tracing;
@@ -38,6 +38,7 @@ use utils::pki_utils::{load_certs, load_private_key};
 use crate::utils::{config::*, tracing_utils};
 use tracing::field;
 use tracing_futures::Instrument;
+
 static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
 
 #[tokio::main(core_threads = 8)]
@@ -189,17 +190,19 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     let mut tasks = vec![];
     let grpc_addr = grpc_addr.clone();
     let mmc = &mc.messaging_memory_channels;
+
     let pmc = &mc.persistence_memory_channels;
     let simc = &mc.si_memory_channels;
 
+    let (to_client_sender, to_client_receiver) = (mmc.to_client_sender_for_grpc.clone(), mmc.to_client_receiver_for_grpc.clone());
+
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
-    let to_client_receiver_for_grpc = mmc.to_client_receiver_for_grpc.clone();
+
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
     let client_sender_for_public = simc.client_sender.clone();
     let tls_config = swir_config.tls_config.clone();
-
     let grpc_client_interface = tokio::spawn(async move {
-        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_receiver_for_grpc.clone());
+        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_sender);
         let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
 
         let pub_sub_svc = swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
@@ -219,7 +222,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
         if let Ok(builder) = builder {
             let grpc = builder
                 .trace_fn(|header_map| {
-                    let span = tracing::info_span!("CLIENT_GRPC", correlation_id = field::Empty, origin = field::Empty);
+                    let span = tracing::info_span!("CLIENT_GRPC_INCOMING", correlation_id = field::Empty, origin = field::Empty);
                     let span = tracing_utils::from_http_headers(span, &header_map);
                     let corr_id_header = HeaderName::from_lowercase(X_CORRRELATION_ID_HEADER_NAME.as_bytes()).unwrap();
                     let origin_header = HeaderName::from_lowercase("origin".as_bytes()).unwrap();
@@ -245,7 +248,16 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
             }
         }
     });
+    let client_config = swir_config.client_config.clone();
+    let grpc_notification_interface = tokio::spawn(async move {
+        let client_config = client_config.clone();
+        if let Some(client_config) = client_config {
+            info!("Starting GRPC notification interface {:?}", client_config);
+            grpc_handler::client_handler(client_config, to_client_receiver).await;
+        }
+    });
     tasks.push(grpc_client_interface);
+    tasks.push(grpc_notification_interface);
     tasks
 }
 
@@ -311,8 +323,9 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels) -> 
     let internal_grpc_port = swir_config.internal_grpc_port;
 
     let mmc = &mc.messaging_memory_channels;
+
     let simc = &mc.si_memory_channels;
-    let to_si_http_client = mmc.to_si_http_client.clone();
+    let to_si_http_client = mmc.to_client_sender_for_rest.clone();
     let receiver = simc.receiver.clone();
     let si = tokio::spawn(async move {
         if let Some(services) = config {

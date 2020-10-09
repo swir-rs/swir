@@ -174,21 +174,19 @@ pub struct Stores {
 }
 
 #[derive(Debug, Clone)]
-pub struct MemoryChannelEndpoint<T1, T2> {
+pub struct MemoryChannelEndpoint<T1> {
     pub from_client_receiver: Arc<Mutex<mpsc::Receiver<T1>>>,
-    pub to_client_sender_for_rest: mpsc::Sender<T2>,
-    pub to_client_sender_for_grpc: mpsc::Sender<T2>,
 }
 
 pub struct MessagingMemoryChannels {
-    pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext, BackendToRestContext>>,
-    pub nats_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext, BackendToRestContext>>,
-    pub aws_kinesis_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext, BackendToRestContext>>,
-    pub to_client_sender_for_rest: HashMap<String, mpsc::Sender<BackendToRestContext>>,
+    pub kafka_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext>>,
+    pub nats_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext>>,
+    pub aws_kinesis_memory_channels: Vec<MemoryChannelEndpoint<RestToMessagingContext>>,
+    pub to_client_sender_for_rest: mpsc::Sender<BackendToRestContext>,
     pub to_client_receiver_for_rest: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
+    pub to_client_sender_for_grpc: mpsc::Sender<BackendToRestContext>,
     pub to_client_receiver_for_grpc: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>,
     pub from_client_to_messaging_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    pub to_si_http_client: mpsc::Sender<BackendToRestContext>,
 }
 
 pub struct PersistenceMemoryChannels {
@@ -271,12 +269,20 @@ pub struct TracingConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct ClientConfig {
+    pub ip: String,
+    pub http_port: Option<u16>,
+    pub grpc_port: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Swir {
     pub tracing: Option<TracingConfig>,
     pub ip: String,
     pub http_port: u16,
     pub grpc_port: u16,
     pub internal_grpc_port: u16,
+    pub client_config: Option<ClientConfig>,
     pub tls_config: Option<ServerTlsConfig>,
     pub client_executable: Option<String>,
     pub pubsub: PubSub,
@@ -337,15 +343,15 @@ impl Swir {
 // from_client_sender [database_name_2] --> key-value store 2
 
 fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
-    let mut to_client_sender_for_rest_map = HashMap::new();
+    let mut subscribe_topics = vec![];
+    let mut publish_topics = vec![];
+
     let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
 
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));
     let to_client_sender_for_grpc = to_client_sender_for_grpc;
     let to_client_receiver_for_grpc = Arc::new(Mutex::new(to_client_receiver_for_grpc));
-    let to_client_sender_for_si = to_client_sender_for_rest.clone();
-    let box_to_client_sender_for_rest = to_client_sender_for_rest;
 
     let mut kafka_memory_channels = vec![];
     let mut from_client_to_messaging_sender = HashMap::new();
@@ -354,18 +360,17 @@ fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-            to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
-            to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
         };
 
         kafka_memory_channels.push(mme);
         for producer_topic in kafka_channels.producer_topics.iter() {
             from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+            publish_topics.push(producer_topic.client_topic.clone());
         }
 
         for consumer_topic in kafka_channels.consumer_topics.iter() {
             from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
-            to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(), box_to_client_sender_for_rest.clone());
+            subscribe_topics.push(consumer_topic.client_topic.clone());
         }
     }
 
@@ -374,18 +379,17 @@ fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
         let (from_client_sender, from_client_receiver): (mpsc::Sender<RestToMessagingContext>, mpsc::Receiver<RestToMessagingContext>) = mpsc::channel(20000);
         let mme = MemoryChannelEndpoint {
             from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-            to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
-            to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
         };
 
         aws_kinesis_memory_channels.push(mme);
         for producer_topic in aws_kinesis_channels.producer_topics.iter() {
             from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+            publish_topics.push(producer_topic.client_topic.clone());
         }
 
         for consumer_topic in aws_kinesis_channels.consumer_topics.iter() {
             from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
-            to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(), box_to_client_sender_for_rest.clone());
+            subscribe_topics.push(consumer_topic.client_topic.clone());
         }
     }
 
@@ -397,17 +401,16 @@ fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
 
             let mme = MemoryChannelEndpoint {
                 from_client_receiver: Arc::new(Mutex::new(from_client_receiver)),
-                to_client_sender_for_rest: box_to_client_sender_for_rest.clone(),
-                to_client_sender_for_grpc: to_client_sender_for_grpc.clone(),
             };
             nats_memory_channels.push(mme);
             for producer_topic in nats_channels.producer_topics.iter() {
                 from_client_to_messaging_sender.insert(producer_topic.client_topic.clone(), from_client_sender.clone());
+                publish_topics.push(producer_topic.client_topic.clone());
             }
 
             for consumer_topic in nats_channels.consumer_topics.iter() {
                 from_client_to_messaging_sender.insert(consumer_topic.client_topic.clone(), from_client_sender.clone());
-                to_client_sender_for_rest_map.insert(consumer_topic.client_topic.clone(), box_to_client_sender_for_rest.clone());
+                subscribe_topics.push(consumer_topic.client_topic.clone());
             }
         }
     }
@@ -415,11 +418,11 @@ fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
         kafka_memory_channels,
         nats_memory_channels,
         aws_kinesis_memory_channels,
-        to_client_sender_for_rest: to_client_sender_for_rest_map,
+        to_client_sender_for_rest,
         to_client_receiver_for_rest,
         to_client_receiver_for_grpc,
+        to_client_sender_for_grpc,
         from_client_to_messaging_sender,
-        to_si_http_client: to_client_sender_for_si,
     }
 }
 

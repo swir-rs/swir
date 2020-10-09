@@ -15,7 +15,10 @@ spec:
       serviceAccountName: swir-operator
       containers:
       - name: swir-operator
-        image: swir/swir-operator:v3
+        image: swir/swir-operator:v0.3.1
+        env:
+          - name: SWIR_SIDECAR_IMAGE_VERSION
+            value: swir/swir:v0.3.1
         volumeMounts:
           - name: config-volume
             mountPath: /configs/namespace

@@ -89,22 +89,6 @@ public class GrpcClient {
     void  biStreamMessagesToSidecar(PubSubApiGrpc.PubSubApiStub apiStub, PersistenceApiGrpc.PersistenceApiBlockingStub persistenceApiStub, ObjectMapper om, String producer) {
 
         try {
-            var responseObserver = new io.grpc.stub.StreamObserver<rs.swir.api.client.PublishResponse>() {
-                @Override
-                public void onNext(PublishResponse value) {
-                    logger.debug(String.format("Response status: %s", value.getStatus()));
-                }
-
-                @Override
-                public void onError(Throwable t) {
-                    logger.warn(String.format("Server thrown an error %s" , t.getMessage()), t);
-                }
-
-                @Override
-                public void onCompleted() {
-                    logger.info(String.format("Messaging Server sent completed"));
-                }
-            };
 
             var persistenceObserver = new io.grpc.stub.StreamObserver<rs.swir.api.client.StoreResponse>() {
                 @Override
@@ -122,8 +106,6 @@ public class GrpcClient {
                     logger.info(String.format("Persistence Server sent completed"));
                 }
             };
-            var response = apiStub.publishBiStream(responseObserver);
-
 
             var counter = 0;
             while(true){
@@ -131,11 +113,11 @@ public class GrpcClient {
                 var bytes = new byte[64];
                 random.nextBytes(bytes);;
                 var correlationId = UUID.randomUUID().toString();
-		int c = counter++;
+		        int c = counter++;
                 var p = new Payload().setProducer(producer).setConsumer(producer).setCounter(c).setTimestamp(System.currentTimeMillis()).setPayload(Base64.getEncoder().encodeToString(bytes));
                 logger.info(String.format("produced : %s", p));
                 var request = PublishRequest.newBuilder().setCorrelationId(correlationId).setTopic(producer).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
-                response.onNext(request);
+                var res = blockingStub.publish(request);
                 var sr = StoreRequest.newBuilder().setCorrelationId(correlationId).setDatabaseName(clientDatabaseName).setKey(Integer.toString(c)).setPayload(ByteString.copyFrom(om.writeValueAsBytes(p))).build();
                 var result = persistenceApiStub.store(sr);
                 logger.info(String.format("stored : %s %s",p,  result.getStatus()));

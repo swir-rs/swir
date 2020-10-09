@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: client
-        image: swir-example-si-python-grpc-client:v3
+        image: swir-example-si-python-grpc-client:v0.3.1
         env:
           - name: sidecar
             value: "127.0.0.1:50051"
