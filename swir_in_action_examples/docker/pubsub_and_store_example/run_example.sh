@@ -3,14 +3,14 @@
 cwd=$(pwd)
 cd ../../../
 root_dir=$(pwd)
-docker pull swir/swir:v0.3.1
+docker pull swir/swir:v0.3.2
 cd $cwd
 
 cd ./swir-configurator
 printf "\n**********************\n"
 printf "\nConfigurator \n"
 
-docker build --tag swir-example-configurator:v0.3.1 . 
+docker build --tag swir-example-configurator:v0.3.2 . 
 
 printf "\nConfigurator... done"
 printf "\n**********************\n"
@@ -20,7 +20,7 @@ cd ../swir-python-processor
 printf "\n**********************\n"
 printf "\nPython processor  \n"
 cp $root_dir/grpc_api/*.proto .
-docker build --tag swir-example-python-processor:v0.3.1 .
+docker build --tag swir-example-python-processor:v0.3.2 .
 rm *.proto
 printf "\nPython processor  done"
 printf "\n**********************\n"
@@ -29,7 +29,7 @@ printf "\n**********************\n"
 cd ../swir-java-processor
 printf "\n**********************\n"
 printf "\nJava processor  \n"
-docker build --tag swir-example-java-processor:v0.3.1 .
+docker build --tag swir-example-java-processor:v0.3.2 .
 printf "\nJava processor  done"
 printf "\n**********************\n"
 
@@ -38,7 +38,7 @@ cd ../swir-java-source
 printf "\n**********************\n"
 printf "\nJava GRPC source  \n"
 cp -r $root_dir/grpc_api/ .
-docker build --tag swir-example-java-source:v0.3.1 .
+docker build --tag swir-example-java-source:v0.3.2 .
 rm -rf grpc_api
 printf "\nJava GRPC source...done"
 printf "\n**********************\n"
@@ -49,7 +49,7 @@ cd ../swir-python-sink
 printf "\n**********************\n"
 printf "\nPython GRPC sink  \n"
 cp $root_dir/grpc_api/*.proto .
-docker build --tag swir-example-python-sink:v0.3.1 .
+docker build --tag swir-example-python-sink:v0.3.2 .
 rm *.proto
 printf "Python GRPC sink... done  \n"
 printf "\n**********************\n"

@@ -164,53 +164,52 @@ impl NatsBroker {
         }
     }
 
-    async fn nats_incoming_event_handler(&self, nats: &Connection) {       
+    async fn nats_incoming_event_handler(&self, nats: &Connection) {
         let subscriptions = self.subscriptions.clone();
-	let mut tasks = vec![];
-	if !self.nats.consumer_topics.is_empty() {
+        let mut tasks = vec![];
+        if !self.nats.consumer_topics.is_empty() {
             for ct in self.nats.consumer_topics.iter() {
                 let topic = ct.consumer_topic.clone();
                 let group = ct.consumer_group.clone();
                 debug!("Subscribing to topic {:?}", &ct);
-		let subscriptions = subscriptions.clone();
-		
-		if let Ok(subscription)  = nats.queue_subscribe(&topic,&group){
-		    let subscription = subscription.clone();
-		    let job = task::spawn_blocking(move || {
-			info!("Waiting for events {:?}",subscription);		    			
-			for msg in subscription.messages() {
-			    let topic = msg.subject;
-			    let maybe_msg = NatsMessageWrapper::decode(Bytes::from(msg.data));
-			    let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
-			    if let Ok(wrapper) = &maybe_msg {
-				let span = tracing_utils::from_map(span, &wrapper.headers);
-				let _sp = span.enter();
-				let mut subs = Box::new(Vec::new());
-				let mut has_lock = false;
-				while !has_lock {
-				    if let Ok(mut subscriptions) = subscriptions.try_lock() {
-					if let Some(subscriptions) = subscriptions.get_mut(&topic) {
-					    subs = subscriptions.clone();
-					}
-					has_lock = true;
-				    }
-				}
-				send_request(&mut subs, wrapper.payload.to_owned());
-			    } else {
-				warn!("Unable to decode NATS message {:?}", maybe_msg);
-			    };
-			}
-		    });
-		    tasks.push(job);
-		}else{
-		    warn!("Can't subscribe ");
-		}
+                let subscriptions = subscriptions.clone();
+
+                if let Ok(subscription) = nats.queue_subscribe(&topic, &group) {
+                    let subscription = subscription.clone();
+                    let job = task::spawn_blocking(move || {
+                        info!("Waiting for events {:?}", subscription);
+                        for msg in subscription.messages() {
+                            let topic = msg.subject;
+                            let maybe_msg = NatsMessageWrapper::decode(Bytes::from(msg.data));
+                            let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
+                            if let Ok(wrapper) = &maybe_msg {
+                                let span = tracing_utils::from_map(span, &wrapper.headers);
+                                let _sp = span.enter();
+                                let mut subs = Box::new(Vec::new());
+                                let mut has_lock = false;
+                                while !has_lock {
+                                    if let Ok(mut subscriptions) = subscriptions.try_lock() {
+                                        if let Some(subscriptions) = subscriptions.get_mut(&topic) {
+                                            subs = subscriptions.clone();
+                                        }
+                                        has_lock = true;
+                                    }
+                                }
+                                send_request(&mut subs, wrapper.payload.to_owned());
+                            } else {
+                                warn!("Unable to decode NATS message {:?}", maybe_msg);
+                            };
+                        }
+                    });
+                    tasks.push(job);
+                } else {
+                    warn!("Can't subscribe ");
+                }
             }
         } else {
             info!("No consumers configured");
         };
-	futures::future::join_all(tasks).await;
-
+        futures::future::join_all(tasks).await;
     }
 }
 
@@ -219,9 +218,8 @@ impl Broker for NatsBroker {
     async fn configure_broker(&self) {
         info!("Configuring NATS broker {:?} ", self);
         let cluster = self.nats.brokers.get(0).unwrap().clone();
-	let nc = nats::connect(&cluster).unwrap();
-        
-        
+        let nc = nats::connect(&cluster).unwrap();
+
         let mut producer_topics = vec![];
         for pt in self.nats.producer_topics.iter() {
             producer_topics.push(pt.producer_topic.clone());
