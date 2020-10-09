@@ -73,10 +73,6 @@ fn find_channel_by_database_name<'a>(
     from_client_to_persistence_sender.get(database_name)
 }
 
-fn find_to_client_sender<'a>(client_topic: &'a str, to_client_sender: &'a HashMap<String, mpsc::Sender<BackendToRestContext>>) -> Option<&'a mpsc::Sender<BackendToRestContext>> {
-    to_client_sender.get(client_topic)
-}
-
 fn validate_content_type(headers: &HeaderMap<HeaderValue>) -> Option<bool> {
     match headers.get(http::header::CONTENT_TYPE) {
         Some(header) => {
@@ -127,7 +123,7 @@ async fn sub_unsubscribe_handler(
     whole_body: Vec<u8>,
     correlation_id: String,
     from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    to_client_sender_for_rest: &HashMap<String, mpsc::Sender<BackendToRestContext>>,
+    to_client_sender: mpsc::Sender<BackendToRestContext>,
 ) -> Response<Body> {
     let wb = String::from_utf8_lossy(&whole_body);
     if is_subscribe {
@@ -137,7 +133,7 @@ async fn sub_unsubscribe_handler(
     }
     let maybe_json = serde_json::from_slice(&whole_body);
     match maybe_json {
-        Ok(json) => sub_unsubscribe_processor(is_subscribe, json, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await,
+        Ok(json) => sub_unsubscribe_processor(is_subscribe, json, correlation_id, &from_client_to_backend_channel_sender, to_client_sender).await,
         Err(e) => {
             warn!("Unable to parse body {:?}", e);
             let mut response = Response::new(Body::from(e.to_string()));
@@ -317,77 +313,72 @@ async fn sub_unsubscribe_processor(
     csr: ClientSubscribeRequest,
     correlation_id: String,
     from_client_to_backend_channel_sender: &HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    to_client_sender_for_rest: &HashMap<String, mpsc::Sender<BackendToRestContext>>,
+    to_client_sender: mpsc::Sender<BackendToRestContext>,
 ) -> Response<Body> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
     let json: ClientSubscribeRequest = csr;
     let (local_tx, local_rx): (oneshot::Sender<MessagingResult>, oneshot::Receiver<MessagingResult>) = oneshot::channel();
-    let client_topic = json.client_topic.clone();
+    let endpoint = json.endpoint.clone();
+    let sb = SubscribeRequest {
+        correlation_id,
+        client_interface_type: CustomerInterfaceType::REST,
+        client_topic: json.client_topic.clone(),
+        endpoint,
+        tx: Box::new(to_client_sender.clone()),
+    };
 
-    if let Some(to_client_sender) = find_to_client_sender(&client_topic, &to_client_sender_for_rest) {
-        let endpoint = json.endpoint.clone();
-        let sb = SubscribeRequest {
-            correlation_id,
-            client_interface_type: CustomerInterfaceType::REST,
-            client_topic: json.client_topic.clone(),
-            endpoint,
-            tx: Box::new(to_client_sender.clone()),
-        };
+    let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
 
-        let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
-
-        let mut sender = if let Some(channel) = maybe_channel {
-            channel.clone()
-        } else {
-            set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
-            return response;
-        };
-        let ctx = if is_subscribe {
-            RestToMessagingContext {
-                job: Job::Subscribe(sb),
-                sender: local_tx,
-                span: Span::current(),
-            }
-        } else {
-            RestToMessagingContext {
-                job: Job::Unsubscribe(sb),
-                sender: local_tx,
-                span: Span::current(),
-            }
-        };
-
-        debug!("Waiting for broker");
-        if let Err(e) = sender.try_send(ctx) {
-            warn!("Channel is dead {:?}", e);
-            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            *response.body_mut() = Body::empty();
-        }
-
-        let response_from_broker = local_rx.await;
-        debug!("Got result {:?}", response_from_broker);
-        if let Ok(res) = response_from_broker {
-            set_http_response(res.status, &mut response);
-        } else {
-            *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            *response.body_mut() = Body::empty();
+    let mut sender = if let Some(channel) = maybe_channel {
+        channel.clone()
+    } else {
+        set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
+        return response;
+    };
+    let ctx = if is_subscribe {
+        RestToMessagingContext {
+            job: Job::Subscribe(sb),
+            sender: local_tx,
+            span: Span::current(),
         }
     } else {
-        set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
+        RestToMessagingContext {
+            job: Job::Unsubscribe(sb),
+            sender: local_tx,
+            span: Span::current(),
+        }
+    };
+
+    debug!("Waiting for broker");
+    if let Err(e) = sender.try_send(ctx) {
+        warn!("Channel is dead {:?}", e);
+        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        *response.body_mut() = Body::empty();
     }
+
+    let response_from_broker = local_rx.await;
+    debug!("Got result {:?}", response_from_broker);
+    if let Ok(res) = response_from_broker {
+        set_http_response(res.status, &mut response);
+    } else {
+        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        *response.body_mut() = Body::empty();
+    }
+
     response
 }
 
 #[instrument(
     name = "CLIENT_HTTP_INCOMING",
     fields(correlation_id),
-    skip(req, from_client_to_backend_channel_sender, to_client_sender_for_rest, from_client_to_persistence_sender, from_client_to_si_sender)
+    skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender)
 )]
 pub async fn handler(
     req: Request<Body>,
     from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
-    to_client_sender_for_rest: HashMap<String, mpsc::Sender<BackendToRestContext>>,
+    to_client_sender: mpsc::Sender<BackendToRestContext>,
     from_client_to_persistence_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
 ) -> Result<Response<Body>, hyper::Error> {
@@ -462,7 +453,7 @@ pub async fn handler(
                 return Ok(response);
             }
             let whole_body = get_whole_body(req).await;
-            response = sub_unsubscribe_handler(true, whole_body, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await;
+            response = sub_unsubscribe_handler(true, whole_body, correlation_id, &from_client_to_backend_channel_sender, to_client_sender).await;
             response
         }
 
@@ -471,7 +462,7 @@ pub async fn handler(
                 return Ok(response);
             }
             let whole_body = get_whole_body(req).await;
-            response = sub_unsubscribe_handler(false, whole_body, correlation_id, &from_client_to_backend_channel_sender, &to_client_sender_for_rest).await;
+            response = sub_unsubscribe_handler(false, whole_body, correlation_id, &from_client_to_backend_channel_sender, to_client_sender).await;
             response
         }
 

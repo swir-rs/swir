@@ -1,11 +1,12 @@
-[![Build Status](https://travis-ci.org/swir-rs/swir.svg?branch=master)](https://travis-ci.org/swir-rs/swir)
+[![Build Status](https://travis-ci.com/swir-rs/swir.svg?branch=master)](https://travis-ci.com/swir-rs/swir)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitHub release](https://img.shields.io/github/release/swir-rs/swir.svg)](https://GitHub.com/Naereen/StrapDown.js/releases/)
 [![Awesome Badges](https://img.shields.io/badge/badges-awesome-green.svg)](https://swir.rs)
+
 # SWIR or Sidecar Written in Rust
 
 
-![Logo](graphics/swir_logo.png)
+![](graphics/swir_logo_sidecar.png)
 
 
 For alternative meaning of [SWIR](https://en.pons.com/translate/polish-english/swir)

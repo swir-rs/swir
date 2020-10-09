@@ -3,26 +3,26 @@ cwd=$(pwd)
 # Compile, build and generate necessary docker images
 cd ../../../
 root_dir=$(pwd)
-./build.sh swir_in_action_examples/docker/performance_framework/swir.yaml
+#./build.sh swir_in_action_examples/docker/performance_framework/swir.yaml
 cd $cwd
 
 cd swir-java-client
-docker build --tag swir-java-client:v3 .
+docker build --tag swir-java-client:v0.3.1 .
 cd ../swir-kafka-sink
-docker build --tag swir-kafka-sink:v3 .
+docker build --tag swir-kafka-sink:v0.3.1 .
 cd ../swir-nats-sink
-docker build --tag swir-nats-sink:v3 .
-cd ../swir-grpc-client
-cp -r $root_dir/grpc_api .
-docker build -m 4g --tag swir-grpc-client:v3 .
-rm -rf grpc_api
-cd ../swir-grpc-sink
-cp -r $root_dir/grpc_api .
-docker build --tag swir-grpc-sink:v3 .
-rm -rf grpc_api
+docker build --tag swir-nats-sink:v0.3.1 .
+#cd ../swir-grpc-client
+#cp -r $root_dir/grpc_api .
+#docker build -m 4g --tag swir-grpc-client:v0.3.1 .
+#rm -rf grpc_api
+# cd ../swir-grpc-sink
+# cp -r $root_dir/grpc_api .
+# docker build --tag swir-grpc-sink:v0.3.1 .
+# rm -rf grpc_api
 cd ..
 
-docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
+#docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
 # this should deploy the infrastructure
 # Docker instance names/network name created by docker compose could change
 docker-compose -f docker-compose-infr.yml -p docker up -d
@@ -37,6 +37,7 @@ docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create 
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic RequestNoSidecar --partitions 2 --replication-factor 1
 docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create --topic ResponseNoSidecar --partitions 2 --replication-factor 1
 
+
 # this should deploy swir and other components
 docker-compose  -f docker-compose-swir.yml -p pf up -d
 
@@ -50,13 +51,13 @@ docker-compose  -f docker-compose-swir.yml -p pf up -d
 
 
 #Kafka test over gRPC
-#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA -e publish_type=[unary|bidi] swir-grpc-client:v3
+#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA -e publish_type=[unary|bidi] swir-grpc-client:v0.3.1
 
 #Nats test over gRPC
-#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppB -e client_response_topic=SubscribeToAppB -e publish_type=[unary|bidi] swir-grpc-client:v3
+#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir -e sidecar_port=50051 -e messages=100000 -e threads=10 -e client_request_topic=ProduceToAppB -e client_response_topic=SubscribeToAppB -e publish_type=[unary|bidi] swir-grpc-client:v0.3.1
 
 #gRPC to gRPC
-#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir-grpc-sink -e sidecar_port=50052 -e messages=1000000 -e threads=200 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v3
+#docker run -ti --network docker_swir-net  --rm -e sidecar_hostname=swir-grpc-sink -e sidecar_port=50052 -e messages=1000000 -e threads=200 -e client_request_topic=ProduceToAppA -e client_response_topic=SubscribeToAppA  swir-grpc-client:v0.3.1
 
 #Kafka to Kafka
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":1000000, "threads":200, "sidecarUrl":"http://pf_swir_1:8080","clientTopic":"ProduceToAppA","testType":"kafka","missedPackets":50}' -H "Content-Type: application/json" -X POST http://pf_swir-java-client_1:8090/test

@@ -7,7 +7,7 @@ services:
   order-generator:
     networks:
       - swir-net
-    image: swir-example-java-source:v3
+    image: swir-example-java-source:v0.3.1
 #    depends_on:
 #      - order-generator-sidecar
     environment:
@@ -22,7 +22,7 @@ services:
   order-processor:
     networks:
       - swir-net
-    image: swir-example-python-processor:v3
+    image: swir-example-python-processor:v0.3.1
 #    depends_on:
 #      - order-processor-sidecar
     environment:
@@ -36,7 +36,7 @@ services:
   inventory-processor:
     networks:
       - swir-net
-    image: swir-example-java-processor:v3
+    image: swir-example-java-processor:v0.3.1
 #    depends_on:
 #      - inventory-processor-sidecar
     ports:
@@ -52,7 +52,7 @@ services:
   billing-processor:
     networks:
       - swir-net
-    image: swir-example-python-processor:v3
+    image: swir-example-python-processor:v0.3.1
 #    depends_on:
 #      - billing-processor-sidecar
     environment:
@@ -65,7 +65,7 @@ services:
   shipments-sink:
     networks:
       - swir-net
-    image: swir-example-python-sink:v3
+    image: swir-example-python-sink:v0.3.1
 #    depends_on:
 #      - shipments-sink-sidecar
     environment:

@@ -1,0 +1,49 @@
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: swir-operator
+spec:
+  selector:
+    matchLabels:
+      app: swir-operator
+  replicas: 2 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: swir-operator
+    spec:
+      serviceAccountName: swir-operator
+      containers:
+      - name: swir-operator
+        image: swir/swir-operator:v0.3.1
+        env:
+          - name: SWIR_SIDECAR_IMAGE_VERSION
+            value: swir/swir:v0.3.1
+        volumeMounts:
+          - name: config-volume
+            mountPath: /configs/namespace
+          - name: certs-volume
+            mountPath: /certs/namespace
+      volumes: 
+        - name: config-volume
+          configMap:
+            name: swir-operator-config
+            items:
+            - key: processor_1.yaml
+              path: processor1-config.yaml
+            - key: processor_2.yaml
+              path: processor2-config.yaml
+            - key: processor_3.yaml
+              path: processor3-config.yaml
+            - key: source.yaml
+              path: source-config.yaml
+            - key: sink.yaml
+              path: sink-config.yaml
+        - name: certs-volume
+          configMap:
+            name: swir-operator-certs
+            items:
+            - key: dummy
+              path: dummy
+
+        

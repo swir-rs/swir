@@ -1,27 +1,28 @@
 version: '3.7'
 services:
-  swir:
-    networks:
-      - swir-net
-    image: swir/swir:v3
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-      - "50051:50051"
-    # environment:
-    #   - kafka_brokers=[kafka:9094]
-    #   - nats_brokers=nats://nats:4222
-    #   - consumer_topic_1=Response
-    #   - consumer_group_1=swir
-    #   - client_consumer_topic_1=SubscribeToAppA
-    #   - producer_topic_1=Request
-    #   - client_producer_topic_1=ProduceToAppA
-    #   - consumer_topic_2=Response2
-    #   - consumer_group_2=swir
-    #   - client_consumer_topic_2=SubscribeToAppC
-    #   - producer_topic_2=Request2
+  # swir:
+  #   networks:
+  #     - swir-net
+  #   image: swir/swir:v3
+  #   ports:
+  #     - "8080:8080"
+  #     - "8443:8443"
+  #     - "50051:50051"
+  #   # environment:
+  #   #   - kafka_brokers=[kafka:9094]
+  #   #   - nats_brokers=nats://nats:4222
+  #   #   - consumer_topic_1=Response
+  #   #   - consumer_group_1=swir
+  #   #   - client_consumer_topic_1=SubscribeToAppA
+  #   #   - producer_topic_1=Request
+  #   #   - client_producer_topic_1=ProduceToAppA
+  #   #   - consumer_topic_2=Response2
+  #   #   - consumer_group_2=swir
+  #   #   - client_consumer_topic_2=SubscribeToAppC
+  #   #   - producer_topic_2=Request2
     #   - client_producer_topic_2=ProduceToAppC
 
+    
   swir-kafka-sink1:
     networks:
       - swir-net
@@ -31,8 +32,8 @@ services:
       - sink_consumer_topic=Request
       - sink_consumer_group=swir
       - sink_producer_topic=Response
-    depends_on:
-      - "swir"
+    # depends_on: 
+    #   - "swir"
       
   swir-kafka-sink2:
     networks:
@@ -43,31 +44,31 @@ services:
       - sink_consumer_topic=Request2
       - sink_consumer_group=swir
       - sink_producer_topic=Response2
-    depends_on:
-      - "swir"      
+    # depends_on: 
+    #   - "swir"      
 
-  swir-grpc-sink:
-    networks:
-      - swir-net
-    image: swir-grpc-sink:v3
-    ports:
-      - "50052:50052"
-    environment:
-      - grpc_port=50052
-    depends_on:
-      - "swir"
+  # swir-grpc-sink:
+  #   networks:
+  #     - swir-net
+  #   image: swir-grpc-sink:v3
+  #   ports:
+  #     - "50052:50052"
+  #   environment:
+  #     - grpc_port=50052
+  #   depends_on:
+  #     - "swir"
 
-  swir-kafka-sink-nosidecar:
-    networks:
-      - swir-net
-    image: swir-kafka-sink:v3
-    environment:
-      - bootstrap_servers=kafka:9094
-      - sink_consumer_topic=RequestNoSidecar
-      - sink_consumer_group=swir
-      - sink_producer_topic=ResponseNoSidecar
-    depends_on:
-      - "swir"
+  # swir-kafka-sink-nosidecar:
+  #   networks:
+  #     - swir-net
+  #   image: swir-kafka-sink:v3
+  #   environment:
+  #     - bootstrap_servers=kafka:9094
+  #     - sink_consumer_topic=RequestNoSidecar
+  #     - sink_consumer_group=swir
+  #     - sink_producer_topic=ResponseNoSidecar
+  #   depends_on:
+  #     - "swir"
       
   swir-nats-sink:
     networks:
@@ -77,8 +78,8 @@ services:
       - bootstrap_servers=nats://nats:4222
       - subscribe_topic=Request
       - response_topic=Response
-    depends_on:
-      - "swir"
+    # depends_on: 
+    #   - "swir"
   swir-nats-sink2:
     networks:
       - swir-net
@@ -87,8 +88,8 @@ services:
       - bootstrap_servers=nats://nats:4222
       - subscribe_topic=Request2
       - response_topic=Response2
-    depends_on:
-      - "swir"      
+    # depends_on: 
+    #  - "swir"      
   swir-java-client:
     networks:
       - swir-net
@@ -99,8 +100,8 @@ services:
       - consumer_topic=ResponseNoSidecar
       - consumer_group=swir
       - producer_topic=RequestNoSidecar
-    depends_on:
-      - "swir"
+    # depends_on:
+    #   - "swir"
 networks:
   swir-net:
     external:

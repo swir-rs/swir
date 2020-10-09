@@ -6,6 +6,7 @@ metadata:
     "sidecar.jaegertracing.io/inject": "true"
   labels:
     app: swir
+    swir: source
 spec:
   replicas: 1
   selector:
@@ -17,16 +18,8 @@ spec:
         app: swir
     spec:
       containers:
-      - name: swir
-        image: swir/swir:v3
-        env:
-          - name: swir_config_file
-            value: /swir_config/config.yaml
-        volumeMounts:
-          - name: config-volume
-            mountPath: /swir_config            
       - name: client
-        image: swir-example-java-source:v3
+        image: swir-example-java-source:v0.3.1
         env:
           - name: sidecar_hostname
             value: "127.0.0.1"
@@ -37,10 +30,3 @@ spec:
           - name: client_database_name
             value: source_store
 
-      volumes:
-        - name: config-volume
-          configMap:
-            name: source-config
-            items:
-              - key: source.yaml
-                path: config.yaml

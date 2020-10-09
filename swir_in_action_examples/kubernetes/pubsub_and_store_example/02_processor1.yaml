@@ -6,6 +6,7 @@ metadata:
     "sidecar.jaegertracing.io/inject": "true"
   labels:
     app: swir
+    swir: processor1
 spec:
   replicas: 1
   selector:
@@ -17,16 +18,8 @@ spec:
         app: swir
     spec:
       containers:
-      - name: swir
-        image: swir/swir:v3
-        env:
-          - name: swir_config_file
-            value: /swir_config/config.yaml
-        volumeMounts:
-          - name: config-volume
-            mountPath: /swir_config            
       - name: client
-        image: swir-example-python-processor:v3
+        image: swir-example-python-processor:v0.3.1
         env:
           - name: sidecar
             value: "127.0.0.1:50051"
@@ -34,10 +27,3 @@ spec:
             value: orders
           - name: publish_topic
             value: inventory
-      volumes:
-        - name: config-volume
-          configMap:
-            name: processor1-config
-            items:
-              - key: processor_1.yaml
-                path: config.yaml
