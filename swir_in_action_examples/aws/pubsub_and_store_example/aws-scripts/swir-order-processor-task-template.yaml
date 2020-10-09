@@ -4,7 +4,7 @@ executionRoleArn: 'arn:aws:iam::<aws_account>:role/ecsTaskExecutionRole' # The A
 networkMode: host # The Docker networking mode to use for the containers in the task. Valid values are: bridge, host, awsvpc, none.
 containerDefinitions: # [REQUIRED] A list of container definitions in JSON format that describe the different containers that make up your task.
 - name: 'swir-sidecar'  # The name of a container.
-  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir/swir:v0.3.1' # The image used to start a container.
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir/swir:v0.3.2' # The image used to start a container.
   memory: 200 # The amount (in MiB) of memory to present to the container.
   portMappings: # The list of port mappings for the container.
   - containerPort: 50051  # The port number on the container that is bound to the user-specified or automatically assigned host port.
@@ -31,7 +31,7 @@ containerDefinitions: # [REQUIRED] A list of container definitions in JSON forma
 
 
 - name: 'swir-example-http-java-processor'  # The name of a container.
-  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-example-python-processor:v0.3.1'
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-example-python-processor:v0.3.2'
   memory: 500 # The amount (in MiB) of memory to present to the container.
   portMappings: [] # The list of port mappings for the container.
   essential: true # If the essential parameter of a container is marked as true, and that container fails or stops for any reason, all other containers that are part of the task are stopped.
@@ -62,7 +62,7 @@ containerDefinitions: # [REQUIRED] A list of container definitions in JSON forma
       
 
 - name: 'swir-configurator'  # The name of a container.
-  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-aws-example-configurator:v0.3.1' # The image used to start a container.
+  image: '<aws_account>.dkr.ecr.<aws_region>.amazonaws.com/swir-aws-example-configurator:v0.3.2' # The image used to start a container.
   memory: 100 # The amount (in MiB) of memory to present to the container.
   portMappings: [] # The list of port mappings for the container.
   essential: false # If the essential parameter of a container is marked as true, and that container fails or stops for any reason, all other containers that are part of the task are stopped.

@@ -1,6 +1,6 @@
 server:
   port: 8090
-sidecarUrl: ${sidecar_url}
+sidecarUrl: 127.0.0.1
 kafkaProducerTopic: RequestNoSidecar
 kafkaConsumerTopic: ResponseNoSidecar
 http:

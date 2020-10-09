@@ -13,7 +13,7 @@ echo "Accout " $1 " region " $2
 cwd=$(pwd)
 
 cd ../../../
-docker pull swir/swir:v0.3.1
+docker pull swir/swir:v0.3.2
 root_folder=$(pwd)
 image_folder=$root_folder/swir_in_action_examples/docker/pubsub_and_store_example
 cd $cwd
@@ -22,7 +22,7 @@ source $root_folder/secure.sh
 cd ./swir-configurator
 printf "\n**********************\n"
 printf "\nConfigurator \n"
-docker build --tag swir-aws-example-configurator:v0.3.1 .
+docker build --tag swir-aws-example-configurator:v0.3.2 .
 printf "\nConfigurator... done"
 printf "\n**********************\n"
 
@@ -30,7 +30,7 @@ cd $image_folder/swir-python-processor
 printf "\n**********************\n"
 printf "\nPython processor  \n"
 cp $root_folder/grpc_api/*.proto .
-docker build --tag swir-example-python-processor:v0.3.1 .
+docker build --tag swir-example-python-processor:v0.3.2 .
 rm *.proto
 printf "\nPython processor  done"
 printf "\n**********************\n"
@@ -38,7 +38,7 @@ printf "\n**********************\n"
 cd ../swir-java-processor
 printf "\n**********************\n"
 printf "\nJava processor  \n"
-docker build --tag swir-example-java-processor:v0.3.1 .
+docker build --tag swir-example-java-processor:v0.3.2 .
 printf "\nJava processor  done"
 printf "\n**********************\n"
 
@@ -46,7 +46,7 @@ cd ../swir-java-source
 printf "\n**********************\n"
 printf "\nJava GRPC source  \n"
 cp -r $root_folder/grpc_api/ .
-docker build --tag swir-example-java-source:v0.3.1 .
+docker build --tag swir-example-java-source:v0.3.2 .
 rm -rf grpc_api
 printf "\nJava GRPC source...done"
 printf "\n**********************\n"
@@ -55,7 +55,7 @@ cd ../swir-python-sink
 printf "\n**********************\n"
 printf "\nPython GRPC sink  \n"
 cp $root_folder/grpc_api/*.proto .
-docker build --tag swir-example-python-sink:v0.3.1 .
+docker build --tag swir-example-python-sink:v0.3.2 .
 rm *.proto
 printf "\nPython GRPC sink... done  \n"
 printf "\n**********************\n"

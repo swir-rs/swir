@@ -4,7 +4,7 @@ services:
   swir-example-si-configurator:
     networks:
       - swir-si
-    image: swir-example-si-configurator:v0.3.1
+    image: swir-example-si-configurator:v0.3.2
 #    command: ["/bin/bash","-c","cp /config/* swir_config/ ; cp /certificates/* certs/"]
     volumes:
       - type: volume
@@ -39,7 +39,7 @@ services:
   orchestator_sidecar:
     networks:
       - swir-si
-    image: swir/swir:v0.3.1
+    image: swir/swir:v0.3.2
     depends_on:
       - swir-example-si-configurator
       - swir-example-logger
@@ -64,7 +64,7 @@ services:
   books_sidecar:
     networks:
       - swir-si
-    image: swir/swir:v0.3.1
+    image: swir/swir:v0.3.2
     depends_on:
       - swir-example-si-configurator
       - swir-example-logger      
@@ -88,7 +88,7 @@ services:
   magazinges_sidecar:
     networks:
       - swir-si
-    image: swir/swir:v0.3.1
+    image: swir/swir:v0.3.2
     depends_on:
       - swir-example-si-configurator
       - swir-example-logger      
