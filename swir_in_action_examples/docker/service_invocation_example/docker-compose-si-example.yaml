@@ -34,8 +34,7 @@ services:
       - "4250"
               
 
-# step 1 
-# Java gRCP
+
   orchestator_sidecar:
     networks:
       - swir-si
@@ -59,8 +58,7 @@ services:
         target: /certs                
 
 
-# step 2     
-# python REST 
+
   books_sidecar:
     networks:
       - swir-si
@@ -84,7 +82,6 @@ services:
         target: /certs        
 
 
-# python REST 
   magazinges_sidecar:
     networks:
       - swir-si
@@ -105,7 +102,35 @@ services:
         target: /swir_config
       - type: volume
         source: certs
-        target: /certs        
+        target: /certs
+
+  books:
+    networks:
+      - swir-si
+    image: swir-example-si-python-http-server:v0.3.2
+    depends_on:
+     - books_sidecar
+    environment:
+      - port=8090
+
+  magazines:
+    networks:
+      - swir-si
+    image: swir-example-si-python-http-server:v0.3.2
+    depends_on:
+      - magazinges_sidecar
+    environment:
+      - port=8090
+
+  orchestrator_app:
+    networks:
+      - swir-si
+    image: swir-example-si-python-grpc-client:v0.3.2
+    depends_on:
+     - orchestator_sidecar
+    environment:
+      - sidecar=orchestator_sidecar:50051
+      - service_names=books,magazines
 
         
 volumes:

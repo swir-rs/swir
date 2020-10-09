@@ -486,25 +486,27 @@ async fn send_request(mut client: NotificationApiClient<tonic::transport::Channe
 
 pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
     if let Some(port) = client_config.grpc_port {
-        let endpoint = Endpoint::from_shared(format! {"http://{}:{}", client_config.ip, port})
-            .unwrap()
-            .timeout(Duration::from_secs(2))
-            .concurrency_limit(256)
-            .connect()
-            .await;
-
-        if let Ok(channel) = endpoint {
-            let client = NotificationApiClient::new(channel);
-            info!("GRPC client created");
-            let mut rx = rx.lock().await;
-            while let Some(ctx) = rx.next().await {
-                let client = client.clone();
-                let parent_span = ctx.span.clone();
-                let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
-                tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
+        loop {
+            let endpoint = Endpoint::from_shared(format! {"http://{}:{}", client_config.ip, port})
+                .unwrap()
+                .timeout(Duration::from_secs(2))
+                .concurrency_limit(256)
+                .connect()
+                .await;
+            if let Ok(channel) = endpoint {
+                let client = NotificationApiClient::new(channel);
+                info!("GRPC client created");
+                let mut rx = rx.lock().await;
+                while let Some(ctx) = rx.next().await {
+                    let client = client.clone();
+                    let parent_span = ctx.span.clone();
+                    let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
+                    tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
+                }
+            } else {
+                warn!("Can't create a GRPC channel {:?} {:?}", client_config, endpoint);
+                tokio::time::delay_for(Duration::from_secs(5)).await;
             }
-        } else {
-            warn!("Can't create a GRPC channel {:?} {:?}", client_config, endpoint);
         }
     } else {
         warn!("No GRPC port set. Client will not get any notifications");

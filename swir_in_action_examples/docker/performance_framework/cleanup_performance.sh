@@ -1,2 +1,2 @@
-docker-compose -f docker-compose-swir.yml -p pf down --remove-orphans
-docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
+docker-compose -f docker-compose-swir.yaml -p pf down --remove-orphans
+docker-compose -f docker-compose-infr.yaml -p docker down --remove-orphans
