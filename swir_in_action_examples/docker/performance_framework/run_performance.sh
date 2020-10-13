@@ -1,9 +1,8 @@
 #!/bin/bash
 cwd=$(pwd)
-# Compile, build and generate necessary docker images
 cd ../../../
 root_dir=$(pwd)
-#./build.sh swir_in_action_examples/docker/performance_framework/swir.yaml
+./build.sh "swir_in_action_examples/docker/performance_framework/swir.yaml" "v0.3.2-perf"
 cd $cwd
 
 cd swir-java-client
@@ -12,14 +11,6 @@ cd ../swir-kafka-sink
 docker build --tag swir-kafka-sink:v0.3.2 .
 cd ../swir-nats-sink
 docker build --tag swir-nats-sink:v0.3.2 .
-#cd ../swir-grpc-client
-#cp -r $root_dir/grpc_api .
-#docker build -m 4g --tag swir-grpc-client:v0.3.2 .
-#rm -rf grpc_api
-# cd ../swir-grpc-sink
-# cp -r $root_dir/grpc_api .
-# docker build --tag swir-grpc-sink:v0.3.2 .
-# rm -rf grpc_api
 cd ..
 
 #docker-compose -f docker-compose-infr.yaml -p docker down --remove-orphans

@@ -2,8 +2,8 @@
 !src
 !grpc_api
 !rustycar*
-!swir_in_action_examples/docker/performance_framework/
 !certs/*
+!swir_in_action_examples/docker/performance_framework/swir.yaml
 #!swir_in_action_examples/docker/performance_framework/swir-java-client/build/libs/*.jar
 !target/release/swir
 !target/debug/swir

@@ -8,14 +8,22 @@ echo "**************************"
 #docker rmi --no-prune swir/swir:v0.3.2
 #docker build -t swir/swir:v0.3.2 -f Dockerfile_local .
 
+default_version=v0.3.2
 
+if [ -z "$2" ]
+then
+    version=$default_version    
+else
+    version=$2
 
-docker rmi --no-prune swir/swir:v0.3.2
+fi
+
+docker rmi --no-prune swir/swir:$version
 docker build -f build/Dockerfile_build_stage1 -t swir_builder:latest .
 if [ -z "$1" ]
 then
-    docker build --build-arg swir_config=swir.yaml -t swir/swir:v0.3.2 -f build/Dockerfile_build_stage2 .
+    docker build --build-arg swir_config=swir.yaml -t swir/swir:$version -f build/Dockerfile_build_stage2 .
 else
-    docker build --build-arg swir_config=$1 -t swir/swir:v0.3.2 -f build/Dockerfile_build_stage2 .    
+    docker build --build-arg swir_config=$1 -t swir/swir:$version -f build/Dockerfile_build_stage2 .    
 fi
 echo "**************************"
