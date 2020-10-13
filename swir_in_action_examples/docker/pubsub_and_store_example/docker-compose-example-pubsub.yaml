@@ -1,5 +1,4 @@
 version: '3.7'
-# Sidecars layer. All sidecars are already deployed.
 services:
   swir-example-configurator:
     networks:
@@ -133,10 +132,83 @@ services:
       - type: volume
         source: swir_config
         target: /swir_config                
+  
+# step 1 
+# Java gRCP
+  order-generator:
+    networks:
+      - swir-net
+    image: swir-example-java-source:v0.3.2
+    depends_on:
+      - order-generator-sidecar
+    environment:
+      - sidecar_hostname=order-generator-sidecar
+      - sidecar_port=50051
+      - produce_topic=orders
+      - client_database_name=source_store
         
+
+# step 2     
+# python gRPC
+  order-processor:
+    networks:
+      - swir-net
+    image: swir-example-python-processor:v0.3.2
+    depends_on:
+      - order-processor-sidecar
+    environment:
+      - sidecar=order-processor-sidecar:50051
+      - subscribe_topic=orders
+      - publish_topic=inventory
+
+
+# step 3           
+# Java SpringBoot and REST
+  inventory-processor:
+    networks:
+      - swir-net
+    image: swir-example-java-processor:v0.3.2
+    depends_on:
+      - inventory-processor-sidecar
+    ports:
+      - "8080"
+    environment:
+      - sidecar_url=http://inventory-processor-sidecar:8080
+      - subscribe_topic=inventory
+      - producer_topic=billing
+      - server_port=8080
+
+# step 4           
+# python gRPC      
+  billing-processor:
+    networks:
+      - swir-net
+    image: swir-example-python-processor:v0.3.2
+    depends_on:
+      - billing-processor-sidecar
+    environment:
+      - sidecar=billing-processor-sidecar:50051
+      - subscribe_topic=billing
+      - publish_topic=shipments
+
+# step 5
+# Python gRPC
+  shipments-sink:
+    networks:
+      - swir-net
+    image: swir-example-python-sink:v0.3.2
+    depends_on:
+      - shipments-sink-sidecar
+    environment:
+      - sidecar=shipments-sink-sidecar:50051
+      - subscribe_topic=shipments
+      - client_database_name=sink_store
+
+
 volumes:
   swir_config:
 networks:
   swir-net:
     external:
       name: docker_swir-net
+

@@ -22,10 +22,10 @@ docker build --tag swir-nats-sink:v0.3.2 .
 # rm -rf grpc_api
 cd ..
 
-#docker-compose -f docker-compose-infr.yml -p docker down --remove-orphans
+#docker-compose -f docker-compose-infr.yaml -p docker down --remove-orphans
 # this should deploy the infrastructure
 # Docker instance names/network name created by docker compose could change
-docker-compose -f docker-compose-infr.yml -p docker up -d
+docker-compose -f docker-compose-infr.yaml -p docker up -d
  
 # Create necessary topics for Kafka
 sleep 5
@@ -39,7 +39,7 @@ docker exec -t docker_kafka_1 kafka-topics.sh --bootstrap-server :9094 --create 
 
 
 # this should deploy swir and other components
-docker-compose  -f docker-compose-swir.yml -p pf up -d
+docker-compose  -f docker-compose-swir.yaml -p pf up -d
 
 #use these to produce and receive messasges
 
@@ -63,7 +63,7 @@ docker-compose  -f docker-compose-swir.yml -p pf up -d
 #docker run --network docker_swir-net -it --rm curlimages/curl -v -d '{"messages":1000000, "threads":200, "sidecarUrl":"http://pf_swir_1:8080","clientTopic":"ProduceToAppA","testType":"kafka","missedPackets":50}' -H "Content-Type: application/json" -X POST http://pf_swir-java-client_1:8090/test
 
 #Clean up
-#docker-compose -p pf -f docker-compose-swir.yml down --remove-orphans
+#docker-compose -p pf -f docker-compose-swir.yaml down --remove-orphans
 
 
 #Copy logs to file

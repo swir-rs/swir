@@ -26,7 +26,7 @@ services:
   swir-kafka-sink1:
     networks:
       - swir-net
-    image: swir-kafka-sink:v3
+    image: swir-kafka-sink:v0.3.2
     environment:
       - bootstrap_servers=kafka:9094
       - sink_consumer_topic=Request
@@ -38,7 +38,7 @@ services:
   swir-kafka-sink2:
     networks:
       - swir-net
-    image: swir-kafka-sink:v3
+    image: swir-kafka-sink:v0.3.2
     environment:
       - bootstrap_servers=kafka:9094
       - sink_consumer_topic=Request2
@@ -73,7 +73,7 @@ services:
   swir-nats-sink:
     networks:
       - swir-net
-    image: swir-nats-sink:v3
+    image: swir-nats-sink:v0.3.2
     environment:
       - bootstrap_servers=nats://nats:4222
       - subscribe_topic=Request
@@ -83,7 +83,7 @@ services:
   swir-nats-sink2:
     networks:
       - swir-net
-    image: swir-nats-sink:v3
+    image: swir-nats-sink:v0.3.2
     environment:
       - bootstrap_servers=nats://nats:4222
       - subscribe_topic=Request2
@@ -93,7 +93,7 @@ services:
   swir-java-client:
     networks:
       - swir-net
-    image: swir-java-client:v3
+    image: swir-java-client:v0.3.2
     environment:
       - sidecar_url=h2://swir:8080/publish
       - bootstrap_servers=kafka:9094

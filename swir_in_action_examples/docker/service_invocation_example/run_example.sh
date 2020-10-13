@@ -38,15 +38,14 @@ printf "\n**********************\n"
 
 cd ..
 
-docker-compose -f docker-compose-si-example-sidecars.yaml -p app down
-docker-compose -f docker-compose-si-example-applications.yaml -p app down
+docker-compose -f docker-compose-si-example.yaml -p app down
+
 
 # Create necessary topics for Kafka
 
 sleep 5
 
-docker-compose -f docker-compose-si-example-sidecars.yaml -p app up -d
-docker-compose -f docker-compose-si-example-applications.yaml -p app up -d
+docker-compose -f docker-compose-si-example.yaml -p app up -d
 
 
 printf "\n**********************\n"
@@ -57,10 +56,9 @@ printf "\n**********************\n"
 sleep 5
 
 #Sidecar logs 
-docker-compose  -f docker-compose-si-example-sidecars.yaml -p app logs -ft
+docker-compose  -f docker-compose-si-example.yaml -p app logs -ft orchestator_sidecar books_sidecar magazinges_sidecar
+docker-compose  -f docker-compose-si-example.yaml -p app logs -ft books magazines orchestrator_app
 
-#Application logs
-docker-compose  -f docker-compose-si-example-applications.yaml -p app logs -ft
 
 #clean all
 ./cleanup_example.sh
