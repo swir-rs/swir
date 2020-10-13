@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::future::FutureExt;
@@ -143,13 +142,14 @@ impl KafkaBroker {
                                 } else {
                                     OwnedHeaders::new()
                                 };
-                                let r = FutureRecord::to(topic.as_str()).payload(&req.payload).key("some key").headers(headers);
-                                let kafka_send = kafka_producer.send(r, 0).map(move |status| match status {
+                                let payload = req.payload.clone();
+                                let r = FutureRecord::to(topic.as_str()).payload(&payload).key("some key").headers(headers);
+                                let kafka_send = kafka_producer.send(r, Duration::from_millis(0)).map(move |status| match status {
                                     Ok(_) => sender.send(MessagingResult {
                                         correlation_id: req.correlation_id,
                                         status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
                                     }),
-                                    Err(e) => sender.send(MessagingResult {
+                                    Err((e, _m)) => sender.send(MessagingResult {
                                         correlation_id: req.correlation_id,
                                         status: BackendStatusCodes::Error(e.to_string()),
                                     }),

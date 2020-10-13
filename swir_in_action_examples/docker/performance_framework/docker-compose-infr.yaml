@@ -33,11 +33,6 @@ services:
       - "4222:4222"
       - "8222:8222"
       - "6222:6222"
-    entrypoint: ["docker-entrypoint.sh"]
-    command: ["nats-server", "-DV", "--config", "/etc/nats/nats-server.conf"]
-
-      
-      
       
   redis:
     networks:
