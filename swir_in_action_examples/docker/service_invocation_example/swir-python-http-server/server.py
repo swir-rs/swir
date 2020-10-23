@@ -69,9 +69,9 @@ class S(BaseHTTPRequestHandler):
         response.write(post_data)                
         self.wfile.write(response.getvalue())
 
-def run(server_class=HTTPServer, handler_class=S, port=8080):
+def run(server_class=HTTPServer, handler_class=S, port=8080,ip='127.0.0.1'):
     logging.basicConfig(level=logging.INFO)
-    server_address = ('', port)
+    server_address = (ip, port)
     httpd = server_class(server_address, handler_class)
     logging.info('Starting httpd...\n')
     try:
@@ -84,4 +84,5 @@ def run(server_class=HTTPServer, handler_class=S, port=8080):
 if __name__ == '__main__':
     import os
     port = os.environ['port']
-    run(port=int(port))
+    ip = os.environ['ip']
+    run(port=int(port), ip)

@@ -86,4 +86,9 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(process)d - %(funcName)s:%(lineno)d - %(levelname)s - %(message)s')
     console.setFormatter(formatter)
     logger.addHandler(console)
-    run()
+    while True:
+        try:
+            run()
+        except:
+            logging.warn("Unable to connect to service")
+            time.sleep(5)                    
