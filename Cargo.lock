@@ -244,11 +244,6 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "base64"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "base64-url"
 version = "1.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,11 +2383,11 @@ dependencies = [
 
 [[package]]
 name = "swir"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "async-trait 0.1.41 (registry+https://github.com/rust-lang/crates.io-index)",
  "aws-lock-client 0.0.3 (git+https://github.com/swir-rs/aws-lock-client-rs)",
- "base64 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "base64 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "config 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "currenttimemillis 0.0.1 (git+https://github.com/swir-rs/currenttimemillis-rs)",
@@ -3211,7 +3206,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum aws-lock-client 0.0.3 (git+https://github.com/swir-rs/aws-lock-client-rs)" = "<none>"
 "checksum base-x 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "1b20b618342cf9891c292c4f5ac2cde7287cc5c87e87e9c769d617793607dec1"
 "checksum base64 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
-"checksum base64 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)" = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 "checksum base64-url 1.4.7 (registry+https://github.com/rust-lang/crates.io-index)" = "9956620977549f836bcfa3ab63551fe9a021df799437a403629bd991aa8d92ff"
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 "checksum blake2b_simd 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)" = "d8fb2d74254a3a0b5cac33ac9f8ed0e44aa50378d9dbb2e5d83bd21ed1dc2c8a"
