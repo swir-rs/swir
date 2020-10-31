@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use futures::stream::StreamExt;
-use nats::*;
-use std::{collections::HashMap, sync::Arc, thread};
+use nats::asynk::*;
+use std::{collections::HashMap, sync::Arc};
 
 mod nats_msg_wrapper {
     include!(concat!(env!("OUT_DIR"), "/nats_msg_wrapper.rs"));
@@ -34,34 +34,24 @@ pub struct NatsBroker {
     subscriptions: Arc<Mutex<Box<Subscriptions>>>,
 }
 
-fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
+async fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
     for subscription in subscriptions.iter_mut() {
-        let mut got_sent = false;
-        while !got_sent {
-            let mrc = BackendToRestContext {
-                span: Span::current(),
-                correlation_id: subscription.to_string(),
-                sender: None,
-                request_params: RESTRequestParams {
-                    payload: p.to_owned(),
-                    method: "POST".to_string(),
-                    uri: subscription.endpoint.url.clone(),
-                    ..Default::default()
-                },
-            };
+        let mrc = BackendToRestContext {
+            span: Span::current(),
+            correlation_id: subscription.to_string(),
+            sender: None,
+            request_params: RESTRequestParams {
+                payload: p.to_owned(),
+                method: "POST".to_string(),
+                uri: subscription.endpoint.url.clone(),
+                ..Default::default()
+            },
+        };
 
-            match subscription.tx.try_send(mrc) {
-                Ok(_) => {
-                    got_sent = true;
-                }
-                Err(mpsc::error::TrySendError::Closed(_)) => {
-                    got_sent = true;
-                    warn!("Unable to send {}. Channel is closed", subscription);
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    warn!("Unable to send {}. Channel is full", subscription);
-                    thread::yield_now();
-                }
+        match subscription.tx.send(mrc).await {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("Unable to send {}. Channel is {:?}", subscription, e);
             }
         }
     }
@@ -122,7 +112,7 @@ impl NatsBroker {
                             let mut p = vec![];
                             let res = wrapper.encode(&mut p);
                             if let Ok(_) = res {
-                                let nats_publish = nats.publish(&topic, &p);
+                                let nats_publish = nats.publish(&topic, &p).await;
                                 match nats_publish {
                                     Ok(_) => {
                                         let res = sender.send(MessagingResult {
@@ -174,11 +164,10 @@ impl NatsBroker {
                 debug!("Subscribing to topic {:?}", &ct);
                 let subscriptions = subscriptions.clone();
 
-                if let Ok(subscription) = nats.queue_subscribe(&topic, &group) {
-                    let subscription = subscription.clone();
-                    let job = task::spawn_blocking(move || {
+                if let Ok(mut subscription) = nats.queue_subscribe(&topic, &group).await {
+                    let job = task::spawn(async move {
                         info!("Waiting for events {:?}", subscription);
-                        for msg in subscription.messages() {
+                        while let Some(msg) = subscription.next().await {
                             let topic = msg.subject;
                             let maybe_msg = NatsMessageWrapper::decode(Bytes::from(msg.data));
                             let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
@@ -195,7 +184,7 @@ impl NatsBroker {
                                         has_lock = true;
                                     }
                                 }
-                                send_request(&mut subs, wrapper.payload.to_owned());
+                                send_request(&mut subs, wrapper.payload.to_owned()).await;
                             } else {
                                 warn!("Unable to decode NATS message {:?}", maybe_msg);
                             };
@@ -218,7 +207,7 @@ impl Broker for NatsBroker {
     async fn configure_broker(&self) {
         info!("Configuring NATS broker {:?} ", self);
         let cluster = self.nats.brokers.get(0).unwrap().clone();
-        let nc = nats::connect(&cluster).unwrap();
+        let nc = connect(&cluster).await.unwrap();
 
         let mut producer_topics = vec![];
         for pt in self.nats.producer_topics.iter() {
