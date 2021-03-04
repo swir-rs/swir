@@ -81,7 +81,7 @@ impl NatsBroker {
 
     async fn nats_event_handler(&self, nats: &Connection) {
         let mut rx = self.rx.lock().await;
-        while let Some(ctx) = rx.next().await {
+        while let Some(ctx) = rx.recv().await {
             let parent_span = ctx.span;
             let span = info_span!(parent: &parent_span, "NATS_OUTGOING");
             let sender = ctx.sender;

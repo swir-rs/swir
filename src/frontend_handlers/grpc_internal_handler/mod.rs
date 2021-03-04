@@ -36,7 +36,7 @@ impl swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInv
             sender: local_sender,
             span: Span::current(),
         };
-        let mut sender = self.from_client_to_si_sender.clone();
+        let sender = self.from_client_to_si_sender.clone();
         let res = sender.try_send(ctx);
         if let Err(e) = res {
             warn!("invoke internal : Channel is dead {:?}", e);

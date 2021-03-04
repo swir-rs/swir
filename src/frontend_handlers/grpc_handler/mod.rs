@@ -3,10 +3,7 @@ use hyper::StatusCode;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use tokio::{
-    stream::StreamExt,
-    sync::{mpsc, oneshot, Mutex},
-};
+use tokio::sync::{mpsc, oneshot, Mutex};
 
 use crate::swir_common;
 use crate::swir_grpc_api;
@@ -274,7 +271,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 span: Span::current(),
             };
 
-            let mut tx = tx.clone();
+            let tx = tx.clone();
             if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
@@ -316,7 +313,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 span: Span::current(),
             };
 
-            let mut tx = tx.clone();
+            let tx = tx.clone();
             if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
@@ -368,7 +365,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 span: Span::current(),
             };
 
-            let mut tx = tx.clone();
+            let tx = tx.clone();
             if let Err(e) = tx.try_send(ctx) {
                 warn!("Channel is dead {:?}", e);
             }
@@ -435,7 +432,7 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
             sender: local_sender,
             span: Span::current(),
         };
-        let mut sender = self.from_client_to_si_sender.clone();
+        let sender = self.from_client_to_si_sender.clone();
         let res = sender.try_send(ctx);
         if let Err(e) = res {
             warn!("Channel is dead {:?}", e);
@@ -497,7 +494,8 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 let client = NotificationApiClient::new(channel);
                 info!("GRPC client created");
                 let mut rx = rx.lock().await;
-                while let Some(ctx) = rx.next().await {
+
+                while let Some(ctx) = rx.recv().await {
                     let client = client.clone();
                     let parent_span = ctx.span.clone();
                     let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
@@ -505,13 +503,13 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 }
             } else {
                 warn!("Can't create a GRPC channel {:?} {:?}", client_config, endpoint);
-                tokio::time::delay_for(Duration::from_secs(5)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
         }
     } else {
         warn!("No GRPC port set. Client will not get any notifications");
         let mut rx = rx.lock().await;
-        while let Some(ctx) = rx.next().await {
+        while let Some(ctx) = rx.recv().await {
             debug!("Discarding {}", ctx.correlation_id);
         }
     }

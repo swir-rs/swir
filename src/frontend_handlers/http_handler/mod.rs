@@ -1,6 +1,6 @@
 use crate::swir_common;
 use crate::utils::{structs::*, tracing_utils};
-use futures::stream::StreamExt;
+use futures::StreamExt;
 use http::HeaderValue;
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
@@ -185,7 +185,7 @@ async fn service_invocation_processor(correlation_id: String, path: String, req:
             sender: local_sender,
             span: Span::current(),
         };
-        let mut sender = from_client_to_si_sender;
+        let sender = from_client_to_si_sender;
 
         let res = sender.try_send(ctx);
         if let Err(e) = res {
@@ -231,7 +231,7 @@ async fn persistence_processor(
     let msg = format!("op {:?} -> {} {}", op_type, database_name, key);
 
     let maybe_channel = find_channel_by_database_name(&database_name, from_client_to_persistence_sender);
-    let mut sender = if let Some(channel) = maybe_channel {
+    let sender = if let Some(channel) = maybe_channel {
         channel.clone()
     } else {
         set_http_response(BackendStatusCodes::NoTopic("No mapping for this topic".to_string()), &mut response);
@@ -331,7 +331,7 @@ async fn sub_unsubscribe_processor(
 
     let maybe_channel = find_channel_by_topic(&sb.client_topic, &from_client_to_backend_channel_sender);
 
-    let mut sender = if let Some(channel) = maybe_channel {
+    let sender = if let Some(channel) = maybe_channel {
         channel.clone()
     } else {
         set_http_response(BackendStatusCodes::NoTopic("No channel for this topic".to_string()), &mut response);
@@ -422,7 +422,7 @@ pub async fn handler(
                     sender: local_tx,
                     span: Span::current(),
                 };
-                let mut channel = channel.to_owned();
+                let channel = channel.to_owned();
 
                 if let Err(e) = channel.try_send(ctx) {
                     warn!("Channel is dead {:?}", e);
@@ -593,7 +593,7 @@ pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>
     let client = hyper::Client::builder().build_http();
     info!("Client done");
     let mut rx = rx.lock().await;
-    while let Some(ctx) = rx.next().await {
+    while let Some(ctx) = rx.recv().await {
         let client = client.clone();
         let parent_span = ctx.span.clone();
         let span = info_span!(parent: parent_span, "CLIENT_HTTP_OUTGOING");

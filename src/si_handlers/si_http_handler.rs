@@ -126,7 +126,7 @@ async fn service_invocation_processor(req: Request<Body>, from_client_to_si_send
         sender: local_sender,
         span: Span::current(),
     };
-    let mut sender = from_client_to_si_sender;
+    let sender = from_client_to_si_sender;
 
     let res = sender.try_send(ctx);
     if let Err(e) = res {

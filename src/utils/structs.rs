@@ -1,7 +1,7 @@
 use crate::swir_common;
+use core::fmt::Error;
+use core::fmt::Formatter;
 use custom_error::custom_error;
-use serde::export::fmt::Error;
-use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;

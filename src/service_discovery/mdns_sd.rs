@@ -45,7 +45,7 @@ impl MDNSServiceDiscovery {
         }
     }
     fn generate_instance_name(&self) -> String {
-        rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).take(16).collect()
+        rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).map(char::from).take(16).collect()
     }
 
     fn get_service_domain_and_name(&self, svc: &AnnounceServiceDetails) -> (String, String) {
@@ -61,7 +61,7 @@ impl MDNSServiceDiscovery {
 
 #[async_trait]
 impl ServiceDiscovery for MDNSServiceDiscovery {
-    async fn resolve(&self, svc: &ServiceDetails, mut sender: mpsc::Sender<ResolvedAddr>) {
+    async fn resolve(&self, svc: &ServiceDetails, sender: mpsc::Sender<ResolvedAddr>) {
         let domain = self.create_domain(&svc);
         debug!("resolver: resolving domain {}", domain);
 

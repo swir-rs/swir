@@ -5,7 +5,7 @@ use crate::swir_common;
 use crate::swir_grpc_internal_api;
 use crate::utils::{config::Services, structs::*, tracing_utils};
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fs, sync::Arc};
 use tokio::{
     sync::{mpsc, oneshot, Mutex},
     time::timeout,
@@ -168,10 +168,10 @@ impl ServiceInvocationService {
             resolver.resolve(svc, sender.clone()).await;
         }
 
-        let server_root_ca_cert = tokio::fs::read(services.tls_config.server_ca_cert).await.unwrap();
+        let server_root_ca_cert = fs::read(services.tls_config.server_ca_cert).unwrap();
         let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert.clone());
-        let client_cert = tokio::fs::read(services.tls_config.client_cert.clone()).await.unwrap();
-        let client_key = tokio::fs::read(services.tls_config.client_key.clone()).await.unwrap();
+        let client_cert = fs::read(services.tls_config.client_cert.clone()).unwrap();
+        let client_key = fs::read(services.tls_config.client_key.clone()).unwrap();
         let client_identity = Identity::from_pem(client_cert, client_key);
         let domain_name = services.tls_config.domain_name.clone();
 
@@ -237,7 +237,7 @@ impl ServiceInvocationService {
         let mut receiver = receiver.lock().await;
         while let Some(ctx) = receiver.recv().await {
             let grpc_clients = self.grpc_clients.clone();
-            let mut http_sender = http_sender.clone();
+            let http_sender = http_sender.clone();
             let client_endpoint_mapping = client_endpoint_mapping.clone();
             let parent_span = ctx.span;
             let _s = parent_span.enter();

@@ -116,7 +116,7 @@ impl KafkaBroker {
 
         info!("Kafka running");
         let mut rx = self.rx.lock().await;
-        while let Some(ctx) = rx.next().await {
+        while let Some(ctx) = rx.recv().await {
             let parent_span = ctx.span;
             let span = info_span!(parent: &parent_span, "KAFKA_OUTGOING");
             let sender = ctx.sender;
@@ -216,7 +216,7 @@ impl KafkaBroker {
             info!("Subsciptions {:?}", subscriptions);
         }
 
-        let mut message_stream = consumer.start();
+        let mut message_stream = consumer.stream();
         while let Some(message) = message_stream.next().await {
             match message {
                 Err(e) => warn!("Kafka error: {}", e),

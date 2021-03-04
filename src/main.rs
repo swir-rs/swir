@@ -8,6 +8,10 @@ mod messaging_handlers;
 mod persistence_handlers;
 mod si_handlers;
 mod utils;
+
+use futures::StreamExt;
+use std::iter::Iterator;
+
 use si_handlers::si_http_handler;
 mod service_discovery;
 
@@ -22,11 +26,10 @@ pub mod swir_grpc_api {
     tonic::include_proto!("swir_public");
 }
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{fs, net::SocketAddr, sync::Arc};
 
 use frontend_handlers::http_handler::{client_handler, handler};
 use frontend_handlers::{grpc_handler, grpc_internal_handler};
-use futures_util::stream::StreamExt;
 use http::header::HeaderName;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Server};
@@ -41,7 +44,7 @@ use tracing_futures::Instrument;
 
 static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
 
-#[tokio::main(core_threads = 8)]
+#[tokio::main(worker_threads = 8)]
 async fn main() {
     let swir_config = Swir::new();
     println!("{:?}", swir_config);
@@ -147,13 +150,14 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
             let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
             config.set_single_cert(certs, key).expect("invalid key or certificate");
             let tls_acceptor = TlsAcceptor::from(Arc::new(config));
-            let _arc_acceptor = Arc::new(tls_acceptor);
-            let mut listener = TcpListener::bind(&http_addr).await.unwrap();
-            let incoming = listener.incoming();
+            let arc_acceptor = Arc::new(tls_acceptor);
+            let listener = TcpListener::bind(&http_addr).await.unwrap();
+
+            let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
 
             let incoming = hyper::server::accept::from_stream(incoming.filter_map(|socket| async {
                 match socket {
-                    Ok(stream) => match _arc_acceptor.clone().accept(stream).await {
+                    Ok(stream) => match arc_acceptor.clone().accept(stream).await {
                         Ok(val) => Some(Ok::<_, hyper::Error>(val)),
                         Err(e) => {
                             println!("TLS error: {}", e);
@@ -211,8 +215,8 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
         let service_invocation_svc = swir_grpc_api::service_invocation_api_server::ServiceInvocationApiServer::new(service_invocation_handler);
 
         let builder = if let Some(tls_config) = tls_config {
-            let cert = tokio::fs::read(tls_config.certificate).await.unwrap();
-            let key = tokio::fs::read(tls_config.private_key).await.unwrap();
+            let cert = fs::read(tls_config.certificate).unwrap();
+            let key = fs::read(tls_config.private_key).unwrap();
             let identity = Identity::from_pem(cert, key);
             TonicServer::builder().tls_config(ServerTlsConfig::new().identity(identity))
         } else {
@@ -275,10 +279,10 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
             let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
             let service_invocation_svc = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
 
-            let cert = tokio::fs::read(tls_config.server_cert).await.unwrap();
-            let key = tokio::fs::read(tls_config.server_key).await.unwrap();
+            let cert = fs::read(tls_config.server_cert).map(|data| data).unwrap();
+            let key = fs::read(tls_config.server_key).unwrap();
             let server_identity = Identity::from_pem(cert, key);
-            let client_ca_cert = tokio::fs::read(tls_config.client_ca_cert).await.unwrap();
+            let client_ca_cert = fs::read(tls_config.client_ca_cert).unwrap();
             let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
             let tls = ServerTlsConfig::new().identity(server_identity).client_ca_root(client_ca_cert);

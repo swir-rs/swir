@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bytes;
-use futures::{future::join_all, stream::StreamExt};
+use futures::future::join_all;
 
 use rand::{distributions::Alphanumeric, rngs, Rng, SeedableRng};
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
@@ -117,7 +117,7 @@ impl AwsKinesisBroker {
         info!("Aws Kinesis running {:?}", self.aws_kinesis);
         let mut rx = self.rx.lock().await;
 
-        while let Some(job) = rx.next().await {
+        while let Some(job) = rx.recv().await {
             let sender = job.sender;
             match job.job {
                 Job::Subscribe(value) => {
@@ -134,7 +134,7 @@ impl AwsKinesisBroker {
                     let maybe_topic = self.aws_kinesis.get_producer_topic_for_client_topic(&req.client_topic);
                     let client = aws_kinesis_client.clone();
                     if let Some(topic) = maybe_topic {
-                        let partition_key = rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).take(32).collect();
+                        let partition_key = rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).map(char::from).take(32).collect();
                         tokio::spawn(async move {
                             debug!("Partition topic {} key {}", topic, partition_key);
                             match aws_put_record(client.clone(), topic, bytes::Bytes::from(req.payload), partition_key).await {
@@ -220,6 +220,7 @@ impl AwsKinesisBroker {
                         max_results: None,
                         next_token: None,
                         stream_creation_timestamp: None,
+                        shard_filter: None,
                         stream_name: Some(stream_name.clone()),
                     };
                     let list_shards_output = aws_kinesis_client.list_shards(list_shards_input).await;
@@ -313,7 +314,7 @@ impl AwsKinesisBroker {
             if elapsed < interval_duration {
                 let additional_delay = interval_duration - elapsed;
                 debug!("Additional delay of {:?}", additional_delay);
-                tokio::time::delay_for(interval_duration - elapsed).await;
+                tokio::time::sleep(interval_duration - elapsed).await;
             }
         }
     }

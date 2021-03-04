@@ -1,6 +1,5 @@
 use crate::service_discovery::{ResolveListeners, ResolvedAddr, ServiceDiscovery};
 use crate::utils::config::{AnnounceServiceDetails, ServiceDetails};
-use futures::StreamExt;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
@@ -19,7 +18,7 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::time;
 
 fn generate_instance_name() -> String {
-    rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).take(16).collect()
+    rngs::SmallRng::from_entropy().sample_iter(Alphanumeric).map(char::from).take(16).collect()
 }
 
 fn get_domain(svc: &AnnounceServiceDetails) -> String {
@@ -114,7 +113,7 @@ impl DynamoDBServiceDiscovery {
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(5));
-            while let Some(_) = interval.next().await {
+            while let Some(_) = Option::Some(interval.tick().await) {
                 Self::announce_internal(&client, &table, &announced_services, &instance_name, &fqdn, &ip, port).await;
                 Self::retrieve(&client, &table, &listeners).await;
             }

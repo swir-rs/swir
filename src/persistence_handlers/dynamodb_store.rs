@@ -10,7 +10,6 @@ use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::stream::StreamExt;
 use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 
 #[derive(Debug)]
@@ -245,7 +244,7 @@ impl DynamoDbStore {
 
         info!("DynamoDB is running");
         let mut rx = self.rx.lock().await;
-        while let Some(job) = rx.next().await {
+        while let Some(job) = rx.recv().await {
             let sender = job.sender;
 
             match job.job {

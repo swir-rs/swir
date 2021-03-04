@@ -7,7 +7,6 @@ use crate::utils::{
 use async_trait::async_trait;
 
 use std::sync::Arc;
-use tokio::stream::StreamExt;
 use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 
 use redis::{pipe, Client, Commands, Connection};
@@ -150,7 +149,7 @@ impl RedisStore {
         info!("Redis is running");
         let mut rx = self.rx.lock().await;
 
-        while let Some(ctx) = rx.next().await {
+        while let Some(ctx) = rx.recv().await {
             let parent_span = ctx.span;
             let span = info_span!(parent: &parent_span, "REDIS");
             let _s = span.enter();
