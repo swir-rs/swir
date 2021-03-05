@@ -1,4 +1,4 @@
-FROM rust:1.41 as builder
+FROM rust:1.50 as builder
 WORKDIR /usr/src/swir
 RUN rustup component add rustfmt 
 COPY build.rs ./

@@ -5,10 +5,10 @@ echo ""
 echo "This is slow and takes time on the first build"
 echo ""
 echo "**************************"
-#docker rmi --no-prune swir/swir:v0.3.2
-#docker build -t swir/swir:v0.3.2 -f Dockerfile_local .
+#docker rmi --no-prune swir/swir:v0.4.0
+#docker build -t swir/swir:v0.4.0 -f Dockerfile_local .
 
-default_version=v0.3.2
+default_version=v0.4.0
 
 if [ -z "$2" ]
 then

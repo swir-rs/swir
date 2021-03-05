@@ -1,4 +1,4 @@
-FROM rust:1.44.1 as swir_builder
+FROM rust:1.50 as swir_builder
 WORKDIR /swir
 
 COPY build.rs ./
