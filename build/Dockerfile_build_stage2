@@ -4,6 +4,6 @@ COPY --from=swir_builder:latest /swir/target/release/swir /swir
 ARG swir_config
 COPY $swir_config /swir.yaml
 ENV RUST_BACKTRACE=full
-ENV RUST_LOG=info,rusoto_core=info,swir=debug,rusoto_dynamodb=info
+ENV RUST_LOG=info,rusoto_core=info,swir=info,rusoto_dynamodb=info
 EXPOSE 8080 8090 50051
 ENTRYPOINT ["./swir"]

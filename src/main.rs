@@ -45,13 +45,10 @@ use tracing_futures::Instrument;
 static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
 
 #[tokio::main(worker_threads = 8)]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let swir_config = Swir::new();
     println!("{:?}", swir_config);
-    if let Err(e) = tracing_utils::init_tracer(&swir_config) {
-        println!("Some serious problem with logging system {}", e);
-        return;
-    };
+    let (_tracer, _guard) = tracing_utils::init_tracer(&swir_config)?;
 
     let mc: MemoryChannels = utils::config::create_memory_channels(&swir_config);
     let ip = swir_config.ip.clone();
@@ -81,6 +78,7 @@ async fn main() {
         utils::command_utils::run_java_command(command);
     }
     futures::future::join_all(tasks).await;
+    Ok(())
 }
 
 fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {

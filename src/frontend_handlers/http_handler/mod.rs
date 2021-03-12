@@ -372,7 +372,7 @@ async fn sub_unsubscribe_processor(
 
 #[instrument(
     name = "CLIENT_HTTP_INCOMING",
-    fields(correlation_id),
+    fields(method, uri, correlation_id),
     skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender)
 )]
 pub async fn handler(
@@ -386,9 +386,10 @@ pub async fn handler(
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
     let span = tracing_utils::from_http_headers(Span::current(), &req.headers());
+    span.record("method", &req.method().as_str());
+    span.record("uri", &req.uri().to_string().as_str());
 
     let headers = req.headers().clone();
-    debug!("Headers {:?}", headers);
 
     let correlation_id = if let Some(correlation_id) = extract_correlation_id_from_headers(&headers) {
         correlation_id
@@ -397,8 +398,9 @@ pub async fn handler(
         *response.body_mut() = Body::empty();
         return Ok(response);
     };
+
     span.record("correlation_id", &correlation_id.as_str());
-    debug!("Correlation id {}", correlation_id);
+    info!("Request {:?}", headers);
 
     let response = match (req.method(), req.uri().path()) {
         (&Method::POST, "/pubsub/publish") => {

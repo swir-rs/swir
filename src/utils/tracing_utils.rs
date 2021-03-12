@@ -1,5 +1,4 @@
 use super::config::*;
-use opentelemetry::global;
 use opentelemetry::propagation::TextMapPropagator;
 use opentelemetry::sdk::{
     propagation::TraceContextPropagator,
@@ -8,8 +7,11 @@ use opentelemetry::sdk::{
     Resource,
 };
 
+use opentelemetry_jaeger::Uninstall;
 use std::collections::HashMap;
-use tracing::Span;
+use std::{thread, time::Duration};
+use tracing::span;
+use tracing::span::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use http::{header::HeaderName, HeaderMap};
@@ -60,7 +62,7 @@ pub fn from_map(span: Span, map: &HashMap<String, String>) -> Span {
     span
 }
 
-pub fn init_tracer(config: &Swir) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_tracer(config: &Swir) -> Result<(Option<opentelemetry::sdk::trace::Tracer>, Option<Uninstall>), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let fmt_layer = fmt::layer().with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new("info")).unwrap();
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).finish();
@@ -69,9 +71,7 @@ pub fn init_tracer(config: &Swir) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(cfg) = &config.tracing {
         if let Some(open_telemetry) = &cfg.open_telemetry {
             debug!("Open telementry tracing selected {:?}", open_telemetry);
-
-            global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-            let (tracer, _uninstall) = opentelemetry_jaeger::new_pipeline()
+            let (tracer, uninstall) = opentelemetry_jaeger::new_pipeline()
                 .from_env()
                 .with_agent_endpoint(format!("{}:{}", open_telemetry.collector_address, open_telemetry.collector_port))
                 .with_service_name(&open_telemetry.service_name)
@@ -87,29 +87,21 @@ pub fn init_tracer(config: &Swir) -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .install()?;
 
-            let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+            let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer.clone());
             let registry = registry.with(opentelemetry);
             if let Err(e) = registry.try_init() {
                 println!("Unable to initialise the tracer {}", e);
                 Err(Box::new(e))
             } else {
-                info!("Using  opentelemetry tracer");
-                Ok(())
+                span!(tracing::Level::INFO, "faster_work").in_scope(|| thread::sleep(Duration::from_millis(10)));
+                Ok((Some(tracer), Some(uninstall)))
             }
         } else {
-            Ok(registry.try_init()?)
+            registry.try_init()?;
+            Ok((None, None))
         }
     } else {
-        Ok(registry.try_init()?)
+        registry.try_init()?;
+        Ok((None, None))
     }
-}
-
-#[allow(dead_code)]
-fn init_tracer_no_conf() -> Result<(), Box<dyn std::error::Error>> {
-    let fmt_layer = fmt::layer().with_target(false);
-    let filter_layer = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new("info")).unwrap();
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).finish();
-    let registry = tracing_subscriber::registry().with(filter_layer).with(fmt_layer);
-
-    Ok(registry.try_init()?)
 }
