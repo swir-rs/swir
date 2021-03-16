@@ -45,8 +45,11 @@ multimap="0.8"
 
 nats = {version="0.8",optional=true}
 
-opentelemetry = { version = "0.12", default-features = false, features = ["trace"] }
-opentelemetry-jaeger = "0.11"
+opentelemetry = { version = "0.12.0", features = ["tokio-support","trace","serialize"]}
+
+#, default-features = false, features = ["rt-tokio","trace","serialize"] }
+#opentelemetry-jaeger = "0.11"
+opentelemetry-otlp = { version= "0.5", features=["default"]}
 
 prost = { version = "0.7" }
 prost-derive = { version = "0.7" }
