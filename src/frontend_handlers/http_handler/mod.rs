@@ -387,13 +387,13 @@ pub async fn handler(
 ) -> Result<Response<Body>, hyper::Error> {
 
 
-    let mut labels = metric_registry.labels.clone();
+    let mut labels = metric_registry.http.labels.clone();
     let interface = &req.uri().path().to_string();
     labels.push(KeyValue::new("interface", interface.clone()));
 		
     let request_start = SystemTime::now();
 
-    metric_registry.http_incoming_counters.request_counter.add(1,&labels);
+    metric_registry.http.incoming_counters.request_counter.add(1,&labels);
     
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
@@ -511,9 +511,9 @@ pub async fn handler(
     };
 
 
-    bump_http_response_counters(&response.status(),&metric_registry.http_incoming_counters,&labels);
+    bump_http_response_counters(&response.status(),&metric_registry.http.incoming_counters,&labels);
     
-    metric_registry.http_incoming_histograms.request_response_time        .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()),&labels);
+    metric_registry.http.incoming_histograms.request_response_time        .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()),&labels);
     info!("{:?}", response);
     Ok(response)
 }
@@ -533,10 +533,10 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
 
-    let mut labels = metric_registry.labels.clone();
+    let mut labels = metric_registry.http.labels.clone();
     let interface = &uri.path().to_string();
     labels.push(KeyValue::new("interface", interface.clone()));    
-    metric_registry.http_outgoing_counters.request_counter.add(1,&labels);
+    metric_registry.http.outgoing_counters.request_counter.add(1,&labels);
     
     
     let mut builder = Request::builder().method(method).uri(&uri);
@@ -580,7 +580,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
         let maybe_response = client.request(req).await;
         let res = if let Ok(response) = maybe_response {
 
-	    bump_http_response_counters(&response.status(),&metric_registry.http_outgoing_counters,&labels);
+	    bump_http_response_counters(&response.status(),&metric_registry.http.outgoing_counters,&labels);
 	    	    	    
             let status_code = response.status().as_u16();
             let mut parsed_headers = HashMap::new();
@@ -623,15 +623,15 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
 	let maybe_response = client.request(req).await;
 	if let Ok(response) = maybe_response{
 	    if  response.status().is_server_error() {
-		metric_registry.http_outgoing_counters.server_error_counter.add(1,&labels);
+		metric_registry.http.outgoing_counters.server_error_counter.add(1,&labels);
 	    }
 	    
 	    if  response.status().is_client_error() {
-		metric_registry.http_outgoing_counters.client_error_counter.add(1,&labels);
+		metric_registry.http.outgoing_counters.client_error_counter.add(1,&labels);
 	    }
 	    
 	    if  response.status().is_success() {
-		metric_registry.http_outgoing_counters.success_counter.add(1,&labels);
+		metric_registry.http.outgoing_counters.success_counter.add(1,&labels);
 	    }
 
 	    
@@ -639,7 +639,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
             debug!("HTTP Response {:?}", maybe_response);
 	}
     }
-    metric_registry.http_outgoing_histograms.request_response_time
+    metric_registry.http.outgoing_histograms.request_response_time
         .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()),&labels);
     
 }

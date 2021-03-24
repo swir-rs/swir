@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
 
     tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config, &mc));
 
-    tasks.append(&mut start_pubsub_service(&swir_config, mc.messaging_memory_channels));
+    tasks.append(&mut start_pubsub_service(&swir_config, mc.messaging_memory_channels,metric_registry.clone()));
     tasks.append(&mut start_persistence_service(&swir_config, mc.persistence_memory_channels));
 
     if let Some(command) = client_executable {
@@ -249,8 +249,8 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
                     };
                     span
                 })
-                .add_service(metric_utils::MeteredService{inner: pub_sub_svc, labels: metric_registry.labels.clone(), counters: metric_registry.grpc_incoming_counters.clone(), histograms: metric_registry.grpc_incoming_histograms.clone()})
-                .add_service(metric_utils::MeteredService{inner: persistence_svc, labels: metric_registry.labels.clone(), counters: metric_registry.grpc_incoming_counters.clone(), histograms: metric_registry.grpc_incoming_histograms.clone()})
+                .add_service(metric_utils::MeteredService{inner: pub_sub_svc, labels: metric_registry.grpc.labels.clone(), counters: metric_registry.grpc.incoming_counters.clone(), histograms: metric_registry.grpc.incoming_histograms.clone()})
+                .add_service(metric_utils::MeteredService{inner: persistence_svc, labels: metric_registry.grpc.labels.clone(), counters: metric_registry.grpc.incoming_counters.clone(), histograms: metric_registry.grpc.incoming_histograms.clone()})
                 .add_service(service_invocation_svc)
                 .serve(grpc_addr.to_owned());
 
@@ -395,11 +395,11 @@ fn start_service_invocation_service_private_http_interface(swir_config: &Swir, m
     tasks
 }
 
-fn start_pubsub_service(swir_config: &Swir, mmc: MessagingMemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_pubsub_service(swir_config: &Swir, mmc: MessagingMemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let config = swir_config.pubsub.clone();
     let messaging = tokio::spawn(async move {
-        messaging_handlers::configure_broker(config, mmc).await;
+        messaging_handlers::configure_broker(config, mmc, metric_registry).await;
     });
     tasks.push(messaging);
     tasks

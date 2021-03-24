@@ -473,9 +473,9 @@ async fn send_request(mut client: NotificationApiClient<MeteredClientService>, c
 
     let mut req = Request::new(sreq.clone());
 
-    let mut labels = metric_registry.labels.clone();
+    let mut labels = metric_registry.grpc.labels.clone();
     labels.push(KeyValue::new("interface", "subscription_notification"));    
-    metric_registry.grpc_outgoing_counters.request_counter.add(1,&labels);
+    metric_registry.grpc.outgoing_counters.request_counter.add(1,&labels);
 
     if let Some((trace_header_name, trace_header)) = tracing_utils::get_grpc_tracing_header() {
         req.metadata_mut().insert(trace_header_name, trace_header);
@@ -501,9 +501,9 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
             if let Ok(channel) = endpoint {
                 let metered_client = MeteredClientService{
 		    inner: channel,
-		    labels: metric_registry.labels.clone(),
-		    counters : metric_registry.grpc_outgoing_counters.clone(),
-		    histograms: metric_registry.grpc_outgoing_histograms.clone()
+		    labels: metric_registry.grpc.labels.clone(),
+		    counters : metric_registry.grpc.outgoing_counters.clone(),
+		    histograms: metric_registry.grpc.outgoing_histograms.clone()
 		};
 
 		//		let client = NotificationApiClient::new(channel);

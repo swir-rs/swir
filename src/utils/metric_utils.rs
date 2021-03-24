@@ -39,16 +39,20 @@ pub struct Histograms{
 }
 
 #[derive(Debug, Clone)]
-pub struct MetricRegistry{
+pub struct InOutMetricInstruments{
     pub labels: Vec<KeyValue>,
-    pub http_incoming_counters: Counters,
-    pub http_outgoing_counters: Counters,
-    pub http_incoming_histograms: Histograms,
-    pub http_outgoing_histograms: Histograms,
-    pub grpc_incoming_counters: Counters,
-    pub grpc_outgoing_counters: Counters,
-    pub grpc_incoming_histograms: Histograms,
-    pub grpc_outgoing_histograms: Histograms
+    pub incoming_counters: Counters,
+    pub outgoing_counters: Counters,
+    pub incoming_histograms: Histograms,
+    pub outgoing_histograms: Histograms
+}
+
+#[derive(Debug, Clone)]
+pub struct MetricRegistry{    
+    pub http: InOutMetricInstruments,
+    pub grpc: InOutMetricInstruments,
+    pub kafka: InOutMetricInstruments,
+
 	    
 }
 
@@ -142,17 +146,58 @@ pub fn init_metrics(config: &Swir) -> Result<(MetricRegistry, Option<PushControl
             .init()
     };
 
+
+    let kafka_incoming_counters = Counters{
+	request_counter: meter.u64_counter("kafka_incoming_requests").with_description("Total number of KAFKA requests made.").init(),
+	success_counter: meter.u64_counter("kafka_incoming_success").with_description("Total number of success").init(),
+	client_error_counter: meter.u64_counter("kafka_incoming_clienterrors").with_description("Total number of client errors").init(),
+	server_error_counter:  meter.u64_counter("kafka_incoming_servererrors").with_description("Total number of server errors").init()
+    };
+    let kafka_incoming_histograms =  Histograms{
+	request_response_time: meter
+            .f64_value_recorder("kafka_incoming_request_duration_seconds")
+            .with_description("The KAFKA request latencies in seconds.")
+            .init()
+    };
+
+    let kafka_outgoing_counters = Counters{
+	request_counter: meter.u64_counter("kafka_outgoing_requests").with_description("Total number of KAFKA requests made.").init(),
+	success_counter: meter.u64_counter("kafka_outgoing_success").with_description("Total number of success").init(),
+	client_error_counter: meter.u64_counter("kafka_outgoing_clienterrors").with_description("Total number of client errors").init(),
+	server_error_counter:  meter.u64_counter("kafka_outgoing_servererrors").with_description("Total number of server errors").init()
+    };
+    let kafka_outgoing_histograms =  Histograms{
+	request_response_time: meter
+            .f64_value_recorder("kafka_outgoing_request_duration_seconds")
+            .with_description("The KAFKA request latencies in seconds.")
+            .init()
+    };
+
     
     let mr = MetricRegistry{
-	labels,
-	http_incoming_counters,
-	http_outgoing_counters,
-	http_incoming_histograms,
-	http_outgoing_histograms,
-	grpc_incoming_counters,
-	grpc_outgoing_counters,
-	grpc_incoming_histograms,
-	grpc_outgoing_histograms,
+	
+	http: InOutMetricInstruments{
+	    labels: labels.clone(),
+	    incoming_counters: http_incoming_counters,
+	    outgoing_counters: http_outgoing_counters,
+	    incoming_histograms: http_incoming_histograms,
+	    outgoing_histograms: http_outgoing_histograms
+	},
+	grpc: InOutMetricInstruments{
+	    labels: labels.clone(),
+	    incoming_counters: grpc_incoming_counters,
+	    outgoing_counters: grpc_outgoing_counters,
+	    incoming_histograms: grpc_incoming_histograms,
+	    outgoing_histograms: grpc_outgoing_histograms
+	},
+	kafka: InOutMetricInstruments{
+	    labels: labels.clone(),
+	    incoming_counters: kafka_incoming_counters,
+	    outgoing_counters: kafka_outgoing_counters,
+	    incoming_histograms: kafka_incoming_histograms,
+	    outgoing_histograms: kafka_outgoing_histograms
+	},
+	
     };
     Ok((mr, controller))
         
