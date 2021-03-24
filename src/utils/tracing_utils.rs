@@ -6,6 +6,9 @@ use opentelemetry::sdk::{
     trace::{IdGenerator, Sampler},
     Resource,
 };
+
+
+
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::Uninstall;
 use std::collections::HashMap;
@@ -105,3 +108,6 @@ pub fn init_tracer(config: &Swir) -> Result<(Option<opentelemetry::sdk::trace::T
         Ok((None, None))
     }
 }
+
+
+

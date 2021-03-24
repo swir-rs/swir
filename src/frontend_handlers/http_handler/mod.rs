@@ -1,6 +1,7 @@
 use crate::swir_common;
-use crate::utils::{structs::*, tracing_utils};
+use crate::utils::{structs::*, tracing_utils,metric_utils,metric_utils::bump_http_response_counters};
 use futures::StreamExt;
+use std::time::SystemTime;
 use http::HeaderValue;
 use hyper::{
     client::{connect::dns::GaiResolver, HttpConnector},
@@ -12,6 +13,7 @@ use tracing::Span;
 use tracing_futures::Instrument;
 
 use tokio::sync::{mpsc, oneshot, Mutex};
+use opentelemetry::KeyValue;
 
 #[derive(Debug)]
 enum PersistenceOperationType {
@@ -373,7 +375,7 @@ async fn sub_unsubscribe_processor(
 #[instrument(
     name = "CLIENT_HTTP_INCOMING",
     fields(method, uri, correlation_id),
-    skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender)
+    skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender, metric_registry)
 )]
 pub async fn handler(
     req: Request<Body>,
@@ -381,7 +383,18 @@ pub async fn handler(
     to_client_sender: mpsc::Sender<BackendToRestContext>,
     from_client_to_persistence_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
+    metric_registry: Arc<metric_utils::MetricRegistry>
 ) -> Result<Response<Body>, hyper::Error> {
+
+
+    let mut labels = metric_registry.labels.clone();
+    let interface = &req.uri().path().to_string();
+    labels.push(KeyValue::new("interface", interface.clone()));
+		
+    let request_start = SystemTime::now();
+
+    metric_registry.http_incoming_counters.request_counter.add(1,&labels);
+    
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -401,17 +414,17 @@ pub async fn handler(
 
     span.record("correlation_id", &correlation_id.as_str());
     info!("Request {:?}", headers);
-
+    
     let response = match (req.method(), req.uri().path()) {
-        (&Method::POST, "/pubsub/publish") => {
+        (&Method::POST, "/pubsub/publish") => {	    
             let whole_body = get_whole_body(req).await;
             let wb = whole_body.clone();
             let wb = String::from_utf8_lossy(&wb);
 
             let client_topic = extract_topic_from_headers(&headers).unwrap();
             let maybe_channel = find_channel_by_topic(&client_topic, &from_client_to_backend_channel_sender);
-            if let Some(channel) = maybe_channel {
-                info!("Publish start {}", wb);
+            if let Some(channel) = maybe_channel {		
+                info!("Publish start {}", wb);		
                 let p = PublishRequest {
                     correlation_id,
                     payload: whole_body,
@@ -451,14 +464,14 @@ pub async fn handler(
         }
 
         (&Method::POST, "/pubsub/subscribe") => {
-            if validate_content_type(&headers).is_none() {
-                return Ok(response);
-            }
-            let whole_body = get_whole_body(req).await;
-            response = sub_unsubscribe_handler(true, whole_body, correlation_id, &from_client_to_backend_channel_sender, to_client_sender).await;
-            response
+	    if validate_content_type(&headers).is_none() {
+		return Ok(response);
+	    }
+	    let whole_body = get_whole_body(req).await;
+	    response = sub_unsubscribe_handler(true, whole_body, correlation_id, &from_client_to_backend_channel_sender, to_client_sender).await;
+	    response
         }
-
+	
         (&Method::POST, "/pubsub/unsubscribe") => {
             if validate_content_type(&headers).is_none() {
                 return Ok(response);
@@ -481,7 +494,7 @@ pub async fn handler(
             let response = persistence_processor(PersistenceOperationType::Delete, correlation_id, &headers, req, &from_client_to_persistence_sender).await;
             response
         }
-        (&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {
+        (&Method::POST, path) if path.starts_with("/serviceinvocation/invoke/") => {	    
             if validate_content_type(&headers).is_none() {
                 response
             } else {
@@ -496,18 +509,36 @@ pub async fn handler(
             not_found
         }
     };
+
+
+    bump_http_response_counters(&response.status(),&metric_registry.http_incoming_counters,&labels);
+    
+    metric_registry.http_incoming_histograms.request_response_time        .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()),&labels);
     info!("{:?}", response);
     Ok(response)
 }
 
-async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendToRestContext) {
+async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendToRestContext,metric_registry: Arc<metric_utils::MetricRegistry>) {
     let req_params = ctx.request_params;
     let uri = req_params.uri;
     let upper = req_params.method.to_uppercase();
     let method = upper.as_bytes();
 
+    
+		
+    let request_start = SystemTime::now();
+
+    
+
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
+
+    let mut labels = metric_registry.labels.clone();
+    let interface = &uri.path().to_string();
+    labels.push(KeyValue::new("interface", interface.clone()));    
+    metric_registry.http_outgoing_counters.request_counter.add(1,&labels);
+    
+    
     let mut builder = Request::builder().method(method).uri(&uri);
 
     for (k, v) in req_params.headers.iter() {
@@ -548,6 +579,9 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     if let Some(sender) = ctx.sender {
         let maybe_response = client.request(req).await;
         let res = if let Ok(response) = maybe_response {
+
+	    bump_http_response_counters(&response.status(),&metric_registry.http_outgoing_counters,&labels);
+	    	    	    
             let status_code = response.status().as_u16();
             let mut parsed_headers = HashMap::new();
             for (header, value) in response.headers().iter() {
@@ -586,19 +620,39 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
             warn!("Problem with an internal communication {:?}", e);
         }
     } else {
-        let maybe_response = client.request(req).await;
-        debug!("HTTP Response {:?}", maybe_response);
+	let maybe_response = client.request(req).await;
+	if let Ok(response) = maybe_response{
+	    if  response.status().is_server_error() {
+		metric_registry.http_outgoing_counters.server_error_counter.add(1,&labels);
+	    }
+	    
+	    if  response.status().is_client_error() {
+		metric_registry.http_outgoing_counters.client_error_counter.add(1,&labels);
+	    }
+	    
+	    if  response.status().is_success() {
+		metric_registry.http_outgoing_counters.success_counter.add(1,&labels);
+	    }
+
+	    
+	}else{	    
+            debug!("HTTP Response {:?}", maybe_response);
+	}
     }
+    metric_registry.http_outgoing_histograms.request_response_time
+        .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()),&labels);
+    
 }
 
-pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
+pub async fn client_handler(rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>, metric_registry: Arc<metric_utils::MetricRegistry>) {
     let client = hyper::Client::builder().build_http();
     info!("Client done");
-    let mut rx = rx.lock().await;
+    let mut rx = rx.lock().await;    
     while let Some(ctx) = rx.recv().await {
         let client = client.clone();
         let parent_span = ctx.span.clone();
+	let metric_registry = metric_registry.clone();	
         let span = info_span!(parent: parent_span, "CLIENT_HTTP_OUTGOING");
-        tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
+        tokio::spawn(async move { send_request(client, ctx,metric_registry).instrument(span).await });
     }
 }
