@@ -39,7 +39,7 @@ pub async fn configure_broker(messaging: PubSub, mc: MessagingMemoryChannels, me
             }
             let mce = mce.unwrap();
             let rx = mce.from_client_receiver.to_owned();
-            let nats_broker = nats_handler::NatsBroker::new(nats, rx);
+            let nats_broker = nats_handler::NatsBroker::new(nats, rx, Arc::new(metric_registry.nats.clone()));
             let f = tokio::spawn(async move { nats_broker.configure_broker().await });
             futures.push(f);
         }

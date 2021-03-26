@@ -261,7 +261,7 @@ pub struct OpenTelemetry {
     pub collector_address: String,
     pub collector_port: u16,
     pub service_name: String,
-    pub metric_window: Option<u64>
+    pub metric_window: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -314,16 +314,13 @@ impl Swir {
     }
 }
 
-
-
-
 // #[async_trait]
 // trait Sender<T:Send+Sync+'static>{
 //     async fn send(&self, value: T) -> Result<(), mpsc::error::SendError<T>>;
 //     async fn closed(&self);
 //     fn try_send(&self, message: T) -> Result<(), mpsc::error::TrySendError<T>>;
 //     async fn send_timeout( &self, value: T,timeout: core::time::Duration)-> Result<(), mpsc::error::SendTimeoutError<T>>;
- 
+
 // }
 
 // #[async_trait]
@@ -367,9 +364,8 @@ impl Swir {
 //     }
 //     fn poll_recv(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<Option<T>>{
 // 	self.0.poll_recv(cx)
-//     }  
+//     }
 // }
-
 
 // Messaging
 //
@@ -406,7 +402,6 @@ fn create_messaging_channels(config: &Swir) -> MessagingMemoryChannels {
 
     let (to_client_sender_for_grpc, to_client_receiver_for_grpc): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
     let (to_client_sender_for_rest, to_client_receiver_for_rest): (mpsc::Sender<BackendToRestContext>, mpsc::Receiver<BackendToRestContext>) = mpsc::channel(20000);
-    
 
     let to_client_receiver_for_rest = Arc::new(Mutex::new(to_client_receiver_for_rest));
     let to_client_sender_for_grpc = to_client_sender_for_grpc;

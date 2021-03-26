@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use futures::stream::StreamExt;
 use nats::asynk::*;
+use std::time::SystemTime;
 use std::{collections::HashMap, sync::Arc};
 
 mod nats_msg_wrapper {
@@ -17,6 +18,7 @@ use crate::messaging_handlers::{client_handler::ClientHandler, Broker};
 
 use crate::utils::{
     config::{ClientTopicsConfiguration, Nats},
+    metric_utils::InOutMetricInstruments,
     structs::*,
 };
 use async_trait::async_trait;
@@ -32,6 +34,7 @@ pub struct NatsBroker {
     nats: Nats,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
     subscriptions: Arc<Mutex<Box<Subscriptions>>>,
+    metrics: Arc<InOutMetricInstruments>,
 }
 
 async fn send_request(subscriptions: &mut Vec<SubscribeRequest>, p: Vec<u8>) {
@@ -71,11 +74,12 @@ impl ClientHandler for NatsBroker {
 }
 
 impl NatsBroker {
-    pub fn new(config: Nats, rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>) -> Self {
+    pub fn new(config: Nats, rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>, metrics: Arc<InOutMetricInstruments>) -> Self {
         NatsBroker {
             nats: config,
             rx,
             subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
+            metrics,
         }
     }
 
@@ -97,10 +101,14 @@ impl NatsBroker {
 
                 Job::Publish(value) => {
                     let req = value;
+                    let counters = self.metrics.outgoing_counters.clone();
+                    let labels = self.metrics.labels.clone();
+                    let histograms = self.metrics.outgoing_histograms.clone();
 
                     async {
                         debug!("Publish {}", &req.correlation_id);
-
+                        counters.request_counter.add(1, &labels);
+                        let request_start = SystemTime::now();
                         let maybe_topic = self.nats.get_producer_topic_for_client_topic(&req.client_topic);
 
                         let mut headers = HashMap::new();
@@ -115,6 +123,7 @@ impl NatsBroker {
                                 let nats_publish = nats.publish(&topic, &p).await;
                                 match nats_publish {
                                     Ok(_) => {
+                                        counters.success_counter.add(1, &labels);
                                         let res = sender.send(MessagingResult {
                                             correlation_id: req.correlation_id,
                                             status: BackendStatusCodes::Ok("NATS is good".to_string()),
@@ -124,6 +133,7 @@ impl NatsBroker {
                                         }
                                     }
                                     Err(e) => {
+                                        counters.server_error_counter.add(1, &labels);
                                         let res = sender.send(MessagingResult {
                                             correlation_id: req.correlation_id,
                                             status: BackendStatusCodes::Error(e.to_string()),
@@ -146,6 +156,7 @@ impl NatsBroker {
                                 warn!("Can't send response back {:?}", res);
                             }
                         }
+                        histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
                     }
                     .instrument(span)
                     .await;
@@ -163,6 +174,9 @@ impl NatsBroker {
                 let group = ct.consumer_group.clone();
                 debug!("Subscribing to topic {:?}", &ct);
                 let subscriptions = subscriptions.clone();
+                let counters = self.metrics.incoming_counters.clone();
+                let labels = self.metrics.labels.clone();
+                let histograms = self.metrics.incoming_histograms.clone();
 
                 if let Ok(mut subscription) = nats.queue_subscribe(&topic, &group).await {
                     let job = task::spawn(async move {
@@ -171,6 +185,8 @@ impl NatsBroker {
                             let topic = msg.subject;
                             let maybe_msg = NatsMessageWrapper::decode(Bytes::from(msg.data));
                             let span = info_span!("NATS_INCOMING", topic = &topic.as_str());
+                            let request_start = SystemTime::now();
+                            counters.request_counter.add(1, &labels);
                             if let Ok(wrapper) = &maybe_msg {
                                 let span = tracing_utils::from_map(span, &wrapper.headers);
                                 let _sp = span.enter();
@@ -185,9 +201,12 @@ impl NatsBroker {
                                     }
                                 }
                                 send_request(&mut subs, wrapper.payload.to_owned()).await;
+                                counters.success_counter.add(1, &labels);
                             } else {
+                                counters.server_error_counter.add(1, &labels);
                                 warn!("Unable to decode NATS message {:?}", maybe_msg);
                             };
+                            histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
                         }
                     });
                     tasks.push(job);
