@@ -1,6 +1,6 @@
 use crate::utils::config::{StoreType, Stores};
-use crate::utils::structs::RestToPersistenceContext;
 use crate::utils::metric_utils;
+use crate::utils::structs::RestToPersistenceContext;
 use async_trait::async_trait;
 use futures::future::join_all;
 
@@ -16,14 +16,18 @@ trait Store {
     async fn configure_store(&self);
 }
 
-pub async fn configure_stores(stores: Stores, from_client_to_persistence_receivers: HashMap<StoreType, Vec<Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>>>, metric_registry: Arc<metric_utils::MetricRegistry>) {
+pub async fn configure_stores(
+    stores: Stores,
+    from_client_to_persistence_receivers: HashMap<StoreType, Vec<Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>>>,
+    metric_registry: Arc<metric_utils::MetricRegistry>,
+) {
     let mut futures = vec![];
 
     let receivers = from_client_to_persistence_receivers.get(&StoreType::Redis);
     if let Some(receivers) = receivers {
         for (i, redis_store) in stores.redis.iter().enumerate() {
             let receiver = &receivers[i];
-            let redis_store = redis_store::RedisStore::new(redis_store.to_owned(), receiver.clone(),Arc::new(metric_registry.redis.clone()));
+            let redis_store = redis_store::RedisStore::new(redis_store.to_owned(), receiver.clone(), Arc::new(metric_registry.redis.clone()));
             futures.push(tokio::spawn(async move { redis_store.configure_store().await }));
         }
     }

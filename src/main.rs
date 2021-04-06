@@ -48,7 +48,7 @@ static X_CORRRELATION_ID_HEADER_NAME: &str = "x-correlation-id";
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let swir_config = Swir::new();
     println!("{:?}", swir_config);
-    let (_tracer, _guard) = tracing_utils::init_tracer(&swir_config)?;
+    let _tracer = tracing_utils::init_tracer(&swir_config)?;
     let (metric_registry, _controller) = metric_utils::init_metrics(&swir_config)?;
     let metric_registry = Arc::new(metric_registry);
 
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config, &mc));
 
     tasks.append(&mut start_pubsub_service(&swir_config, mc.messaging_memory_channels, metric_registry.clone()));
-    tasks.append(&mut start_persistence_service(&swir_config, mc.persistence_memory_channels,metric_registry.clone()));
+    tasks.append(&mut start_persistence_service(&swir_config, mc.persistence_memory_channels, metric_registry.clone()));
     tasks.append(&mut vec![tokio::spawn(metric_utils::self_metrics(metric_registry.clone()))]);
 
     if let Some(command) = client_executable {
@@ -415,12 +415,12 @@ fn start_pubsub_service(swir_config: &Swir, mmc: MessagingMemoryChannels, metric
     tasks
 }
 
-fn start_persistence_service(swir_config: &Swir, pmc: PersistenceMemoryChannels,metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_persistence_service(swir_config: &Swir, pmc: PersistenceMemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let config = swir_config.clone();
     let pmc = pmc.from_client_to_persistence_receivers_map;
     let persistence = tokio::spawn(async move {
-        persistence_handlers::configure_stores(config.stores, pmc,metric_registry).await;
+        persistence_handlers::configure_stores(config.stores, pmc, metric_registry).await;
     });
     tasks.push(persistence);
     tasks

@@ -45,11 +45,11 @@ multimap="0.8"
 
 nats = {version="0.8",optional=true}
      
-opentelemetry = { version = "0.12.0", features = ["tokio-support","trace","serialize","metrics"]}
+opentelemetry = { version = "0.13.0", features = ["rt-tokio","trace","serialize","metrics"]}
 
 #, default-features = false, features = ["rt-tokio","trace","serialize"] }
-opentelemetry-jaeger = "0.11"	        
-opentelemetry-otlp = { version= "0.5", features=["default","metrics"]}
+opentelemetry-jaeger = "0.12"	        
+opentelemetry-otlp = { version= "0.6", features=["default","metrics"]}
 procinfo= "0.4"
 prost = { version = "0.7" }
 prost-derive = { version = "0.7" }
@@ -77,7 +77,7 @@ tower-layer = "0.3.1"
 tower="0.4"
 tracing = "0.1"
 tracing-futures = "0.2.5"	
-tracing-opentelemetry = {version = "0.11.0"}
+tracing-opentelemetry = {version = "0.12.0"}
 tracing-subscriber = { version = "0.2.16"}
 
 

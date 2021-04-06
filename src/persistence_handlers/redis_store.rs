@@ -1,16 +1,16 @@
 use crate::persistence_handlers::Store;
 use crate::utils::{
     config::{ClientToBackendDatabaseResolver, Redis},
+    metric_utils::OutMetricInstruments,
     structs::*,
-    metric_utils::OutMetricInstruments
 };
 
 use async_trait::async_trait;
-use std::time::SystemTime;
-use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 use opentelemetry::KeyValue;
 use redis::{pipe, Client, Commands, Connection};
+use std::sync::Arc;
+use std::time::SystemTime;
+use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 use tracing::info_span;
 
 #[derive(Debug)]
@@ -21,8 +21,8 @@ pub struct RedisStore {
 }
 
 impl RedisStore {
-    pub fn new(config: Redis, rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>,metrics: Arc<OutMetricInstruments>) -> Self {
-        RedisStore { config, rx,metrics }
+    pub fn new(config: Redis, rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>, metrics: Arc<OutMetricInstruments>) -> Self {
+        RedisStore { config, rx, metrics }
     }
 
     fn validate_mapping(&self, pr: &dyn PersistenceRequest) -> Option<String> {
@@ -151,7 +151,7 @@ impl RedisStore {
         info!("Redis is running");
         let mut rx = self.rx.lock().await;
 
-	let counters = self.metrics.outgoing_counters.clone();
+        let counters = self.metrics.outgoing_counters.clone();
         let mut labels = self.metrics.labels.clone();
         let histograms = self.metrics.outgoing_histograms.clone();
 
@@ -163,24 +163,24 @@ impl RedisStore {
             let request_start = SystemTime::now();
             match ctx.job {
                 PersistenceJobType::Store(value) => {
-		    labels.push(KeyValue::new("operation", "store"));
-		    counters.request_counter.add(1, &labels);
-		    self.store(&mut connection, value, sender);
+                    labels.push(KeyValue::new("operation", "store"));
+                    counters.request_counter.add(1, &labels);
+                    self.store(&mut connection, value, sender);
                 }
-		
+
                 PersistenceJobType::Retrieve(value) => {
-		    labels.push(KeyValue::new("operation", "retrieve"));
-		    counters.request_counter.add(1, &labels);
+                    labels.push(KeyValue::new("operation", "retrieve"));
+                    counters.request_counter.add(1, &labels);
                     self.retrieve(&mut connection, value, sender);
                 }
-		
+
                 PersistenceJobType::Delete(value) => {
-		    labels.push(KeyValue::new("operation", "delete"));
-		    counters.request_counter.add(1, &labels);
+                    labels.push(KeyValue::new("operation", "delete"));
+                    counters.request_counter.add(1, &labels);
                     self.delete(&mut connection, value, sender);
                 }
             }
-	    histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
+            histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
         }
     }
 }
