@@ -248,7 +248,7 @@ async fn persistence_processor(
                 correlation_id,
                 payload: whole_body,
                 table_name: database_name,
-                key: key,
+                key,
             };
 
             let job = RestToPersistenceContext {
@@ -262,7 +262,7 @@ async fn persistence_processor(
             let rr = RetrieveRequest {
                 correlation_id,
                 table_name: database_name,
-                key: key,
+                key,
             };
 
             let job = RestToPersistenceContext {
@@ -276,7 +276,7 @@ async fn persistence_processor(
             let rr = DeleteRequest {
                 correlation_id,
                 table_name: database_name,
-                key: key,
+                key,
             };
 
             let job = RestToPersistenceContext {
@@ -375,7 +375,7 @@ async fn sub_unsubscribe_processor(
 #[instrument(
     name = "CLIENT_HTTP_INCOMING",
     fields(method, uri, correlation_id),
-    skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender, metric_registry)
+    skip(req, from_client_to_backend_channel_sender, to_client_sender, from_client_to_persistence_sender, from_client_to_si_sender)
 )]
 pub async fn handler(
     req: Request<Body>,
@@ -383,16 +383,7 @@ pub async fn handler(
     to_client_sender: mpsc::Sender<BackendToRestContext>,
     from_client_to_persistence_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
     from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
-    metric_registry: Arc<metric_utils::MetricRegistry>,
 ) -> Result<Response<Body>, hyper::Error> {
-    let mut labels = metric_registry.http.labels.clone();
-    let interface = &req.uri().path().to_string();
-    labels.push(KeyValue::new("interface", interface.clone()));
-
-    let request_start = SystemTime::now();
-
-    metric_registry.http.incoming_counters.request_counter.add(1, &labels);
-
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_ACCEPTABLE;
 
@@ -508,13 +499,6 @@ pub async fn handler(
         }
     };
 
-    bump_http_response_counters(&response.status(), &metric_registry.http.incoming_counters, &labels);
-
-    metric_registry
-        .http
-        .incoming_histograms
-        .request_response_time
-        .record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
     info!("{:?}", response);
     Ok(response)
 }
@@ -548,7 +532,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
                 debug!("{}", msg);
                 let res = RESTRequestResult {
                     correlation_id: ctx.correlation_id,
-                    status: ClientCallStatusCodes::Error(msg.to_string()),
+                    status: ClientCallStatusCodes::Error(msg),
                     response_params: RESTResponseParams { ..Default::default() },
                 };
 

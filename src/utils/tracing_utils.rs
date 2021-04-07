@@ -9,8 +9,7 @@ use opentelemetry::sdk::{
 
 use opentelemetry::KeyValue;
 use std::collections::HashMap;
-use std::{thread, time::Duration};
-use tracing::span;
+
 use tracing::span::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -91,7 +90,6 @@ pub fn init_tracer(config: &Swir) -> Result<Option<opentelemetry::sdk::trace::Tr
                 println!("Unable to initialise the tracer {}", e);
                 Err(Box::new(e))
             } else {
-                span!(tracing::Level::INFO, "faster_work").in_scope(|| thread::sleep(Duration::from_millis(10)));
                 Ok(Some(tracer))
             }
         } else {

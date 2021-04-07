@@ -51,7 +51,7 @@ impl RedisStore {
                         let status = if r2 == "OK" {
                             BackendStatusCodes::Ok("REDIS is good".to_string())
                         } else {
-                            BackendStatusCodes::Ok(format!("Problem when storing key: {}", r2).to_string())
+                            BackendStatusCodes::Ok(format!("Problem when storing key: {}", r2))
                         };
 
                         PersistenceResult {
@@ -121,7 +121,7 @@ impl RedisStore {
                 match res {
                     Ok((r1, r2)) => {
                         let payload = if let Some(data) = r1 { data.into_bytes() } else { vec![] };
-                        let status = BackendStatusCodes::Ok(format!("Deleted keys : {:?}", r2).to_string());
+                        let status = BackendStatusCodes::Ok(format!("Deleted keys : {:?}", r2));
 
                         PersistenceResult {
                             correlation_id: sr.correlation_id,

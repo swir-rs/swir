@@ -123,9 +123,9 @@ impl<K: Copy + std::ops::AddAssign + std::convert::From<u16>> SimpleEndpointMana
     }
 
     async fn add(&mut self, uri: &str, endpoint: Endpoint) {
-        if let None = self.managed_endpoints.get(uri) {
+        if self.managed_endpoints.get(uri).is_none() {
             self.key_counter += K::from(1u16);
-            if let Ok(_) = self.rx.send(Change::Insert(self.key_counter, endpoint)).await {
+            if self.rx.send(Change::Insert(self.key_counter, endpoint)).await.is_ok() {
                 self.managed_endpoints.insert(uri.to_string(), self.key_counter);
             }
         } else {
@@ -312,7 +312,7 @@ impl ServiceInvocationService {
                                 warn!("{}", msg);
                                 let _res = sender.send(SIResult {
                                     correlation_id,
-                                    status: BackendStatusCodes::Error(msg.to_string()),
+                                    status: BackendStatusCodes::Error(msg),
                                     response: None,
                                 });
                             }

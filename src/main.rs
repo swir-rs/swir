@@ -28,12 +28,15 @@ pub mod swir_grpc_api {
 
 use std::{fs, net::SocketAddr, sync::Arc};
 
+use crate::metric_utils::bump_http_response_counters;
 use crate::utils::{config::*, metric_utils, tracing_utils};
 use frontend_handlers::http_handler::{client_handler, handler};
 use frontend_handlers::{grpc_handler, grpc_internal_handler};
 use http::header::HeaderName;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Server};
+use opentelemetry::KeyValue;
+use std::time::SystemTime;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tonic::transport::{Certificate, Identity, Server as TonicServer, ServerTlsConfig};
@@ -86,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
 
 fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
-    let http_addr = http_addr.clone();
+    let http_addr = *http_addr;
     let mmc = &mc.messaging_memory_channels;
     let pmc = &mc.persistence_memory_channels;
     let simc = &mc.si_memory_channels;
@@ -102,18 +105,41 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let client_sender_for_http = client_sender_for_http.to_owned();
-        let http_metric_registry = http_metric_registry.clone();
+        let metric_registry = http_metric_registry.clone();
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(
-                    req,
-                    from_client_to_messaging_sender.clone(),
-                    to_client_sender_for_rest.clone(),
-                    from_client_to_persistence_senders.clone(),
-                    client_sender_for_http.to_owned(),
-                    http_metric_registry.clone(),
-                )
+                let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
+                let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
+                let to_client_sender_for_rest = to_client_sender_for_rest.clone();
+                let client_sender_for_http = client_sender_for_http.to_owned();
+                let metric_registry = metric_registry.clone();
+
+                let method = req.method().clone();
+                let uri = req.uri().clone();
+                let mut labels = metric_registry.http.labels.clone();
+                labels.push(KeyValue::new("method", method.to_string()));
+                labels.push(KeyValue::new("uri", uri.to_string()));
+                let counters = metric_registry.http.incoming_counters.clone();
+                let histograms = metric_registry.http.incoming_histograms.clone();
+
+                Box::pin(async move {
+                    counters.request_counter.add(1, &labels);
+                    let request_start = SystemTime::now();
+                    let response = handler(
+                        req,
+                        from_client_to_messaging_sender,
+                        to_client_sender_for_rest,
+                        from_client_to_persistence_senders,
+                        client_sender_for_http,
+                    )
+                    .await;
+                    if let Ok(resp) = &response {
+                        bump_http_response_counters(&resp.status(), &counters, &labels);
+                    };
+                    histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
+                    response
+                })
             }))
         }
     });
@@ -121,24 +147,47 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
     let to_client_sender_for_rest = mmc.to_client_sender_for_rest.clone();
     let from_client_to_messaging_sender = mmc.from_client_to_messaging_sender.clone();
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
-    let https_metric_registry = metric_registry.clone();
+    let https_metric_registry = metric_registry;
     let https_service = make_service_fn(move |_| {
         let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let client_sender_for_https = client_sender_for_https.to_owned();
-        let https_metric_registry = https_metric_registry.clone();
+        let metric_registry = https_metric_registry.clone();
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                handler(
-                    req,
-                    from_client_to_messaging_sender.clone(),
-                    to_client_sender_for_rest.clone(),
-                    from_client_to_persistence_senders.clone(),
-                    client_sender_for_https.to_owned(),
-                    https_metric_registry.clone(),
-                )
+                let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
+                let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
+                let to_client_sender_for_rest = to_client_sender_for_rest.clone();
+                let client_sender_for_https = client_sender_for_https.to_owned();
+                let metric_registry = metric_registry.clone();
+
+                let method = req.method().clone();
+                let uri = req.uri().clone();
+                let mut labels = metric_registry.http.labels.clone();
+                labels.push(KeyValue::new("method", method.to_string()));
+                labels.push(KeyValue::new("uri", uri.to_string()));
+                let counters = metric_registry.http.incoming_counters.clone();
+                let histograms = metric_registry.http.incoming_histograms.clone();
+
+                Box::pin(async move {
+                    counters.request_counter.add(1, &labels);
+                    let request_start = SystemTime::now();
+                    let response = handler(
+                        req,
+                        from_client_to_messaging_sender,
+                        to_client_sender_for_rest,
+                        from_client_to_persistence_senders,
+                        client_sender_for_https,
+                    )
+                    .await;
+                    if let Ok(resp) = &response {
+                        bump_http_response_counters(&resp.status(), &counters, &labels);
+                    };
+                    histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
+                    response
+                })
             }))
         }
     });
@@ -176,6 +225,7 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
                     }
                 }
             }));
+
             let res = Server::builder(incoming).serve(https_service).instrument(span).await;
             if let Err(e) = res {
                 warn!("Problem starting HTTPs interface {:?}", e);
@@ -198,7 +248,7 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
 
 fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
-    let grpc_addr = grpc_addr.clone();
+    let grpc_addr = *grpc_addr;
     let mmc = &mc.messaging_memory_channels;
 
     let pmc = &mc.persistence_memory_channels;
@@ -214,12 +264,12 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     let incoming_metric_registry = metric_registry.clone();
     let grpc_client_interface = tokio::spawn(async move {
         let metric_registry = incoming_metric_registry.clone();
-        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_sender);
-        let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders);
+        let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_sender, metric_registry.clone());
+        let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders, metric_registry.clone());
 
         let pub_sub_svc = swir_grpc_api::pub_sub_api_server::PubSubApiServer::new(pub_sub_handler);
         let persistence_svc = swir_grpc_api::persistence_api_server::PersistenceApiServer::new(persistence_handler);
-        let service_invocation_handler = grpc_handler::SwirServiceInvocationApi::new(client_sender_for_public);
+        let service_invocation_handler = grpc_handler::SwirServiceInvocationApi::new(client_sender_for_public, metric_registry.clone());
         let service_invocation_svc = swir_grpc_api::service_invocation_api_server::ServiceInvocationApiServer::new(service_invocation_handler);
 
         let builder = if let Some(tls_config) = tls_config {
@@ -261,7 +311,15 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
                     counters: metric_registry.grpc.incoming_counters.clone(),
                     histograms: metric_registry.grpc.incoming_histograms.clone(),
                 })
-                .add_service(service_invocation_svc)
+                .add_service(metric_utils::MeteredService {
+                    inner: service_invocation_svc,
+                    labels: metric_registry.grpc.labels.clone(),
+                    counters: metric_registry.grpc.incoming_counters.clone(),
+                    histograms: metric_registry.grpc.incoming_histograms.clone(),
+                })
+                // .add_service(pub_sub_svc)
+                // .add_service(persistence_svc)
+                //.add_service(service_invocation_svc)
                 .serve(grpc_addr.to_owned());
 
             let res = grpc.await;
@@ -285,7 +343,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
 
 fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
-    let grpc_addr = grpc_addr.clone();
+    let grpc_addr = *grpc_addr;
 
     let simc = &mc.si_memory_channels;
     let si_config = swir_config.services.clone();
@@ -297,7 +355,7 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
             let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
             let service_invocation_svc = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
 
-            let cert = fs::read(tls_config.server_cert).map(|data| data).unwrap();
+            let cert = fs::read(tls_config.server_cert).unwrap();
             let key = fs::read(tls_config.server_key).unwrap();
             let server_identity = Identity::from_pem(cert, key);
             let client_ca_cert = fs::read(tls_config.client_ca_cert).unwrap();
@@ -430,7 +488,6 @@ fn start_rest_client_service(_: &Swir, mc: &MemoryChannels, metric_registry: Arc
     let mut tasks = vec![];
     let mmc = &mc.messaging_memory_channels;
     let to_client_receiver_for_rest = mmc.to_client_receiver_for_rest.clone();
-    let metric_registry = metric_registry.clone();
     let http_client = tokio::spawn(async move { client_handler(to_client_receiver_for_rest.clone(), metric_registry).await });
     tasks.push(http_client);
     tasks

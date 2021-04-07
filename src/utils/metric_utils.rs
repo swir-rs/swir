@@ -86,7 +86,7 @@ pub struct MetricRegistry {
     pub system: SystemInstruments,
 }
 
-pub fn bump_http_response_counters(status: &StatusCode, counters: &Counters, labels: &Vec<KeyValue>) {
+pub fn bump_http_response_counters(status: &StatusCode, counters: &Counters, labels: &[KeyValue]) {
     if status.is_server_error() {
         counters.server_error_counter.add(1, &labels);
     }
@@ -115,7 +115,7 @@ pub fn init_metrics(config: &Swir) -> Result<(MetricRegistry, Option<PushControl
                 // }
                 opentelemetry_otlp::new_metrics_pipeline(tokio::spawn, delayed_interval)
                     .with_export_config(export_config)
-                    .with_period(std::time::Duration::from_secs(open_telemetry.metric_window.unwrap_or_else(|| 30)))
+                    .with_period(std::time::Duration::from_secs(open_telemetry.metric_window.unwrap_or(30)))
                     .with_aggregator_selector(selectors::simple::Selector::Histogram(vec![0.0, 0.1, 0.2, 0.3, 0.5, 0.8, 1.3, 2.1]))
                     .build()?,
             );
@@ -303,7 +303,7 @@ pub fn init_metrics(config: &Swir) -> Result<(MetricRegistry, Option<PushControl
             outgoing_histograms: redis_outgoing_histograms,
         },
         system: SystemInstruments {
-            labels: labels.clone(),
+            labels,
             observers: resource_observers,
         },
     };
@@ -332,9 +332,13 @@ where
     }
 
     fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
+        let method = req.method().clone();
+        let uri = req.uri().clone();
         let mut svc = self.inner.clone();
         let counters = self.counters.clone();
-        let labels = self.labels.clone();
+        let mut labels = self.labels.clone();
+        labels.push(KeyValue::new("method", method.to_string()));
+        labels.push(KeyValue::new("uri", uri.to_string()));
         let histograms = self.histograms.clone();
         Box::pin(async move {
             counters.request_counter.add(1, &labels);
@@ -396,10 +400,12 @@ pub async fn self_metrics(metric_registry: Arc<MetricRegistry>) {
     }
 }
 
+type PinBoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
 impl Service<Request<BoxBody>> for MeteredClientService {
     type Response = Response<Body>;
     type Error = Box<dyn std::error::Error + Send + Sync>;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = PinBoxFuture<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx).map_err(Into::into)
@@ -407,11 +413,15 @@ impl Service<Request<BoxBody>> for MeteredClientService {
 
     fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
         let clone = self.inner.clone();
+        let method = req.method().clone();
+        let uri = req.uri().clone();
         // take the service that was ready
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let counters = self.counters.clone();
         let histograms = self.histograms.clone();
-        let labels = self.labels.clone();
+        let mut labels = self.labels.clone();
+        labels.push(KeyValue::new("method", method.to_string()));
+        labels.push(KeyValue::new("uri", uri.to_string()));
         Box::pin(async move {
             counters.request_counter.add(1, &labels);
             let request_start = SystemTime::now();
