@@ -71,10 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     tasks.append(&mut start_rest_client_service(&swir_config, &mc, metric_registry.clone()));
     tasks.append(&mut start_client_http_interface(&http_addr, &swir_config, &mc, metric_registry.clone()));
     tasks.append(&mut start_client_grpc_interface(&grpc_addr, &swir_config, &mc, metric_registry.clone()));
-    tasks.append(&mut start_internal_grpc_interface(&internal_grpc_addr, &swir_config, &mc));
-    tasks.append(&mut start_service_invocation_service(&swir_config, &mc));
+    tasks.append(&mut start_internal_grpc_interface(&internal_grpc_addr, &swir_config, &mc, metric_registry.clone()));
+    tasks.append(&mut start_service_invocation_service(&swir_config, &mc,metric_registry.clone()));
 
-    tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config, &mc));
+    tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config, &mc, metric_registry.clone()));
 
     tasks.append(&mut start_pubsub_service(&swir_config, mc.messaging_memory_channels, metric_registry.clone()));
     tasks.append(&mut start_persistence_service(&swir_config, mc.persistence_memory_channels, metric_registry.clone()));
@@ -98,14 +98,14 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
     let client_sender_for_http = simc.client_sender.clone();
     let client_sender_for_https = simc.client_sender.clone();
-    let http_metric_registry = metric_registry.clone();
+    let http_metric_registry = metric_registry.to_owned();
 
     let http_service = make_service_fn(move |_| {
         let from_client_to_messaging_sender = from_client_to_messaging_sender.clone();
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let client_sender_for_http = client_sender_for_http.to_owned();
-        let metric_registry = http_metric_registry.clone();
+        let metric_registry = http_metric_registry.to_owned();
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
@@ -113,17 +113,17 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
                 let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
                 let to_client_sender_for_rest = to_client_sender_for_rest.clone();
                 let client_sender_for_http = client_sender_for_http.to_owned();
-                let metric_registry = metric_registry.clone();
-
-                let method = req.method().clone();
-                let uri = req.uri().clone();
-                let mut labels = metric_registry.http.labels.clone();
-                labels.push(KeyValue::new("method", method.to_string()));
-                labels.push(KeyValue::new("uri", uri.to_string()));
-                let counters = metric_registry.http.incoming_counters.clone();
-                let histograms = metric_registry.http.incoming_histograms.clone();
+                let metric_registry = metric_registry.to_owned();
 
                 Box::pin(async move {
+                    let method = req.method();
+                    let uri = req.uri();
+                    let mut labels = metric_registry.http.labels.clone();
+                    labels.push(KeyValue::new("method", method.to_string()));
+                    labels.push(KeyValue::new("uri", uri.to_string()));
+                    let counters = &metric_registry.http.incoming_counters;
+                    let histograms = &metric_registry.http.incoming_histograms;
+
                     counters.request_counter.add(1, &labels);
                     let request_start = SystemTime::now();
                     let response = handler(
@@ -153,7 +153,7 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
         let to_client_sender_for_rest = to_client_sender_for_rest.clone();
         let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
         let client_sender_for_https = client_sender_for_https.to_owned();
-        let metric_registry = https_metric_registry.clone();
+        let metric_registry = https_metric_registry.to_owned();
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
@@ -161,17 +161,17 @@ fn start_client_http_interface(http_addr: &SocketAddr, swir_config: &Swir, mc: &
                 let from_client_to_persistence_senders = from_client_to_persistence_senders.clone();
                 let to_client_sender_for_rest = to_client_sender_for_rest.clone();
                 let client_sender_for_https = client_sender_for_https.to_owned();
-                let metric_registry = metric_registry.clone();
-
-                let method = req.method().clone();
-                let uri = req.uri().clone();
-                let mut labels = metric_registry.http.labels.clone();
-                labels.push(KeyValue::new("method", method.to_string()));
-                labels.push(KeyValue::new("uri", uri.to_string()));
-                let counters = metric_registry.http.incoming_counters.clone();
-                let histograms = metric_registry.http.incoming_histograms.clone();
+                let metric_registry = metric_registry.to_owned();
 
                 Box::pin(async move {
+                    let method = req.method();
+                    let uri = req.uri();
+                    let mut labels = metric_registry.http.labels.clone();
+                    labels.push(KeyValue::new("method", method.to_string()));
+                    labels.push(KeyValue::new("uri", uri.to_string()));
+                    let counters = &metric_registry.http.incoming_counters;
+                    let histograms = &metric_registry.http.incoming_histograms;
+
                     counters.request_counter.add(1, &labels);
                     let request_start = SystemTime::now();
                     let response = handler(
@@ -261,9 +261,9 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     let from_client_to_persistence_senders = pmc.from_client_to_persistence_senders.clone();
     let client_sender_for_public = simc.client_sender.clone();
     let tls_config = swir_config.tls_config.clone();
-    let incoming_metric_registry = metric_registry.clone();
+    let incoming_metric_registry = metric_registry.to_owned();
     let grpc_client_interface = tokio::spawn(async move {
-        let metric_registry = incoming_metric_registry.clone();
+        let metric_registry = incoming_metric_registry.to_owned();
         let pub_sub_handler = grpc_handler::SwirPubSubApi::new(from_client_to_messaging_sender.clone(), to_client_sender, metric_registry.clone());
         let persistence_handler = grpc_handler::SwirPersistenceApi::new(from_client_to_persistence_senders, metric_registry.clone());
 
@@ -317,9 +317,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
                     counters: metric_registry.grpc.incoming_counters.clone(),
                     histograms: metric_registry.grpc.incoming_histograms.clone(),
                 })
-                // .add_service(pub_sub_svc)
-                // .add_service(persistence_svc)
-                //.add_service(service_invocation_svc)
+
                 .serve(grpc_addr.to_owned());
 
             let res = grpc.await;
@@ -341,7 +339,7 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
     tasks
 }
 
-fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &MemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let grpc_addr = *grpc_addr;
 
@@ -354,6 +352,13 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
             let tls_config = services.tls_config;
             let service_invocation_handler = grpc_internal_handler::SwirServiceInvocationDiscoveryApi::new(client_sender_for_internal);
             let service_invocation_svc = swir_grpc_internal_api::service_invocation_discovery_api_server::ServiceInvocationDiscoveryApiServer::new(service_invocation_handler);
+
+            let svc = metric_utils::MeteredService {
+                inner: service_invocation_svc,
+                labels: metric_registry.grpc.labels.clone(),
+                counters: metric_registry.grpc.incoming_counters.clone(),
+                histograms: metric_registry.grpc.incoming_histograms.clone(),
+            };
 
             let cert = fs::read(tls_config.server_cert).unwrap();
             let key = fs::read(tls_config.server_key).unwrap();
@@ -383,7 +388,7 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
 
                     span
                 })
-                .add_service(service_invocation_svc)
+                .add_service(svc)
                 .serve(grpc_addr);
 
             let res = grpc.await;
@@ -397,7 +402,7 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
     tasks
 }
 
-fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels,metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let config = swir_config.services.clone();
     let internal_grpc_port = swir_config.internal_grpc_port;
@@ -412,7 +417,7 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels) -> 
             match services.resolver.resolver_type {
                 ResolverType::MDNS => {
                     if let Ok(resolver) = service_discovery::mdns_sd::MDNSServiceDiscovery::new(internal_grpc_port) {
-                        si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
+                        si_handlers::ServiceInvocationService::new(metric_registry).start(services, &resolver, receiver, to_si_http_client).await;
                     } else {
                         warn!("Problem with resolver");
                     };
@@ -423,7 +428,7 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels) -> 
                         let table = resolver_config.get("table");
                         if let (Some(r), Some(t)) = (region, table) {
                             if let Ok(resolver) = service_discovery::dynamodb_sd::DynamoDBServiceDiscovery::new(r.to_string(), t.to_string(), internal_grpc_port) {
-                                si_handlers::ServiceInvocationService::new().start(services, &resolver, receiver, to_si_http_client).await;
+                                si_handlers::ServiceInvocationService::new(metric_registry).start(services, &resolver, receiver, to_si_http_client).await;
                             } else {
                                 warn!("Problem with resolver");
                             };
@@ -439,7 +444,7 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels) -> 
     tasks
 }
 
-fn start_service_invocation_service_private_http_interface(swir_config: &Swir, mc: &MemoryChannels) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_service_invocation_service_private_http_interface(swir_config: &Swir, mc: &MemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let config = swir_config.services.clone();
     let simc = &mc.si_memory_channels;
@@ -450,7 +455,32 @@ fn start_service_invocation_service_private_http_interface(swir_config: &Swir, m
                 info!("Private invocation service enabled at {}", private_http_socket);
                 let http_service = make_service_fn(move |_| {
                     let client_sender_for_http = client_sender.to_owned();
-                    async move { Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| si_http_handler::handler(req, client_sender_for_http.to_owned()))) }
+                    let metric_registry = metric_registry.to_owned();
+                    async move {
+                        let client_sender_for_http = client_sender_for_http.to_owned();
+                        Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
+                            let client_sender_for_http = client_sender_for_http.to_owned();
+                            let metric_registry = metric_registry.to_owned();                            
+                            let mut labels = metric_registry.http.labels.clone();                            
+                            let counters = metric_registry.http.incoming_counters.clone();
+                            let histograms = metric_registry.http.incoming_histograms.clone();
+
+                            Box::pin(async move {
+				let method = req.method().clone();
+				let uri = req.uri().clone();
+				labels.push(KeyValue::new("method", method.to_string()));
+				labels.push(KeyValue::new("uri", uri.to_string()));
+                                counters.request_counter.add(1, &labels);
+                                let request_start = SystemTime::now();
+                                let response = si_http_handler::handler(req, client_sender_for_http.to_owned()).await;
+                                if let Ok(resp) = &response {
+                                    bump_http_response_counters(&resp.status(), &counters, &labels);
+                                };
+                                histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
+                                response
+                            })
+                        }))
+                    }
                 });
                 if let Err(e) = Server::bind(&private_http_socket).serve(http_service).await {
                     warn!("Problem starting HTTP interface {:?}", e);

@@ -514,11 +514,7 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     //TODO: this will drump stack trace. probably just an error. otherwise validate url in http_handler
     let uri = uri.parse::<hyper::Uri>().unwrap();
 
-    let mut labels = metric_registry.http.labels.clone();
-    let interface = &uri.path().to_string();
-    labels.push(KeyValue::new("interface", interface.clone()));
-    metric_registry.http.outgoing_counters.request_counter.add(1, &labels);
-
+    
     let mut builder = Request::builder().method(method).uri(&uri);
 
     for (k, v) in req_params.headers.iter() {
@@ -552,15 +548,17 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
     }
 
     let req = builder.body(Body::from(req_params.payload)).expect("request builder");
-
+    let mut labels = metric_registry.http.labels.clone();
+    labels.push(KeyValue::new("uri", req.uri().path().to_string()));    
+    //labels.push(KeyValue::new("method", req.method().to_string()));
+    metric_registry.http.outgoing_counters.request_counter.add(1, &labels);
     //    let p = String::from_utf8_lossy(req.as_bytes());
     debug!("HTTP Request {:?}", &uri);
-
-    if let Some(sender) = ctx.sender {
+    
+    if let Some(sender) = ctx.sender {	
         let maybe_response = client.request(req).await;
         let res = if let Ok(response) = maybe_response {
             bump_http_response_counters(&response.status(), &metric_registry.http.outgoing_counters, &labels);
-
             let status_code = response.status().as_u16();
             let mut parsed_headers = HashMap::new();
             for (header, value) in response.headers().iter() {
@@ -598,20 +596,10 @@ async fn send_request(client: Client<HttpConnector<GaiResolver>>, ctx: BackendTo
         if let Err(e) = sender.send(res) {
             warn!("Problem with an internal communication {:?}", e);
         }
-    } else {
+    } else {	
         let maybe_response = client.request(req).await;
         if let Ok(response) = maybe_response {
-            if response.status().is_server_error() {
-                metric_registry.http.outgoing_counters.server_error_counter.add(1, &labels);
-            }
-
-            if response.status().is_client_error() {
-                metric_registry.http.outgoing_counters.client_error_counter.add(1, &labels);
-            }
-
-            if response.status().is_success() {
-                metric_registry.http.outgoing_counters.success_counter.add(1, &labels);
-            }
+	    bump_http_response_counters(&response.status(), &metric_registry.http.outgoing_counters, &labels);            
         } else {
             debug!("HTTP Response {:?}", maybe_response);
         }

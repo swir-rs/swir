@@ -15,8 +15,6 @@ use tracing_futures::Instrument;
 use crate::utils::tracing_utils;
 use swir_grpc_api::notification_api_client::NotificationApiClient;
 use tokio::time::Duration;
-
-use opentelemetry::KeyValue;
 use tonic::transport::Endpoint;
 use tonic::Request;
 
@@ -484,7 +482,7 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
     }
 }
 
-async fn send_request(mut client: NotificationApiClient<MeteredClientService>, ctx: BackendToRestContext, metric_registry: Arc<metric_utils::MetricRegistry>) {
+async fn send_request(mut client: NotificationApiClient<MeteredClientService>, ctx: BackendToRestContext) {
     let sreq = swir_grpc_api::SubscribeNotification {
         correlation_id: ctx.correlation_id,
         payload: ctx.request_params.payload,
@@ -492,9 +490,9 @@ async fn send_request(mut client: NotificationApiClient<MeteredClientService>, c
 
     let mut req = Request::new(sreq.clone());
 
-    let mut labels = metric_registry.grpc.labels.clone();
-    labels.push(KeyValue::new("interface", "subscription_notification"));
-    metric_registry.grpc.outgoing_counters.request_counter.add(1, &labels);
+    //let mut labels = metric_registry.grpc.labels.clone();
+    // labels.push(KeyValue::new("interface", "subscription_notification"));
+    // metric_registry.grpc.outgoing_counters.request_counter.add(1, &labels);
 
     if let Some((trace_header_name, trace_header)) = tracing_utils::get_grpc_tracing_header() {
         req.metadata_mut().insert(trace_header_name, trace_header);
@@ -530,10 +528,9 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 let mut rx = rx.lock().await;
                 while let Some(ctx) = rx.recv().await {
                     let client = client.clone();
-                    let parent_span = ctx.span.clone();
-                    let metric_registry = metric_registry.clone();
+                    let parent_span = ctx.span.clone();                   
                     let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
-                    tokio::spawn(async move { send_request(client, ctx, metric_registry).instrument(span).await });
+                    tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
                 }
             } else {
                 warn!("Can't create a GRPC channel {:?} {:?}", client_config, endpoint);
