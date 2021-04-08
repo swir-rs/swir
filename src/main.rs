@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     tasks.append(&mut start_client_http_interface(&http_addr, &swir_config, &mc, metric_registry.clone()));
     tasks.append(&mut start_client_grpc_interface(&grpc_addr, &swir_config, &mc, metric_registry.clone()));
     tasks.append(&mut start_internal_grpc_interface(&internal_grpc_addr, &swir_config, &mc, metric_registry.clone()));
-    tasks.append(&mut start_service_invocation_service(&swir_config, &mc,metric_registry.clone()));
+    tasks.append(&mut start_service_invocation_service(&swir_config, &mc, metric_registry.clone()));
 
     tasks.append(&mut start_service_invocation_service_private_http_interface(&swir_config, &mc, metric_registry.clone()));
 
@@ -317,7 +317,6 @@ fn start_client_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc: &
                     counters: metric_registry.grpc.incoming_counters.clone(),
                     histograms: metric_registry.grpc.incoming_histograms.clone(),
                 })
-
                 .serve(grpc_addr.to_owned());
 
             let res = grpc.await;
@@ -402,7 +401,7 @@ fn start_internal_grpc_interface(grpc_addr: &SocketAddr, swir_config: &Swir, mc:
     tasks
 }
 
-fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels,metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
+fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels, metric_registry: Arc<MetricRegistry>) -> Vec<tokio::task::JoinHandle<()>> {
     let mut tasks = vec![];
     let config = swir_config.services.clone();
     let internal_grpc_port = swir_config.internal_grpc_port;
@@ -417,7 +416,9 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels,metr
             match services.resolver.resolver_type {
                 ResolverType::MDNS => {
                     if let Ok(resolver) = service_discovery::mdns_sd::MDNSServiceDiscovery::new(internal_grpc_port) {
-                        si_handlers::ServiceInvocationService::new(metric_registry).start(services, &resolver, receiver, to_si_http_client).await;
+                        si_handlers::ServiceInvocationService::new(metric_registry)
+                            .start(services, &resolver, receiver, to_si_http_client)
+                            .await;
                     } else {
                         warn!("Problem with resolver");
                     };
@@ -428,7 +429,9 @@ fn start_service_invocation_service(swir_config: &Swir, mc: &MemoryChannels,metr
                         let table = resolver_config.get("table");
                         if let (Some(r), Some(t)) = (region, table) {
                             if let Ok(resolver) = service_discovery::dynamodb_sd::DynamoDBServiceDiscovery::new(r.to_string(), t.to_string(), internal_grpc_port) {
-                                si_handlers::ServiceInvocationService::new(metric_registry).start(services, &resolver, receiver, to_si_http_client).await;
+                                si_handlers::ServiceInvocationService::new(metric_registry)
+                                    .start(services, &resolver, receiver, to_si_http_client)
+                                    .await;
                             } else {
                                 warn!("Problem with resolver");
                             };
@@ -460,16 +463,16 @@ fn start_service_invocation_service_private_http_interface(swir_config: &Swir, m
                         let client_sender_for_http = client_sender_for_http.to_owned();
                         Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
                             let client_sender_for_http = client_sender_for_http.to_owned();
-                            let metric_registry = metric_registry.to_owned();                            
-                            let mut labels = metric_registry.http.labels.clone();                            
+                            let metric_registry = metric_registry.to_owned();
+                            let mut labels = metric_registry.http.labels.clone();
                             let counters = metric_registry.http.incoming_counters.clone();
                             let histograms = metric_registry.http.incoming_histograms.clone();
 
                             Box::pin(async move {
-				let method = req.method().clone();
-				let uri = req.uri().clone();
-				labels.push(KeyValue::new("method", method.to_string()));
-				labels.push(KeyValue::new("uri", uri.to_string()));
+                                let method = req.method().clone();
+                                let uri = req.uri().clone();
+                                labels.push(KeyValue::new("method", method.to_string()));
+                                labels.push(KeyValue::new("uri", uri.to_string()));
                                 counters.request_counter.add(1, &labels);
                                 let request_start = SystemTime::now();
                                 let response = si_http_handler::handler(req, client_sender_for_http.to_owned()).await;

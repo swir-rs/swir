@@ -119,7 +119,7 @@ impl NatsBroker {
                             let wrapper = NatsMessageWrapper { headers, payload: req.payload };
                             let mut p = vec![];
                             let res = wrapper.encode(&mut p);
-                            if let Ok(_) = res {
+                            if res.is_ok() {
                                 let nats_publish = nats.publish(&topic, &p).await;
                                 match nats_publish {
                                     Ok(_) => {

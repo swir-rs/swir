@@ -528,7 +528,7 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 let mut rx = rx.lock().await;
                 while let Some(ctx) = rx.recv().await {
                     let client = client.clone();
-                    let parent_span = ctx.span.clone();                   
+                    let parent_span = ctx.span.clone();
                     let span = info_span!(parent: parent_span, "CLIENT_GRPC_OUTGOING");
                     tokio::spawn(async move { send_request(client, ctx).instrument(span).await });
                 }

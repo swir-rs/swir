@@ -3,7 +3,12 @@ pub mod si_http_handler;
 use crate::service_discovery::ServiceDiscovery;
 use crate::swir_common;
 use crate::swir_grpc_internal_api;
-use crate::utils::{config::Services, structs::*, tracing_utils,metric_utils::{MetricRegistry,MeteredClientService}};
+use crate::utils::{
+    config::Services,
+    metric_utils::{MeteredClientService, MetricRegistry},
+    structs::*,
+    tracing_utils,
+};
 
 use std::{collections::HashMap, fs, sync::Arc};
 use tokio::{
@@ -57,7 +62,7 @@ async fn invoke_handler(grpc_clients: Arc<Mutex<GrpcClients>>, sender: oneshot::
         if let Some((trace_header_name, trace_header)) = tracing_utils::get_grpc_tracing_header() {
             req.metadata_mut().insert(trace_header_name, trace_header);
         };
-		
+
         let resp = client_holder.client.invoke(req);
         let maybe_timeout = timeout(tokio::time::Duration::from_secs(2), resp).await;
         trace!("public_invoke_handler: got response on internal {:?}", maybe_timeout);
@@ -144,14 +149,14 @@ impl<K: Copy + std::ops::AddAssign + std::convert::From<u16>> SimpleEndpointMana
 
 pub struct ServiceInvocationService {
     grpc_clients: Arc<Mutex<GrpcClients>>,
-    metric_registry: Arc<MetricRegistry>
+    metric_registry: Arc<MetricRegistry>,
 }
 
 impl ServiceInvocationService {
     pub fn new(metric_registry: Arc<MetricRegistry>) -> Self {
         ServiceInvocationService {
             grpc_clients: Arc::new(Mutex::new(GrpcClients::new())),
-	    metric_registry,
+            metric_registry,
         }
     }
 
@@ -178,7 +183,7 @@ impl ServiceInvocationService {
         let domain_name = services.tls_config.domain_name.clone();
 
         let grpc_clients = self.grpc_clients.clone();
-	let metric_registry = self.metric_registry.clone();
+        let metric_registry = self.metric_registry.clone();
         let mut tasks = vec![];
         let h2 = tokio::spawn(async move {
             while let Some(resolved_addr) = resolve_receiver.recv().await {
@@ -214,13 +219,13 @@ impl ServiceInvocationService {
                             let manager = SimpleEndpointManager::new(tx);
                             let mut endpoint_manager = Box::new(manager.clone());
                             endpoint_manager.add(&uri, endpoint).await;
-			    let svc = MeteredClientService{
-				inner: channel,
-				labels: metric_registry.grpc.labels.clone(),
-				counters: metric_registry.grpc.outgoing_counters.clone(),
-				histograms: metric_registry.grpc.outgoing_histograms.clone(),				
-			    };
-			    
+                            let svc = MeteredClientService {
+                                inner: channel,
+                                labels: metric_registry.grpc.labels.clone(),
+                                counters: metric_registry.grpc.outgoing_counters.clone(),
+                                histograms: metric_registry.grpc.outgoing_histograms.clone(),
+                            };
+
                             let client = GrpcClient::new(svc);
 
                             grpc_clients.insert(
@@ -246,7 +251,7 @@ impl ServiceInvocationService {
         let client_endpoint_mapping = services.announce_services.clone();
         let mut receiver = receiver.lock().await;
         while let Some(ctx) = receiver.recv().await {
-            let grpc_clients = self.grpc_clients.clone();	    
+            let grpc_clients = self.grpc_clients.clone();
             let http_sender = http_sender.clone();
             let client_endpoint_mapping = client_endpoint_mapping.clone();
             let parent_span = ctx.span;

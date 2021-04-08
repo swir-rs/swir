@@ -413,19 +413,19 @@ impl Service<Request<BoxBody>> for MeteredClientService {
 
     fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
         let clone = self.inner.clone();
-        
+
         // take the service that was ready
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let counters = self.counters.clone();
         let histograms = self.histograms.clone();
         let mut labels = self.labels.clone();
-	
+
         Box::pin(async move {
-	    let method = req.method().clone();
-            let uri = req.uri().clone();	    
+            let method = req.method().clone();
+            let uri = req.uri().clone();
             labels.push(KeyValue::new("method", method.to_string()));
             labels.push(KeyValue::new("uri", uri.to_string()));
-	    
+
             counters.request_counter.add(1, &labels);
             let request_start = SystemTime::now();
             let result = inner.call(req).await.map_err(Into::into);
