@@ -7,10 +7,9 @@ use opentelemetry::sdk::{
     Resource,
 };
 
-use opentelemetry_jaeger::Uninstall;
+use opentelemetry::KeyValue;
 use std::collections::HashMap;
-use std::{thread, time::Duration};
-use tracing::span;
+
 use tracing::span::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -62,7 +61,7 @@ pub fn from_map(span: Span, map: &HashMap<String, String>) -> Span {
     span
 }
 
-pub fn init_tracer(config: &Swir) -> Result<(Option<opentelemetry::sdk::trace::Tracer>, Option<Uninstall>), Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn init_tracer(config: &Swir) -> Result<Option<opentelemetry::sdk::trace::Tracer>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let fmt_layer = fmt::layer().with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new("info")).unwrap();
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).finish();
@@ -71,21 +70,19 @@ pub fn init_tracer(config: &Swir) -> Result<(Option<opentelemetry::sdk::trace::T
     if let Some(cfg) = &config.tracing {
         if let Some(open_telemetry) = &cfg.open_telemetry {
             debug!("Open telementry tracing selected {:?}", open_telemetry);
-            let (tracer, uninstall) = opentelemetry_jaeger::new_pipeline()
-                .from_env()
-                .with_agent_endpoint(format!("{}:{}", open_telemetry.collector_address, open_telemetry.collector_port))
-                .with_service_name(&open_telemetry.service_name)
-                .with_tags(vec![])
+            let tracer = opentelemetry_otlp::new_pipeline()
+                .with_endpoint(format!("grpc://{}:{}", open_telemetry.collector_address, open_telemetry.collector_port))
                 .with_trace_config(
                     trace::config()
-                        .with_default_sampler(Sampler::AlwaysOn)
+                        .with_sampler(Sampler::AlwaysOn)
                         .with_id_generator(IdGenerator::default())
                         .with_max_events_per_span(64)
                         .with_max_attributes_per_span(16)
                         .with_max_events_per_span(16)
-                        .with_resource(Resource::new(vec![])),
+                        .with_resource(Resource::new(vec![KeyValue::new("service.name", open_telemetry.service_name.clone())])),
                 )
-                .install()?;
+                .with_tonic()
+                .install_batch(opentelemetry::runtime::Tokio)?;
 
             let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer.clone());
             let registry = registry.with(opentelemetry);
@@ -93,15 +90,14 @@ pub fn init_tracer(config: &Swir) -> Result<(Option<opentelemetry::sdk::trace::T
                 println!("Unable to initialise the tracer {}", e);
                 Err(Box::new(e))
             } else {
-                span!(tracing::Level::INFO, "faster_work").in_scope(|| thread::sleep(Duration::from_millis(10)));
-                Ok((Some(tracer), Some(uninstall)))
+                Ok(Some(tracer))
             }
         } else {
             registry.try_init()?;
-            Ok((None, None))
+            Ok(None)
         }
     } else {
         registry.try_init()?;
-        Ok((None, None))
+        Ok(None)
     }
 }

@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::future::FutureExt;
-
 use futures::stream::StreamExt;
 use rdkafka::{
     client::ClientContext,
@@ -13,19 +12,21 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
     TopicPartitionList,
 };
+use std::time::SystemTime;
 use tokio::sync::{mpsc, Mutex};
 
 use crate::messaging_handlers::Broker;
 
 use crate::utils::{
     config::{ClientTopicsConfiguration, Kafka},
+    metric_utils::InOutMetricInstruments,
     structs::*,
 };
 
 use crate::messaging_handlers::client_handler::ClientHandler;
 
 use crate::tracing_utils;
-use tracing::{info_span, Span};
+use tracing::{info_span, span::Span};
 use tracing_futures::Instrument;
 
 type Subscriptions = HashMap<String, Box<Vec<SubscribeRequest>>>;
@@ -37,6 +38,7 @@ pub struct KafkaBroker {
     kafka: Kafka,
     rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>,
     subscriptions: Arc<Mutex<Box<Subscriptions>>>,
+    metrics: Arc<InOutMetricInstruments>,
 }
 
 impl ConsumerContext for CustomContext {
@@ -99,11 +101,12 @@ impl ClientHandler for KafkaBroker {
 }
 
 impl KafkaBroker {
-    pub fn new(config: Kafka, rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>) -> Self {
+    pub fn new(config: Kafka, rx: Arc<Mutex<mpsc::Receiver<RestToMessagingContext>>>, metrics: Arc<InOutMetricInstruments>) -> Self {
         KafkaBroker {
             kafka: config,
             rx,
             subscriptions: Arc::new(Mutex::new(Box::new(HashMap::new()))),
+            metrics,
         }
     }
 
@@ -116,6 +119,7 @@ impl KafkaBroker {
 
         info!("Kafka running");
         let mut rx = self.rx.lock().await;
+
         while let Some(ctx) = rx.recv().await {
             let parent_span = ctx.span;
             let span = info_span!(parent: &parent_span, "KAFKA_OUTGOING");
@@ -132,11 +136,18 @@ impl KafkaBroker {
                 Job::Publish(value) => {
                     let req = value;
                     let maybe_topic = self.kafka.get_producer_topic_for_client_topic(&req.client_topic);
+                    let counters = self.metrics.outgoing_counters.clone();
+                    let labels = self.metrics.labels.clone();
+                    let histograms = self.metrics.outgoing_histograms.clone();
+
                     let kafka_producer = kafka_producer.clone();
                     if let Some(topic) = maybe_topic {
                         tokio::spawn(
                             async move {
                                 debug!("Publish {}", req);
+                                counters.request_counter.add(1, &labels);
+                                let request_start = SystemTime::now();
+
                                 let headers = if let Some((header_name, header_value)) = tracing_utils::get_tracing_header() {
                                     OwnedHeaders::new().add(header_name, header_value.as_bytes())
                                 } else {
@@ -144,18 +155,28 @@ impl KafkaBroker {
                                 };
                                 let payload = req.payload.clone();
                                 let r = FutureRecord::to(topic.as_str()).payload(&payload).key("some key").headers(headers);
-                                let kafka_send = kafka_producer.send(r, Duration::from_millis(0)).map(move |status| match status {
-                                    Ok(_) => sender.send(MessagingResult {
-                                        correlation_id: req.correlation_id,
-                                        status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
-                                    }),
-                                    Err((e, _m)) => sender.send(MessagingResult {
-                                        correlation_id: req.correlation_id,
-                                        status: BackendStatusCodes::Error(e.to_string()),
-                                    }),
+                                let new_labels = labels.clone();
+                                let kafka_send = kafka_producer.send(r, Duration::from_millis(0)).map(move |status| {
+                                    let labels = new_labels;
+                                    match status {
+                                        Ok(_) => {
+                                            counters.success_counter.add(1, &labels);
+                                            sender.send(MessagingResult {
+                                                correlation_id: req.correlation_id,
+                                                status: BackendStatusCodes::Ok("KAFKA is good".to_string()),
+                                            })
+                                        }
+                                        Err((e, _m)) => {
+                                            counters.server_error_counter.add(1, &labels);
+                                            sender.send(MessagingResult {
+                                                correlation_id: req.correlation_id,
+                                                status: BackendStatusCodes::Error(e.to_string()),
+                                            })
+                                        }
+                                    }
                                 });
-
                                 kafka_send.await.expect("Should not panic!");
+                                histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
                             }
                             .instrument(span),
                         );
@@ -216,15 +237,22 @@ impl KafkaBroker {
             info!("Subsciptions {:?}", subscriptions);
         }
 
+        let counters = self.metrics.incoming_counters.clone();
+        let labels = self.metrics.labels.clone();
+        let histograms = self.metrics.incoming_histograms.clone();
+
         let mut message_stream = consumer.stream();
         while let Some(message) = message_stream.next().await {
             match message {
                 Err(e) => warn!("Kafka error: {}", e),
                 Ok(m) => {
+                    counters.request_counter.add(1, &labels);
+                    let request_start = SystemTime::now();
                     let payload = match m.payload_view::<str>() {
                         None => "",
                         Some(Ok(s)) => s,
                         Some(Err(e)) => {
+                            counters.server_error_counter.add(1, &labels);
                             warn!("Error while deserializing message payload: {:?}", e);
                             ""
                         }
@@ -243,10 +271,11 @@ impl KafkaBroker {
                     //                            let header = headers.get(i).unwrap();
                     //                            info!("  Header {:#?}: {:?}", header.0, <header.1);
                     //                        }
-                    //                    }
+                    //
                     let t = String::from(m.topic());
                     let vec = Vec::from(payload);
                     let mut subscriptions = self.subscriptions.lock().await;
+
                     if let Some(mut subs) = subscriptions.get_mut(&t) {
                         if subs.len() != 0 {
                             let mut span = info_span!("KAFKA_INCOMING");
@@ -258,10 +287,13 @@ impl KafkaBroker {
                                 }
                             }
                             send_request(&mut subs, vec).instrument(span).await;
+                            counters.success_counter.add(1, &labels);
                         } else {
+                            counters.server_error_counter.add(1, &labels);
                             warn!("No subscriptions for {} {}", t, String::from_utf8_lossy(&vec));
                         }
                     }
+                    histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
                 }
             };
         }

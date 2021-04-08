@@ -3,7 +3,12 @@ pub mod si_http_handler;
 use crate::service_discovery::ServiceDiscovery;
 use crate::swir_common;
 use crate::swir_grpc_internal_api;
-use crate::utils::{config::Services, structs::*, tracing_utils};
+use crate::utils::{
+    config::Services,
+    metric_utils::{MeteredClientService, MetricRegistry},
+    structs::*,
+    tracing_utils,
+};
 
 use std::{collections::HashMap, fs, sync::Arc};
 use tokio::{
@@ -21,7 +26,7 @@ use tower::discover::Change;
 use tracing::{info_span, Span};
 use tracing_futures::Instrument;
 
-type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<Channel>;
+type GrpcClient = swir_grpc_internal_api::service_invocation_discovery_api_client::ServiceInvocationDiscoveryApiClient<MeteredClientService>;
 type GrpcClients = HashMap<String, ClientHolder<String>>;
 
 fn map_client_to_backend_status_calls(ccsc: ClientCallStatusCodes) -> (BackendStatusCodes, swir_common::InvokeResult) {
@@ -123,9 +128,9 @@ impl<K: Copy + std::ops::AddAssign + std::convert::From<u16>> SimpleEndpointMana
     }
 
     async fn add(&mut self, uri: &str, endpoint: Endpoint) {
-        if let None = self.managed_endpoints.get(uri) {
+        if self.managed_endpoints.get(uri).is_none() {
             self.key_counter += K::from(1u16);
-            if let Ok(_) = self.rx.send(Change::Insert(self.key_counter, endpoint)).await {
+            if self.rx.send(Change::Insert(self.key_counter, endpoint)).await.is_ok() {
                 self.managed_endpoints.insert(uri.to_string(), self.key_counter);
             }
         } else {
@@ -144,12 +149,14 @@ impl<K: Copy + std::ops::AddAssign + std::convert::From<u16>> SimpleEndpointMana
 
 pub struct ServiceInvocationService {
     grpc_clients: Arc<Mutex<GrpcClients>>,
+    metric_registry: Arc<MetricRegistry>,
 }
 
 impl ServiceInvocationService {
-    pub fn new() -> Self {
+    pub fn new(metric_registry: Arc<MetricRegistry>) -> Self {
         ServiceInvocationService {
             grpc_clients: Arc::new(Mutex::new(GrpcClients::new())),
+            metric_registry,
         }
     }
 
@@ -176,6 +183,7 @@ impl ServiceInvocationService {
         let domain_name = services.tls_config.domain_name.clone();
 
         let grpc_clients = self.grpc_clients.clone();
+        let metric_registry = self.metric_registry.clone();
         let mut tasks = vec![];
         let h2 = tokio::spawn(async move {
             while let Some(resolved_addr) = resolve_receiver.recv().await {
@@ -211,7 +219,14 @@ impl ServiceInvocationService {
                             let manager = SimpleEndpointManager::new(tx);
                             let mut endpoint_manager = Box::new(manager.clone());
                             endpoint_manager.add(&uri, endpoint).await;
-                            let client = GrpcClient::new(channel);
+                            let svc = MeteredClientService {
+                                inner: channel,
+                                labels: metric_registry.grpc.labels.clone(),
+                                counters: metric_registry.grpc.outgoing_counters.clone(),
+                                histograms: metric_registry.grpc.outgoing_histograms.clone(),
+                            };
+
+                            let client = GrpcClient::new(svc);
 
                             grpc_clients.insert(
                                 service_name.clone(),
@@ -312,7 +327,7 @@ impl ServiceInvocationService {
                                 warn!("{}", msg);
                                 let _res = sender.send(SIResult {
                                     correlation_id,
-                                    status: BackendStatusCodes::Error(msg.to_string()),
+                                    status: BackendStatusCodes::Error(msg),
                                     response: None,
                                 });
                             }

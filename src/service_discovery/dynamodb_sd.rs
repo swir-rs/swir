@@ -5,11 +5,9 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use currenttimemillis::current_time_milliseconds;
-use get_if_addrs;
 use multimap::MultiMap;
 use rand::distributions::Alphanumeric;
 use rand::{rngs, Rng, SeedableRng};
-use rusoto_dynamodb;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -113,7 +111,7 @@ impl DynamoDBServiceDiscovery {
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(5));
-            while let Some(_) = Option::Some(interval.tick().await) {
+            while Option::Some(interval.tick().await).is_some() {
                 Self::announce_internal(&client, &table, &announced_services, &instance_name, &fqdn, &ip, port).await;
                 Self::retrieve(&client, &table, &listeners).await;
             }

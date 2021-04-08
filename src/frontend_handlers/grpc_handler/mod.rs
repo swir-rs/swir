@@ -8,14 +8,13 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use crate::swir_common;
 use crate::swir_grpc_api;
 use crate::utils::config::ClientConfig;
-use crate::utils::structs::*;
+use crate::utils::{metric_utils, metric_utils::MeteredClientService, structs::*};
 use tracing::Span;
 use tracing_futures::Instrument;
 
 use crate::utils::tracing_utils;
 use swir_grpc_api::notification_api_client::NotificationApiClient;
 use tokio::time::Duration;
-
 use tonic::transport::Endpoint;
 use tonic::Request;
 
@@ -100,6 +99,7 @@ impl fmt::Display for swir_grpc_api::DeleteRequest {
 pub struct SwirPubSubApi {
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
     pub to_client_sender: mpsc::Sender<BackendToRestContext>,
+    pub metric_registry: Arc<metric_utils::MetricRegistry>,
 }
 
 impl SwirPubSubApi {
@@ -107,10 +107,15 @@ impl SwirPubSubApi {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 
-    pub fn new(from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>, to_client_sender: mpsc::Sender<BackendToRestContext>) -> SwirPubSubApi {
+    pub fn new(
+        from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToMessagingContext>>,
+        to_client_sender: mpsc::Sender<BackendToRestContext>,
+        metric_registry: Arc<metric_utils::MetricRegistry>,
+    ) -> SwirPubSubApi {
         SwirPubSubApi {
             from_client_to_backend_channel_sender,
             to_client_sender,
+            metric_registry,
         }
     }
     async fn send_to_backend(&self, tx: &mut mpsc::Sender<RestToMessagingContext>, local_rx: oneshot::Receiver<MessagingResult>, ctx: RestToMessagingContext) -> String {
@@ -174,6 +179,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
                 correlation_id: request.correlation_id,
                 status: msg,
             };
+
             Ok(tonic::Response::new(reply))
         } else {
             Err(tonic::Status::invalid_argument("Invalid topic"))
@@ -182,6 +188,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 
     async fn subscribe(&self, request: tonic::Request<swir_grpc_api::SubscribeRequest>) -> Result<tonic::Response<swir_grpc_api::SubscribeResponse>, tonic::Status> {
         let request = request.into_inner();
+
         info!("Subscribe {}", request);
 
         if let Some(tx) = self.find_channel(&request.topic) {
@@ -197,6 +204,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
             };
             let mut tx = tx.clone();
             let msg = self.subscribe_unsubscribe_processor(true, p, &mut tx).await;
+
             Ok(tonic::Response::new(swir_grpc_api::SubscribeResponse {
                 correlation_id: request.correlation_id.clone(),
                 status: msg,
@@ -208,6 +216,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 
     async fn unsubscribe(&self, request: tonic::Request<swir_grpc_api::UnsubscribeRequest>) -> Result<tonic::Response<swir_grpc_api::UnsubscribeResponse>, tonic::Status> {
         let request = request.into_inner();
+
         info!("Unsubscribe {}", request);
 
         if let Some(tx) = self.find_channel(&request.topic) {
@@ -237,6 +246,7 @@ impl swir_grpc_api::pub_sub_api_server::PubSubApi for SwirPubSubApi {
 #[derive(Debug)]
 pub struct SwirPersistenceApi {
     pub from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>,
+    pub metric_registry: Arc<metric_utils::MetricRegistry>,
 }
 
 impl SwirPersistenceApi {
@@ -244,9 +254,10 @@ impl SwirPersistenceApi {
         self.from_client_to_backend_channel_sender.get(topic_name)
     }
 
-    pub fn new(from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>) -> SwirPersistenceApi {
+    pub fn new(from_client_to_backend_channel_sender: HashMap<String, mpsc::Sender<RestToPersistenceContext>>, metric_registry: Arc<metric_utils::MetricRegistry>) -> SwirPersistenceApi {
         SwirPersistenceApi {
             from_client_to_backend_channel_sender,
+            metric_registry,
         }
     }
 }
@@ -255,6 +266,7 @@ impl SwirPersistenceApi {
 impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceApi {
     async fn store(&self, request: tonic::Request<swir_grpc_api::StoreRequest>) -> Result<tonic::Response<swir_grpc_api::StoreResponse>, tonic::Status> {
         let request = request.into_inner();
+
         info!("Store {}", request);
         if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::StoreRequest {
@@ -298,6 +310,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
     }
     async fn retrieve(&self, request: tonic::Request<swir_grpc_api::RetrieveRequest>) -> Result<tonic::Response<swir_grpc_api::RetrieveResponse>, tonic::Status> {
         let request = request.into_inner();
+
         info!("Retrieve {}", request);
         if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::RetrieveRequest {
@@ -332,8 +345,8 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
                 }
             } else {
                 let mut msg = String::new();
-                msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
 
+                msg.push_str(StatusCode::INTERNAL_SERVER_ERROR.as_str());
                 swir_grpc_api::RetrieveResponse {
                     correlation_id: request.correlation_id,
                     database_name: request.database_name,
@@ -350,6 +363,7 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
 
     async fn delete(&self, request: tonic::Request<swir_grpc_api::DeleteRequest>) -> Result<tonic::Response<swir_grpc_api::DeleteResponse>, tonic::Status> {
         let request = request.into_inner();
+
         info!("Delete {}", request);
         if let Some(tx) = self.find_channel(&request.database_name) {
             let p = crate::utils::structs::DeleteRequest {
@@ -403,11 +417,15 @@ impl swir_grpc_api::persistence_api_server::PersistenceApi for SwirPersistenceAp
 #[derive(Debug)]
 pub struct SwirServiceInvocationApi {
     pub from_client_to_si_sender: mpsc::Sender<RestToSIContext>,
+    pub metric_registry: Arc<metric_utils::MetricRegistry>,
 }
 
 impl SwirServiceInvocationApi {
-    pub fn new(from_client_to_si_sender: mpsc::Sender<RestToSIContext>) -> Self {
-        SwirServiceInvocationApi { from_client_to_si_sender }
+    pub fn new(from_client_to_si_sender: mpsc::Sender<RestToSIContext>, metric_registry: Arc<metric_utils::MetricRegistry>) -> Self {
+        SwirServiceInvocationApi {
+            from_client_to_si_sender,
+            metric_registry,
+        }
     }
 }
 
@@ -415,6 +433,7 @@ impl SwirServiceInvocationApi {
 impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for SwirServiceInvocationApi {
     async fn invoke(&self, request: tonic::Request<swir_common::InvokeRequest>) -> Result<tonic::Response<swir_common::InvokeResponse>, tonic::Status> {
         let req = request.into_inner();
+
         info!("Invoke {}", &req);
         let correlation_id = req.correlation_id.clone();
         let service_name = req.service_name.clone();
@@ -436,6 +455,7 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
         let res = sender.try_send(ctx);
         if let Err(e) = res {
             warn!("Channel is dead {:?}", e);
+
             Err(tonic::Status::internal("Internal error"))
         } else {
             let response_from_service = local_rx.await;
@@ -462,7 +482,7 @@ impl swir_grpc_api::service_invocation_api_server::ServiceInvocationApi for Swir
     }
 }
 
-async fn send_request(mut client: NotificationApiClient<tonic::transport::Channel>, ctx: BackendToRestContext) {
+async fn send_request(mut client: NotificationApiClient<MeteredClientService>, ctx: BackendToRestContext) {
     let sreq = swir_grpc_api::SubscribeNotification {
         correlation_id: ctx.correlation_id,
         payload: ctx.request_params.payload,
@@ -470,18 +490,21 @@ async fn send_request(mut client: NotificationApiClient<tonic::transport::Channe
 
     let mut req = Request::new(sreq.clone());
 
+    //let mut labels = metric_registry.grpc.labels.clone();
+    // labels.push(KeyValue::new("interface", "subscription_notification"));
+    // metric_registry.grpc.outgoing_counters.request_counter.add(1, &labels);
+
     if let Some((trace_header_name, trace_header)) = tracing_utils::get_grpc_tracing_header() {
         req.metadata_mut().insert(trace_header_name, trace_header);
     };
 
-    if let Err(e) = client.subscription_notification(req).await {
-        warn!("Unable to send {} {:?}", sreq, e);
-    } else {
-        info!("Notify {}", sreq);
+    match client.subscription_notification(req).await {
+        Err(e) => warn!("Unable to send {} {:?}", sreq, e),
+        Ok(resp) => info!("Notify {:?}", resp),
     }
 }
 
-pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>) {
+pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Receiver<BackendToRestContext>>>, metric_registry: Arc<metric_utils::MetricRegistry>) {
     if let Some(port) = client_config.grpc_port {
         loop {
             let endpoint = Endpoint::from_shared(format! {"http://{}:{}", client_config.ip, port})
@@ -491,10 +514,18 @@ pub async fn client_handler(client_config: ClientConfig, rx: Arc<Mutex<mpsc::Rec
                 .connect()
                 .await;
             if let Ok(channel) = endpoint {
-                let client = NotificationApiClient::new(channel);
+                let metered_client = MeteredClientService {
+                    inner: channel,
+                    labels: metric_registry.grpc.labels.clone(),
+                    counters: metric_registry.grpc.outgoing_counters.clone(),
+                    histograms: metric_registry.grpc.outgoing_histograms.clone(),
+                };
+
+                //		let client = NotificationApiClient::new(channel);
+                let client = NotificationApiClient::new(metered_client);
+
                 info!("GRPC client created");
                 let mut rx = rx.lock().await;
-
                 while let Some(ctx) = rx.recv().await {
                     let client = client.clone();
                     let parent_span = ctx.span.clone();

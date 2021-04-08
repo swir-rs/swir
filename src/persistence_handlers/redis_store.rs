@@ -1,26 +1,28 @@
 use crate::persistence_handlers::Store;
 use crate::utils::{
     config::{ClientToBackendDatabaseResolver, Redis},
+    metric_utils::OutMetricInstruments,
     structs::*,
 };
 
 use async_trait::async_trait;
-
-use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot::Sender, Mutex};
-
+use opentelemetry::KeyValue;
 use redis::{pipe, Client, Commands, Connection};
+use std::sync::Arc;
+use std::time::SystemTime;
+use tokio::sync::{mpsc, oneshot::Sender, Mutex};
 use tracing::info_span;
 
 #[derive(Debug)]
 pub struct RedisStore {
     config: Redis,
     rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>,
+    metrics: Arc<OutMetricInstruments>,
 }
 
 impl RedisStore {
-    pub fn new(config: Redis, rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>) -> Self {
-        RedisStore { config, rx }
+    pub fn new(config: Redis, rx: Arc<Mutex<mpsc::Receiver<RestToPersistenceContext>>>, metrics: Arc<OutMetricInstruments>) -> Self {
+        RedisStore { config, rx, metrics }
     }
 
     fn validate_mapping(&self, pr: &dyn PersistenceRequest) -> Option<String> {
@@ -49,7 +51,7 @@ impl RedisStore {
                         let status = if r2 == "OK" {
                             BackendStatusCodes::Ok("REDIS is good".to_string())
                         } else {
-                            BackendStatusCodes::Ok(format!("Problem when storing key: {}", r2).to_string())
+                            BackendStatusCodes::Ok(format!("Problem when storing key: {}", r2))
                         };
 
                         PersistenceResult {
@@ -119,7 +121,7 @@ impl RedisStore {
                 match res {
                     Ok((r1, r2)) => {
                         let payload = if let Some(data) = r1 { data.into_bytes() } else { vec![] };
-                        let status = BackendStatusCodes::Ok(format!("Deleted keys : {:?}", r2).to_string());
+                        let status = BackendStatusCodes::Ok(format!("Deleted keys : {:?}", r2));
 
                         PersistenceResult {
                             correlation_id: sr.correlation_id,
@@ -149,23 +151,36 @@ impl RedisStore {
         info!("Redis is running");
         let mut rx = self.rx.lock().await;
 
+        let counters = self.metrics.outgoing_counters.clone();
+        let mut labels = self.metrics.labels.clone();
+        let histograms = self.metrics.outgoing_histograms.clone();
+
         while let Some(ctx) = rx.recv().await {
             let parent_span = ctx.span;
             let span = info_span!(parent: &parent_span, "REDIS");
             let _s = span.enter();
             let sender = ctx.sender;
+            let request_start = SystemTime::now();
             match ctx.job {
                 PersistenceJobType::Store(value) => {
+                    labels.push(KeyValue::new("operation", "store"));
+                    counters.request_counter.add(1, &labels);
                     self.store(&mut connection, value, sender);
                 }
 
                 PersistenceJobType::Retrieve(value) => {
+                    labels.push(KeyValue::new("operation", "retrieve"));
+                    counters.request_counter.add(1, &labels);
                     self.retrieve(&mut connection, value, sender);
                 }
+
                 PersistenceJobType::Delete(value) => {
+                    labels.push(KeyValue::new("operation", "delete"));
+                    counters.request_counter.add(1, &labels);
                     self.delete(&mut connection, value, sender);
                 }
             }
+            histograms.request_response_time.record(request_start.elapsed().map_or(0.0, |d| d.as_secs_f64()), &labels);
         }
     }
 }

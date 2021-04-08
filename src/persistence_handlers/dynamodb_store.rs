@@ -5,7 +5,6 @@ use crate::utils::structs::{BackendStatusCodes, DeleteRequest, PersistenceJobTyp
 use async_trait::async_trait;
 use bytes::Bytes;
 
-use rusoto_dynamodb;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::collections::HashMap;
 use std::str::FromStr;

@@ -261,6 +261,7 @@ pub struct OpenTelemetry {
     pub collector_address: String,
     pub collector_port: u16,
     pub service_name: String,
+    pub metric_window: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -312,6 +313,59 @@ impl Swir {
         Box::new(s)
     }
 }
+
+// #[async_trait]
+// trait Sender<T:Send+Sync+'static>{
+//     async fn send(&self, value: T) -> Result<(), mpsc::error::SendError<T>>;
+//     async fn closed(&self);
+//     fn try_send(&self, message: T) -> Result<(), mpsc::error::TrySendError<T>>;
+//     async fn send_timeout( &self, value: T,timeout: core::time::Duration)-> Result<(), mpsc::error::SendTimeoutError<T>>;
+
+// }
+
+// #[async_trait]
+// trait Receiver<T:Send+Sync+'static>{
+//     async fn recv(&mut self) -> Option<T>;
+//     fn blocking_recv(&mut self) -> Option<T>;
+//     fn close(&mut self);
+//     fn poll_recv(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<Option<T>>;
+// }
+
+// struct MySender<T>(mpsc::Sender<T>);
+// struct MyReceiver<T>(mpsc::Receiver<T>);
+
+// #[async_trait]
+// impl<T:Send+Sync+'static> Sender<T> for MySender<T>{
+//     async fn send(&self, value: T) -> Result<(), mpsc::error::SendError<T>>{
+// 	self.0.send(value).await
+//     }
+//     async fn closed(&self){
+// 	self.0.closed().await
+//     }
+//     fn try_send(&self, message: T) -> Result<(), mpsc::error::TrySendError<T>>{
+//     	self.0.try_send(message)
+//     }
+//     async fn send_timeout( &self, value: T,timeout: core::time::Duration)-> Result<(), mpsc::error::SendTimeoutError<T>>{
+//     	self.0.send_timeout(value, timeout).await
+//     }
+
+// }
+
+// #[async_trait]
+// impl<T:Send+Sync+'static> Receiver<T> for MyReceiver<T>{
+//     async fn recv(&mut self) -> Option<T>{
+// 	self.0.recv().await
+//     }
+//     fn blocking_recv(&mut self) -> Option<T>{
+// 	self.0.blocking_recv()
+//     }
+//     fn close(&mut self){
+// 	self.0.close()
+//     }
+//     fn poll_recv(&mut self, cx: &mut core::task::Context<'_>) -> core::task::Poll<Option<T>>{
+// 	self.0.poll_recv(cx)
+//     }
+// }
 
 // Messaging
 //
