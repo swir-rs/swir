@@ -38,7 +38,7 @@ get_if_addrs = "0.5"
 h2    = { version = "0.3.1" }
 hostname= "0.3"
 http = "0.2"
-hyper = { version = "0.14.2", features = ["full"] }
+hyper = { version = "0.14.12", features = ["full"] }
 
 mdns-responder = {version="0.2", git = "https://github.com/swir-rs/rust-mdns"}
 multimap="0.8"
